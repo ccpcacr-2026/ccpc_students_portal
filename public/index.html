@@ -1702,6 +1702,37 @@
                 </div>`;
         }
 
+        // ── Conditional ("dependable") fields: show/hide based on another field's value ──
+        function matchShowIf(showIf, currentVal) {
+            if (!showIf) return true;
+            const cur = String(currentVal || '').toLowerCase().trim();
+            const targets = Array.isArray(showIf.value) ? showIf.value
+                : Array.isArray(showIf.values) ? showIf.values
+                : [showIf.value];
+            return targets.some(t => String(t || '').toLowerCase().trim() === cur);
+        }
+
+        function getFieldValue(form, name) {
+            const el = form.querySelector(`[name="${name}"]`);
+            if (!el) return '';
+            if (el.type === 'checkbox' || el.type === 'radio') {
+                const checked = form.querySelector(`[name="${name}"]:checked`);
+                return checked ? checked.value : '';
+            }
+            return el.value;
+        }
+
+        function evaluateConditionalFields(form) {
+            if (!form) return;
+            form.querySelectorAll('[data-show-if]').forEach(el => {
+                try {
+                    const showIf = JSON.parse(el.dataset.showIf);
+                    const curVal = getFieldValue(form, showIf.field);
+                    el.style.display = matchShowIf(showIf, curVal) ? '' : 'none';
+                } catch(e) {}
+            });
+        }
+
         function addNav(id, name, icon, active = false) {
             const sidebar = document.getElementById('sidebar-items');
             const bottom = document.getElementById('bottom-nav-container');
@@ -1999,15 +2030,26 @@
                                     }
 
                                      fields.forEach(f => {
-                                         if(f.type === 'group_label') html += `<div class="col-12 mt-4"><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`;
+                                         const controllerVal = f.show_if ? findInBoth(data, loggedInStudent, f.show_if.field) : null;
+                                         const visible = !f.show_if || matchShowIf(f.show_if, controllerVal);
+                                         const showIfAttr = f.show_if ? ` data-show-if='${JSON.stringify(f.show_if).replace(/'/g, "&#39;")}'` : '';
+                                         const hideStyle = visible ? '' : ' style="display:none"';
+                                         if(f.type === 'group_label') html += `<div class="col-12 mt-4"${showIfAttr}${hideStyle}><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`;
                                          else {
                                              const val = findInBoth(data, loggedInStudent, f.data_key || f.name);
-                                             html += `<div class="col-md-6">${renderField(f, val, readOnly)}</div>`;
+                                             html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, readOnly)}</div>`;
                                          }
                                      });
  
                                      html += `</div>${!readOnly?`<button type="submit" class="btn btn-premium-save w-100 mt-5"><i class="bi bi-cloud-arrow-up-fill fs-5"></i> Sync & Save Information</button>`:''}<div class="status-msg text-center mt-3 small fw-bold"></div></form></div>`;
                                     pane.innerHTML = html;
+
+                                    // ── Wire up conditional ("dependable") fields ──
+                                    const _condForm = document.getElementById(`${tid}-form`);
+                                    if (_condForm) {
+                                        evaluateConditionalFields(_condForm);
+                                        _condForm.addEventListener('change', () => evaluateConditionalFields(_condForm));
+                                    }
 
                                     // ── Fill % ──────────────────────────────
                                     const _inputFields = fields.filter(f => f.type !== 'group_label');
