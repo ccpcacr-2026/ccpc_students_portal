@@ -1,0 +1,470 @@
+/* ════════════════════════════════════════════════════════════════════
+   CCPC Design System — Bootstrap 5 Overrides
+   Applies Forest + Saffron theme to all Bootstrap components
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* ── Bootstrap Color Overrides ──────────────────────────────────── */
+:root {
+  --bs-primary: var(--ccpc-primary);
+  --bs-secondary: var(--ccpc-accent);
+  --bs-success: var(--ccpc-good);
+  --bs-warning: var(--ccpc-warn);
+  --bs-danger: var(--ccpc-bad);
+  --bs-light: var(--ccpc-surface);
+  --bs-dark: var(--ccpc-ink);
+  --bs-body-bg: var(--ccpc-surface);
+  --bs-body-color: var(--ccpc-ink);
+  --bs-border-color: var(--ccpc-line);
+  --bs-form-control-bg: var(--ccpc-surface);
+  --bs-form-control-border-color: var(--ccpc-line);
+  --bs-form-control-focus-border-color: var(--ccpc-primary);
+  --bs-form-control-focus-bg: var(--ccpc-surface);
+  --bs-btn-padding-y: 0.5rem;
+  --bs-btn-padding-x: 1rem;
+  --bs-btn-font-weight: 600;
+  --bs-btn-border-radius: var(--ccpc-radius-lg);
+}
+
+/* ── Alert Customization ────────────────────────────────────────── */
+.alert {
+  border: 1.5px solid currentColor;
+  border-radius: var(--ccpc-radius-lg);
+  background-color: var(--ccpc-surface-alt);
+}
+
+.alert-primary {
+  color: var(--ccpc-primary);
+  border-color: var(--ccpc-primary);
+  background-color: rgba(52, 121, 102, 0.08);
+}
+
+.alert-success {
+  color: var(--ccpc-good);
+  border-color: var(--ccpc-good);
+  background-color: rgba(140, 180, 100, 0.08);
+}
+
+.alert-warning {
+  color: var(--ccpc-warn);
+  border-color: var(--ccpc-warn);
+  background-color: rgba(239, 179, 71, 0.08);
+}
+
+.alert-danger {
+  color: var(--ccpc-bad);
+  border-color: var(--ccpc-bad);
+  background-color: rgba(139, 70, 70, 0.08);
+}
+
+/* ── Button Customization ────────────────────────────────────────── */
+.btn {
+  border-radius: var(--ccpc-radius-lg);
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ccpc-shadow-md);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background-color: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+  box-shadow: 0 4px 16px rgba(52, 121, 102, 0.3);
+}
+
+.btn-primary:hover {
+  background-color: var(--ccpc-primary-ink);
+  color: var(--ccpc-surface);
+  box-shadow: 0 8px 24px rgba(52, 121, 102, 0.4);
+}
+
+.btn-secondary {
+  background-color: var(--ccpc-accent);
+  color: var(--ccpc-primary-ink);
+  border: 1.5px solid var(--ccpc-accent);
+}
+
+.btn-secondary:hover {
+  background-color: var(--ccpc-accent-ink);
+  color: var(--ccpc-surface);
+  border-color: var(--ccpc-accent-ink);
+}
+
+.btn-outline-primary {
+  color: var(--ccpc-primary);
+  border-color: var(--ccpc-primary);
+}
+
+.btn-outline-primary:hover {
+  background-color: var(--ccpc-primary);
+  border-color: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+}
+
+.btn-outline-secondary {
+  color: var(--ccpc-accent);
+  border-color: var(--ccpc-accent);
+}
+
+.btn-outline-secondary:hover {
+  background-color: var(--ccpc-accent);
+  border-color: var(--ccpc-accent);
+  color: var(--ccpc-primary-ink);
+}
+
+.btn-sm {
+  border-radius: var(--ccpc-radius-md);
+}
+
+/* ── Card Customization ──────────────────────────────────────────── */
+.card {
+  border: 1px solid var(--ccpc-line);
+  border-radius: var(--ccpc-radius-lg);
+  box-shadow: var(--ccpc-shadow-sm);
+  background-color: var(--ccpc-surface);
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--ccpc-primary);
+  box-shadow: var(--ccpc-shadow-md);
+  transform: translateY(-2px);
+}
+
+.card-header {
+  background-color: var(--ccpc-surface-alt);
+  border-color: var(--ccpc-line);
+  border-radius: var(--ccpc-radius-lg) var(--ccpc-radius-lg) 0 0;
+}
+
+.card-title {
+  font-family: var(--ccpc-font-display);
+  color: var(--ccpc-ink);
+}
+
+.card-body {
+  padding: var(--ccpc-space-lg);
+}
+
+/* ── Form Customization ──────────────────────────────────────────── */
+.form-control,
+.form-select {
+  border-radius: var(--ccpc-radius-md);
+  border-color: var(--ccpc-line);
+  background-color: var(--ccpc-surface);
+  color: var(--ccpc-ink);
+  font-family: var(--ccpc-font-ui);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--ccpc-primary);
+  box-shadow: 0 0 0 0.25rem rgba(52, 121, 102, 0.25);
+  background-color: var(--ccpc-surface);
+  color: var(--ccpc-ink);
+}
+
+.form-label {
+  color: var(--ccpc-ink);
+  font-weight: 600;
+  margin-bottom: var(--ccpc-space-sm);
+}
+
+.form-text {
+  color: var(--ccpc-ink-dim);
+}
+
+/* ── Badge Customization ───────────────────────────────────────── */
+.badge {
+  border-radius: var(--ccpc-radius-sm);
+  font-family: var(--ccpc-font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+}
+
+.badge.bg-primary {
+  background-color: var(--ccpc-primary) !important;
+  color: var(--ccpc-surface);
+}
+
+.badge.bg-secondary {
+  background-color: var(--ccpc-accent) !important;
+  color: var(--ccpc-primary-ink);
+}
+
+.badge.bg-success {
+  background-color: var(--ccpc-good) !important;
+  color: white;
+}
+
+.badge.bg-warning {
+  background-color: var(--ccpc-warn) !important;
+  color: var(--ccpc-primary-ink);
+}
+
+.badge.bg-danger {
+  background-color: var(--ccpc-bad) !important;
+  color: white;
+}
+
+/* ── Table Customization ────────────────────────────────────────── */
+.table {
+  border-collapse: collapse;
+  --bs-table-border-color: var(--ccpc-line);
+  --bs-table-bg: var(--ccpc-surface);
+  --bs-table-striped-bg: var(--ccpc-surface-alt);
+}
+
+.table-light {
+  background-color: var(--ccpc-surface-alt);
+}
+
+.table-sm {
+  --bs-table-padding-y: 0.5rem;
+  --bs-table-padding-x: 0.5rem;
+}
+
+.table thead th {
+  border-bottom-color: var(--ccpc-line);
+  background-color: var(--ccpc-surface-alt);
+  color: var(--ccpc-ink);
+  font-weight: 600;
+}
+
+.table tbody tr:hover {
+  background-color: rgba(52, 121, 102, 0.05);
+}
+
+/* ── Modal Customization ────────────────────────────────────────── */
+.modal-content {
+  border: none;
+  border-radius: var(--ccpc-radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  background-color: var(--ccpc-surface);
+}
+
+.modal-header {
+  border-bottom: 1px solid var(--ccpc-line);
+  background-color: var(--ccpc-surface-alt);
+  border-radius: var(--ccpc-radius-lg) var(--ccpc-radius-lg) 0 0;
+}
+
+.modal-header.bg-primary {
+  background: linear-gradient(135deg, var(--ccpc-primary) 0%, var(--ccpc-primary-ink) 100%);
+  color: var(--ccpc-surface);
+}
+
+.modal-title {
+  font-family: var(--ccpc-font-display);
+  font-weight: 400;
+  color: inherit;
+}
+
+.modal-body {
+  padding: var(--ccpc-space-lg);
+  color: var(--ccpc-ink);
+}
+
+.modal-footer {
+  border-top: 1px solid var(--ccpc-line);
+  background-color: var(--ccpc-surface-alt);
+}
+
+/* ── Dropdown/Select Customization ─────────────────────────────── */
+.dropdown-menu {
+  border-radius: var(--ccpc-radius-lg);
+  border: 1px solid var(--ccpc-line);
+  box-shadow: var(--ccpc-shadow-lg);
+  background-color: var(--ccpc-surface);
+}
+
+.dropdown-item {
+  color: var(--ccpc-ink);
+}
+
+.dropdown-item:hover,
+.dropdown-item.active {
+  background-color: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+}
+
+.dropdown-divider {
+  border-top-color: var(--ccpc-line);
+}
+
+/* ── Nav Customization ──────────────────────────────────────────── */
+.nav-link {
+  color: var(--ccpc-ink-dim);
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+  color: var(--ccpc-primary);
+}
+
+.nav-link.active {
+  color: var(--ccpc-primary);
+  background-color: rgba(52, 121, 102, 0.1);
+  border-radius: var(--ccpc-radius-md);
+}
+
+.navbar {
+  background-color: var(--ccpc-surface);
+  border-bottom: 1px solid var(--ccpc-line);
+}
+
+.navbar-light {
+  --bs-navbar-color: var(--ccpc-ink);
+  --bs-navbar-hover-color: var(--ccpc-primary);
+  --bs-navbar-active-color: var(--ccpc-primary);
+}
+
+/* ── Pagination Customization ───────────────────────────────────── */
+.pagination {
+  gap: var(--ccpc-space-sm);
+}
+
+.page-link {
+  border-radius: var(--ccpc-radius-md);
+  border-color: var(--ccpc-line);
+  color: var(--ccpc-ink);
+}
+
+.page-link:hover {
+  background-color: var(--ccpc-surface-alt);
+  border-color: var(--ccpc-primary);
+  color: var(--ccpc-primary);
+}
+
+.page-link.active {
+  background-color: var(--ccpc-primary);
+  border-color: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+}
+
+/* ── Spinner Customization ─────────────────────────────────────── */
+.spinner-border {
+  border-color: var(--ccpc-line);
+  border-right-color: var(--ccpc-primary);
+}
+
+.spinner-grow {
+  background-color: var(--ccpc-primary);
+}
+
+/* ── Progress Bar Customization ────────────────────────────────── */
+.progress {
+  background-color: var(--ccpc-line);
+  border-radius: var(--ccpc-radius-md);
+  height: 8px;
+}
+
+.progress-bar {
+  background-color: var(--ccpc-primary);
+}
+
+.progress-bar.bg-success {
+  background-color: var(--ccpc-good) !important;
+}
+
+.progress-bar.bg-warning {
+  background-color: var(--ccpc-warn) !important;
+}
+
+.progress-bar.bg-danger {
+  background-color: var(--ccpc-bad) !important;
+}
+
+/* ── Breadcrumb Customization ───────────────────────────────────── */
+.breadcrumb {
+  border-radius: var(--ccpc-radius-lg);
+  background-color: var(--ccpc-surface-alt);
+  padding: var(--ccpc-space-md);
+}
+
+.breadcrumb-item {
+  color: var(--ccpc-ink-dim);
+}
+
+.breadcrumb-item.active {
+  color: var(--ccpc-ink);
+  font-weight: 600;
+}
+
+.breadcrumb-item a {
+  color: var(--ccpc-primary);
+  text-decoration: none;
+}
+
+.breadcrumb-item a:hover {
+  color: var(--ccpc-primary-ink);
+  text-decoration: underline;
+}
+
+/* ── List Group Customization ───────────────────────────────────── */
+.list-group-item {
+  border-color: var(--ccpc-line);
+  background-color: var(--ccpc-surface);
+  color: var(--ccpc-ink);
+}
+
+.list-group-item:hover {
+  background-color: var(--ccpc-surface-alt);
+  border-color: var(--ccpc-primary);
+}
+
+.list-group-item.active {
+  background-color: var(--ccpc-primary);
+  border-color: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+}
+
+/* ── Tooltip Customization ──────────────────────────────────────── */
+.tooltip-inner {
+  background-color: var(--ccpc-ink);
+  border-radius: var(--ccpc-radius-sm);
+}
+
+.bs-tooltip-top .tooltip-arrow::before {
+  border-top-color: var(--ccpc-ink);
+}
+
+.bs-tooltip-bottom .tooltip-arrow::before {
+  border-bottom-color: var(--ccpc-ink);
+}
+
+.bs-tooltip-start .tooltip-arrow::before {
+  border-left-color: var(--ccpc-ink);
+}
+
+.bs-tooltip-end .tooltip-arrow::before {
+  border-right-color: var(--ccpc-ink);
+}
+
+/* ── Popover Customization ──────────────────────────────────────── */
+.popover {
+  border-radius: var(--ccpc-radius-lg);
+  background-color: var(--ccpc-surface);
+  border: 1px solid var(--ccpc-line);
+  box-shadow: var(--ccpc-shadow-lg);
+}
+
+.popover-header {
+  background-color: var(--ccpc-surface-alt);
+  border-bottom-color: var(--ccpc-line);
+  border-radius: var(--ccpc-radius-lg) var(--ccpc-radius-lg) 0 0;
+}
+
+.popover-body {
+  color: var(--ccpc-ink);
+}

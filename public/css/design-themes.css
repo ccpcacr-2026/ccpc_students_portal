@@ -1,0 +1,178 @@
+/* ════════════════════════════════════════════════════════════════════
+   CCPC Design System — Theme Variants
+   Three professional color schemes for different contexts
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* ── Theme 1: Forest + Saffron (DEFAULT) ────────────────────────── */
+:root,
+html[data-theme="forest"] {
+  --ccpc-theme-name: "Forest + Saffron";
+  --ccpc-primary: oklch(0.34 0.06 155);           /* Deep forest green */
+  --ccpc-primary-ink: oklch(0.22 0.05 155);       /* Darker forest for text */
+  --ccpc-accent: oklch(0.74 0.16 70);             /* Saffron / turmeric */
+  --ccpc-accent-ink: oklch(0.45 0.14 65);         /* Darker saffron */
+  --ccpc-surface: oklch(0.975 0.012 85);          /* Warm cream */
+  --ccpc-surface-alt: oklch(0.95 0.018 85);       /* Slightly darker cream */
+  --ccpc-ink: oklch(0.20 0.015 60);               /* Near-black charcoal */
+  --ccpc-ink-dim: oklch(0.45 0.015 60);           /* Muted text */
+  --ccpc-line: oklch(0.88 0.018 80);              /* Hairline borders */
+  --ccpc-good: oklch(0.55 0.13 155);
+  --ccpc-warn: oklch(0.68 0.16 50);
+  --ccpc-bad: oklch(0.55 0.18 25);
+}
+
+/* ── Theme 2: Midnight + Coral ─────────────────────────────────── */
+html[data-theme="midnight"] {
+  --ccpc-theme-name: "Midnight + Coral";
+  --ccpc-primary: oklch(0.25 0.06 265);           /* Deep midnight blue */
+  --ccpc-primary-ink: oklch(0.18 0.05 265);       /* Darker midnight */
+  --ccpc-accent: oklch(0.72 0.17 30);             /* Coral / salmon */
+  --ccpc-accent-ink: oklch(0.50 0.15 30);         /* Darker coral */
+  --ccpc-surface: oklch(0.97 0.008 280);          /* Cool white */
+  --ccpc-surface-alt: oklch(0.94 0.012 280);      /* Cool light gray */
+  --ccpc-ink: oklch(0.18 0.02 270);               /* Dark blue-gray */
+  --ccpc-ink-dim: oklch(0.45 0.02 270);           /* Muted blue-gray */
+  --ccpc-line: oklch(0.87 0.012 270);             /* Blue-tinted border */
+  --ccpc-good: oklch(0.60 0.13 160);              /* Cyan-green */
+  --ccpc-warn: oklch(0.72 0.16 60);               /* Yellow-orange */
+  --ccpc-bad: oklch(0.55 0.18 25);                /* Red */
+}
+
+/* ── Theme 3: Crimson + Cream ──────────────────────────────────── */
+html[data-theme="crimson"] {
+  --ccpc-theme-name: "Crimson + Cream";
+  --ccpc-primary: oklch(0.40 0.15 25);            /* CCPC red */
+  --ccpc-primary-ink: oklch(0.28 0.13 25);        /* Darker crimson */
+  --ccpc-accent: oklch(0.42 0.06 155);            /* Forest as accent */
+  --ccpc-accent-ink: oklch(0.30 0.05 155);        /* Darker forest */
+  --ccpc-surface: oklch(0.97 0.014 80);           /* Warm white */
+  --ccpc-surface-alt: oklch(0.94 0.02 75);        /* Warm light beige */
+  --ccpc-ink: oklch(0.20 0.018 30);               /* Dark red-brown */
+  --ccpc-ink-dim: oklch(0.45 0.018 30);           /* Muted brown */
+  --ccpc-line: oklch(0.86 0.022 60);              /* Warm border */
+  --ccpc-good: oklch(0.55 0.13 155);              /* Green */
+  --ccpc-warn: oklch(0.70 0.16 70);               /* Amber */
+  --ccpc-bad: oklch(0.50 0.20 25);                /* Dark red */
+}
+
+/* ── Theme Transitions ─────────────────────────────────────────── */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ── Theme Information Display ─────────────────────────────────── */
+.theme-info {
+  padding: var(--ccpc-space-md) var(--ccpc-space-lg);
+  border-radius: var(--ccpc-radius-md);
+  background: var(--ccpc-surface-alt);
+  border: 1px solid var(--ccpc-line);
+  font-family: var(--ccpc-font-mono);
+  font-size: 0.875rem;
+  color: var(--ccpc-ink-dim);
+}
+
+.theme-info strong {
+  color: var(--ccpc-primary);
+  font-weight: 600;
+}
+
+/* ── Theme Switcher Component ──────────────────────────────────── */
+.theme-switcher {
+  display: flex;
+  gap: var(--ccpc-space-sm);
+  padding: var(--ccpc-space-md);
+  background: var(--ccpc-surface-alt);
+  border-radius: var(--ccpc-radius-lg);
+}
+
+.theme-switcher-btn {
+  flex: 1;
+  padding: var(--ccpc-space-md);
+  border: 1.5px solid var(--ccpc-line);
+  border-radius: var(--ccpc-radius-md);
+  background: var(--ccpc-surface);
+  color: var(--ccpc-ink);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.theme-switcher-btn:hover {
+  border-color: var(--ccpc-primary);
+  background: var(--ccpc-surface-alt);
+}
+
+.theme-switcher-btn.active {
+  background: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+  border-color: var(--ccpc-primary);
+  box-shadow: 0 4px 12px rgba(52, 121, 102, 0.3);
+}
+
+html[data-theme="midnight"] .theme-switcher-btn.active {
+  box-shadow: 0 4px 12px rgba(64, 66, 204, 0.3);
+}
+
+html[data-theme="crimson"] .theme-switcher-btn.active {
+  box-shadow: 0 4px 12px rgba(102, 51, 51, 0.3);
+}
+
+/* ── Color Swatch Display ──────────────────────────────────────── */
+.color-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: var(--ccpc-space-md);
+  padding: var(--ccpc-space-lg);
+}
+
+.color-swatch {
+  border-radius: var(--ccpc-radius-md);
+  overflow: hidden;
+  box-shadow: var(--ccpc-shadow-sm);
+}
+
+.color-swatch-preview {
+  width: 100%;
+  height: 80px;
+  background: var(--swatch-color);
+}
+
+.color-swatch-label {
+  padding: var(--ccpc-space-sm);
+  background: var(--ccpc-surface-alt);
+  font-size: 0.75rem;
+  font-family: var(--ccpc-font-mono);
+  color: var(--ccpc-ink-dim);
+  text-align: center;
+}
+
+/* ── Pre-defined Color Swatches ────────────────────────────────── */
+.swatch-primary {
+  --swatch-color: var(--ccpc-primary);
+}
+
+.swatch-accent {
+  --swatch-color: var(--ccpc-accent);
+}
+
+.swatch-surface {
+  --swatch-color: var(--ccpc-surface);
+  border: 1px solid var(--ccpc-line);
+}
+
+.swatch-ink {
+  --swatch-color: var(--ccpc-ink);
+}
+
+.swatch-good {
+  --swatch-color: var(--ccpc-good);
+}
+
+.swatch-warn {
+  --swatch-color: var(--ccpc-warn);
+}
+
+.swatch-bad {
+  --swatch-color: var(--ccpc-bad);
+}
