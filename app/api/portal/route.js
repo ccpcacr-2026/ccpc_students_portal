@@ -16,6 +16,8 @@ async function sb(path, method = 'GET', body = null, extra = {}) {
       Authorization: `Bearer ${SB_KEY}`,
       'Content-Type': 'application/json',
       Prefer: method === 'POST' ? 'return=representation' : 'return=minimal',
+      'Accept-Profile': 'student',
+      'Content-Profile': 'student',
       ...extra,
     },
     ...(body !== null ? { body: JSON.stringify(body) } : {}),
