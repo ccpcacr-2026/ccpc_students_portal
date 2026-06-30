@@ -1,0 +1,323 @@
+/* ── Premium Form Components ────────────────────────────────── */
+
+.premium-form-group {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.premium-form-group > input[type="text"],
+.premium-form-group > input[type="email"],
+.premium-form-group > input[type="tel"],
+.premium-form-group > input[type="url"],
+.premium-form-group > input[type="number"],
+.premium-form-group > input[type="date"],
+.premium-form-group > textarea,
+.premium-form-group > select {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--border);
+  border-radius: 0;
+  padding: 12px 0;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--text);
+  transition: all 0.3s ease;
+}
+
+.premium-form-group > input:focus,
+.premium-form-group > textarea:focus,
+.premium-form-group > select:focus {
+  outline: none;
+  border-bottom-color: var(--primary);
+  box-shadow: 0 2px 0 var(--primary);
+}
+
+.premium-form-group > label {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  font-size: 1rem;
+  color: var(--text-3);
+  pointer-events: none;
+  transition: all 0.3s ease;
+  transform-origin: left top;
+  z-index: 0;
+}
+
+.premium-form-group > input:focus ~ label,
+.premium-form-group > input:not(:placeholder-shown) ~ label,
+.premium-form-group > textarea:focus ~ label,
+.premium-form-group > textarea:not(:placeholder-shown) ~ label,
+.premium-form-group > select:focus ~ label,
+.premium-form-group > select:not([value=""]) ~ label {
+  top: -8px;
+  font-size: 0.75rem;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* ── Checkbox & Radio Components ────────────────────────────────── */
+
+.premium-checkbox-group,
+.premium-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.premium-checkbox-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--surface);
+}
+
+.premium-checkbox-card:hover {
+  border-color: var(--primary-l);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.premium-checkbox-card input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.premium-checkbox-card input[type="checkbox"]:checked + span {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.premium-checkbox-card span {
+  flex: 1;
+  color: var(--text);
+  transition: color 0.2s ease;
+}
+
+/* Radio buttons */
+.premium-radio-group .form-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  margin: 0;
+}
+
+.premium-radio-group .form-check-input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.premium-radio-group .form-check-label {
+  margin: 0;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* ── Validation Styles ────────────────────────────────── */
+
+.premium-form-group > input.is-invalid,
+.premium-form-group > textarea.is-invalid,
+.premium-form-group > select.is-invalid {
+  border-bottom-color: #ef4444;
+  box-shadow: 0 2px 0 #ef4444 !important;
+}
+
+.form-error-msg {
+  color: #ef4444;
+  font-size: 0.8rem;
+  margin-top: 6px !important;
+}
+
+/* ── Form Submit Button ────────────────────────────────── */
+
+.btn-premium-save {
+  background: linear-gradient(135deg, var(--primary), var(--primary-l));
+  color: white;
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: 14px 28px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: 0 4px 20px rgba(5, 150, 105, 0.3);
+  transition: all 0.3s ease;
+}
+
+.btn-premium-save:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(5, 150, 105, 0.4);
+  background: linear-gradient(135deg, var(--primary-l), var(--primary-ll));
+  color: white;
+}
+
+.btn-premium-save:active {
+  transform: translateY(0);
+}
+
+.btn-premium-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Progress Bar ────────────────────────────────────────────────── */
+
+.tab-fill-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.tab-fill-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tab-fill-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.tab-fill-label {
+  font-size: 0.85rem;
+  color: var(--text-3);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── Status Messages ────────────────────────────────────────────────── */
+
+.status-msg {
+  display: none;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.status-msg.text-success {
+  display: block;
+  background: rgba(52, 211, 153, 0.1);
+  color: #059669;
+}
+
+.status-msg.text-danger {
+  display: block;
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+/* ── Include Fields (Read-Only Profile Data) ────────────────────────────── */
+
+.include-master-info {
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid var(--border-g);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin: 20px 0;
+}
+
+.imi-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.imi-value {
+  font-size: 0.95rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────– */
+
+@media (max-width: 576px) {
+  .premium-form-group {
+    margin-bottom: 20px;
+  }
+
+  .premium-checkbox-group,
+  .premium-radio-group {
+    gap: 10px;
+  }
+
+  .premium-checkbox-card {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+
+  .btn-premium-save {
+    padding: 12px 20px;
+    font-size: 0.9rem;
+  }
+
+  .tab-fill-progress {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tab-fill-label {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* ── Select/Dropdown Styling ────────────────────────────────– */
+
+.premium-field.form-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23059669' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  background-size: 16px 12px;
+  appearance: none;
+  padding-right: 32px;
+}
+
+.premium-field.form-select:focus {
+  box-shadow: 0 2px 0 var(--primary) !important;
+}
+
+/* ── Textarea Styling ────────────────────────────────– */
+
+.premium-form-group > textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.premium-form-group > textarea:focus {
+  box-shadow: 0 2px 0 var(--primary) !important;
+}
+
+/* ── File Input ────────────────────────────────– */
+
+.premium-form-group > input[type="file"] {
+  padding: 8px 0;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 12px;
+}
+
+.premium-form-group > input[type="file"]:focus {
+  border-color: var(--primary);
+  background: rgba(16, 185, 129, 0.05);
+}
