@@ -2009,8 +2009,7 @@
                                                                 }
                                                                 if(btn) btn.disabled = false;
                                                             }
-                                                        })
-                                                        .withFailureHandler(err => {
+                                                        }).catch(err => {
                                                             if(attempt < maxAttempts) {
                                                                 if(status) status.innerText = 'Retrying... (' + attempt + '/' + maxAttempts + ')';
                                                                 setTimeout(trySubmit, 1000 * attempt);
@@ -2021,20 +2020,17 @@
                                                                 }
                                                                 if(btn) btn.disabled = false;
                                                             }
-                                                        })
-                                                        .handleSubmit(submission);
+                                                        });
                                                 }
                                                 trySubmit();
                                             };
                                         }
                                     }
                                 } catch (e) { console.error("Error rendering tab " + t.tab_name, e); }
-                            }).getStudentTabData(loggedInStudent.student_id, t.tab_name);
+                            }).catch(err => console.error("Error fetching tab data", err));
                         } catch (e) { console.error("Error in tabs loop", e); }
                     });
-
-                    // Redundant logout buttons removed to keep top-right as primary
-                }).getTabs(loggedInStudent.student_id);
+                }).catch(err => console.error("Error fetching tabs", err));
             } catch(e) {
                 console.error("showForm critical error", e);
                 alert("An error occurred while loading your profile. Please try again.");
