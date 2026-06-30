@@ -1,0 +1,267 @@
+/* ── Bus Tracking Map Styles ────────────────────────────────── */
+
+#bus-map-container {
+  width: 100%;
+  height: calc(100vh - 120px);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  position: relative;
+}
+
+/* Leaflet map overrides */
+.leaflet-container {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: #ecf0f1;
+}
+
+.leaflet-control {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+}
+
+.leaflet-popup {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.leaflet-popup-content {
+  margin: 12px;
+  font-size: 0.9rem;
+}
+
+/* Bus marker styles */
+.bus-marker {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* ── Bus Tracking Layout ────────────────────────────────────── */
+
+.bus-tracking-container {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  height: calc(100vh - 140px);
+  padding: 20px;
+  background: var(--bg);
+}
+
+.bus-map-wrapper {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── Bus Sidebar ────────────────────────────────────────────────────── */
+
+.bus-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.bus-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.bus-sidebar::-webkit-scrollbar-track {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.bus-sidebar::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 3px;
+}
+
+/* Bus List */
+#bus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.bus-list-item {
+  padding: 12px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bus-list-item:hover {
+  border-color: var(--primary);
+  background: rgba(16, 185, 129, 0.05);
+  transform: translateX(-4px);
+}
+
+.bus-list-item.active {
+  border-color: var(--primary);
+  background: rgba(16, 185, 129, 0.1);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+/* Bus Info Panel */
+#bus-info-panel {
+  position: sticky;
+  top: 0;
+  flex-shrink: 0;
+}
+
+#bus-info-panel .card {
+  border: none;
+  background: var(--surface);
+}
+
+#bus-info-panel .card-header {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* ── Geofence Alerts ────────────────────────────────────────────────────── */
+
+#geofence-alerts {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 999;
+}
+
+#geofence-alerts .alert {
+  margin-bottom: 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  box-shadow: var(--shadow);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ── Bus Data Timestamp ────────────────────────────────────────────────────– */
+
+#bus-data-timestamp {
+  font-size: 0.85rem;
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+/* ── Responsive Design ────────────────────────────────────────────────────– */
+
+@media (max-width: 1024px) {
+  .bus-tracking-container {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .bus-sidebar {
+    max-height: 300px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .bus-list-item {
+    padding: 10px;
+    font-size: 0.85rem;
+  }
+
+  #bus-info-panel {
+    grid-column: 1 / -1;
+  }
+
+  #bus-list {
+    flex: none;
+    max-height: 150px;
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  .bus-tracking-container {
+    padding: 12px;
+    gap: 12px;
+    height: calc(100vh - 120px);
+  }
+
+  #bus-map-container {
+    height: calc(100vh - 320px);
+  }
+
+  .bus-sidebar {
+    grid-template-columns: 1fr;
+    max-height: 200px;
+  }
+
+  .bus-list-item {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  #geofence-alerts {
+    width: 100%;
+    max-width: calc(100vw - 24px);
+    left: 12px;
+    right: 12px;
+  }
+
+  #bus-info-panel {
+    grid-column: 1 / -1;
+    padding: 0;
+  }
+}
+
+/* ── Controls ────────────────────────────────────────────────────– */
+
+.bus-tracking-controls {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  gap: 8px;
+  z-index: 400;
+}
+
+.bus-tracking-controls .btn {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+}
+
+/* ── Loading State ────────────────────────────────────────────────────– */
+
+.bus-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 500;
+}
+
+.spinner-border {
+  color: var(--primary);
+}
+
+/* ── Geofence Circle Styles ────────────────────────────────────── */
+
+.leaflet-circle {
+  stroke: var(--primary);
+  fill: var(--primary-l);
+  fill-opacity: 0.1;
+}

@@ -7,7 +7,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" rel="stylesheet" />
     <link href="/css/forms.css" rel="stylesheet">
+    <link href="/css/bus-tracking.css" rel="stylesheet">
     <style>
         :root {
             --primary:      #059669;
@@ -1356,8 +1358,38 @@
                     const trackPane = document.createElement('div');
                     trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
                     trackPane.style.height = 'calc(100vh - 120px)';
-                    trackPane.innerHTML = `<iframe style="width:100%; height:100%; border:none; border-radius:24px; box-shadow: var(--shadow);" id="bus-iframe"></iframe>`;
+                    trackPane.innerHTML = `
+                      <div class="bus-tracking-container" style="height: 100%;">
+                        <div class="bus-map-wrapper">
+                          <div id="bus-map-container"></div>
+                          <div id="geofence-alerts"></div>
+                          <div class="bus-tracking-controls">
+                            <button class="btn btn-sm btn-outline-primary" onclick="BusTracking.exportBusData()">
+                              <i class="bi bi-download"></i> Export CSV
+                            </button>
+                          </div>
+                        </div>
+                        <div class="bus-sidebar">
+                          <div id="bus-info-panel">
+                            <div class="card shadow-lg">
+                              <div class="card-body text-center text-muted py-4">
+                                <p>Select a bus to view details</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div id="bus-list" style="flex: 1; min-height: 100px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; background: var(--surface);"></div>
+                        </div>
+                      </div>
+                    `;
                     content.appendChild(trackPane);
+
+                    // Initialize bus tracking
+                    setTimeout(() => {
+                      if (!window.busTrackingInitialized) {
+                        BusTracking.initBusMap();
+                        window.busTrackingInitialized = true;
+                      }
+                    }, 500);
                 }
 
                 // Add Admin Logout to mobile nav
@@ -1781,8 +1813,38 @@
                 const trackPane = document.createElement('div');
                 trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
                 trackPane.style.height = 'calc(100vh - 120px)';
-                trackPane.innerHTML = `<iframe style="width:100%; height:100%; border:none; border-radius:24px; box-shadow: var(--shadow);" id="bus-iframe"></iframe>`;
+                trackPane.innerHTML = `
+                  <div class="bus-tracking-container" style="height: 100%;">
+                    <div class="bus-map-wrapper">
+                      <div id="bus-map-container"></div>
+                      <div id="geofence-alerts"></div>
+                      <div class="bus-tracking-controls">
+                        <button class="btn btn-sm btn-outline-primary" onclick="BusTracking.exportBusData()">
+                          <i class="bi bi-download"></i> Export CSV
+                        </button>
+                      </div>
+                    </div>
+                    <div class="bus-sidebar">
+                      <div id="bus-info-panel">
+                        <div class="card shadow-lg">
+                          <div class="card-body text-center text-muted py-4">
+                            <p>Select a bus to view details</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div id="bus-list" style="flex: 1; min-height: 100px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; background: var(--surface);"></div>
+                    </div>
+                  </div>
+                `;
                 if(content) content.appendChild(trackPane);
+
+                // Initialize bus tracking when this tab becomes active
+                setTimeout(() => {
+                  if (!window.busTrackingInitialized) {
+                    BusTracking.initBusMap();
+                    window.busTrackingInitialized = true;
+                  }
+                }, 500);
 
                 const groups = {
                     "Academic Profile": ['name', 'student_id', 'class_name', 'section', 'roll', 'session'],
@@ -2328,7 +2390,9 @@
         };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
     <script src="/js/form-integration.js"></script>
     <script src="/js/admin-tabs.js"></script>
+    <script src="/js/bus-tracking.js"></script>
 </body>
 </html>
