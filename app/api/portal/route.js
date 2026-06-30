@@ -401,6 +401,80 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', data: rows || [] });
   }
 
+  // ── Export Tabs ────────────────────────────────────────────────────────────
+  if (action === 'export_tabs') {
+    const rows = await sb('portal_tabs?order=sort_order.asc');
+    if (rows?.error) return NextResponse.json({ result: 'error', message: 'Could not load tabs.' });
+    const tabs = (rows || []).map(t => ({
+      tab_name: t.tab_name,
+      fields_json: t.fields_json || '[]',
+      condition_json: t.condition_json || '{}',
+      include_fields_json: t.include_fields_json || '[]',
+      icon_class: t.icon_class,
+      is_enabled: t.is_enabled,
+      default_editable: t.default_editable,
+      sort_order: t.sort_order,
+    }));
+    return NextResponse.json({ result: 'success', data: tabs });
+  }
+
+  // ── Import Tabs ────────────────────────────────────────────────────────────
+  if (action === 'import_tabs') {
+    const { tabs_json, merge_mode } = payload;
+    if (!tabs_json) return NextResponse.json({ result: 'error', message: 'No tabs data provided.' });
+
+    let tabs = typeof tabs_json === 'string' ? JSON.parse(tabs_json) : tabs_json;
+    if (!Array.isArray(tabs)) {
+      return NextResponse.json({ result: 'error', message: 'Expected array of tabs.' });
+    }
+
+    const results = { created: [], updated: [], skipped: [], errors: [] };
+
+    for (const tab of tabs) {
+      try {
+        if (!tab.tab_name) {
+          results.skipped.push({ tab_name: '(unnamed)', reason: 'Missing tab_name' });
+          continue;
+        }
+
+        const existing = await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(tab.tab_name)}`);
+        const isExists = existing && !existing.error && existing.length > 0;
+
+        if (isExists && merge_mode === 'skip') {
+          results.skipped.push({ tab_name: tab.tab_name, reason: 'Tab already exists' });
+          continue;
+        }
+
+        const tabData = {
+          tab_name: tab.tab_name,
+          fields_json: tab.fields_json || '[]',
+          condition_json: tab.condition_json || '{}',
+          include_fields_json: tab.include_fields_json || '[]',
+          icon_class: tab.icon_class || 'bi-journal-bookmark-fill',
+          is_enabled: tab.is_enabled !== false,
+          default_editable: tab.default_editable !== false ? 'YES' : 'NO',
+          sort_order: tab.sort_order || 0,
+        };
+
+        if (isExists) {
+          await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(tab.tab_name)}`, 'PATCH', tabData);
+          results.updated.push(tab.tab_name);
+        } else {
+          await sb('portal_tabs', 'POST', { ...tabData, created_at: new Date().toISOString() });
+          results.created.push(tab.tab_name);
+        }
+      } catch (e) {
+        results.errors.push({ tab_name: tab.tab_name, error: e.message });
+      }
+    }
+
+    return NextResponse.json({
+      result: 'success',
+      message: `Imported ${results.created.length} new, updated ${results.updated.length}`,
+      details: results,
+    });
+  }
+
   return NextResponse.json({ result: 'error', message: 'Unknown action' }, { status: 400 });
 }
 
