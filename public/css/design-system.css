@@ -1,0 +1,460 @@
+/* ════════════════════════════════════════════════════════════════════
+   CCPC Student Portal — Design System
+   Inspired by @Student Portal/design/
+   Theme: Forest + Saffron
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* ── Font Imports ───────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap');
+
+/* ── Color Tokens (OKLCH) ───────────────────────────────────────── */
+:root {
+  /* Forest + Saffron Theme */
+  --ccpc-primary: oklch(0.34 0.06 155);           /* Deep forest green */
+  --ccpc-primary-ink: oklch(0.22 0.05 155);       /* Darker forest for text */
+  --ccpc-accent: oklch(0.74 0.16 70);             /* Saffron / turmeric */
+  --ccpc-accent-ink: oklch(0.45 0.14 65);         /* Darker saffron */
+  --ccpc-surface: oklch(0.975 0.012 85);          /* Warm cream */
+  --ccpc-surface-alt: oklch(0.95 0.018 85);       /* Slightly darker cream */
+  --ccpc-ink: oklch(0.20 0.015 60);               /* Near-black charcoal */
+  --ccpc-ink-dim: oklch(0.45 0.015 60);           /* Muted text */
+  --ccpc-line: oklch(0.88 0.018 80);              /* Hairline borders */
+  --ccpc-good: oklch(0.55 0.13 155);
+  --ccpc-warn: oklch(0.68 0.16 50);
+  --ccpc-bad: oklch(0.55 0.18 25);
+
+  /* Typography */
+  --ccpc-font-display: 'Instrument Serif', 'Times New Roman', serif;
+  --ccpc-font-ui: 'Geist', 'Inter', -apple-system, system-ui, sans-serif;
+  --ccpc-font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --ccpc-font-bn: 'Hind Siliguri', 'Geist', system-ui, sans-serif;
+
+  /* Spacing */
+  --ccpc-space-xs: 4px;
+  --ccpc-space-sm: 8px;
+  --ccpc-space-md: 12px;
+  --ccpc-space-lg: 16px;
+  --ccpc-space-xl: 20px;
+  --ccpc-space-2xl: 28px;
+  --ccpc-space-3xl: 36px;
+
+  /* Border Radius */
+  --ccpc-radius-sm: 8px;
+  --ccpc-radius-md: 12px;
+  --ccpc-radius-lg: 16px;
+  --ccpc-radius-xl: 20px;
+  --ccpc-radius-2xl: 28px;
+
+  /* Shadows */
+  --ccpc-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --ccpc-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --ccpc-shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.16);
+  --ccpc-shadow-xl: 0 12px 40px rgba(0, 0, 0, 0.20);
+}
+
+/* ── Global Resets ──────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--ccpc-surface);
+  color: var(--ccpc-ink);
+  font-family: var(--ccpc-font-ui);
+  margin: 0;
+  padding: 0;
+  line-height: 1.5;
+}
+
+/* ── Typography ─────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--ccpc-font-display);
+  line-height: 1.2;
+  margin: 0;
+  font-weight: 400;
+}
+
+h1 {
+  font-size: 2.5rem;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--ccpc-space-lg);
+}
+
+h2 {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+  margin-bottom: var(--ccpc-space-lg);
+}
+
+h3 {
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--ccpc-space-md);
+}
+
+h4 {
+  font-size: 1.25rem;
+  margin-bottom: var(--ccpc-space-md);
+}
+
+p {
+  margin: 0 0 var(--ccpc-space-lg) 0;
+}
+
+/* Display text (italicized for warmth) */
+.display-text {
+  font-family: var(--ccpc-font-display);
+  font-style: italic;
+  color: var(--ccpc-accent);
+}
+
+/* Mono labels (for data, timestamps) */
+.mono-label {
+  font-family: var(--ccpc-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--ccpc-ink-dim);
+  font-weight: 500;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────── */
+.ccpc-card {
+  background: var(--ccpc-surface);
+  border: 1px solid var(--ccpc-line);
+  border-radius: var(--ccpc-radius-lg);
+  padding: var(--ccpc-space-lg);
+  box-shadow: var(--ccpc-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.ccpc-card:hover {
+  border-color: var(--ccpc-primary);
+  box-shadow: var(--ccpc-shadow-md);
+  transform: translateY(-2px);
+}
+
+.ccpc-card-alt {
+  background: var(--ccpc-surface-alt);
+  border: 1.5px solid var(--ccpc-line);
+}
+
+/* Premium card with accent border */
+.ccpc-card-premium {
+  background: linear-gradient(135deg, var(--ccpc-surface) 0%, var(--ccpc-surface-alt) 100%);
+  border: 1.5px solid var(--ccpc-accent);
+  position: relative;
+  overflow: hidden;
+}
+
+.ccpc-card-premium::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--ccpc-accent);
+  opacity: 0.08;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────── */
+.ccpc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ccpc-space-sm);
+  border: none;
+  border-radius: var(--ccpc-radius-lg);
+  padding: var(--ccpc-space-md) var(--ccpc-space-lg);
+  font-family: var(--ccpc-font-ui);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.ccpc-btn-primary {
+  background: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+  box-shadow: 0 4px 16px rgba(52, 121, 102, 0.3);
+}
+
+.ccpc-btn-primary:hover {
+  background: var(--ccpc-primary-ink);
+  box-shadow: 0 8px 24px rgba(52, 121, 102, 0.4);
+  transform: translateY(-2px);
+}
+
+.ccpc-btn-accent {
+  background: var(--ccpc-accent);
+  color: var(--ccpc-primary-ink);
+  border: 1.5px solid var(--ccpc-accent);
+}
+
+.ccpc-btn-accent:hover {
+  background: var(--ccpc-accent-ink);
+  color: var(--ccpc-surface);
+}
+
+.ccpc-btn-secondary {
+  background: var(--ccpc-surface-alt);
+  color: var(--ccpc-ink);
+  border: 1px solid var(--ccpc-line);
+}
+
+.ccpc-btn-secondary:hover {
+  border-color: var(--ccpc-primary);
+  background: var(--ccpc-surface);
+}
+
+.ccpc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Forms ──────────────────────────────────────────────────────── */
+.ccpc-input,
+.ccpc-select,
+.ccpc-textarea {
+  width: 100%;
+  padding: var(--ccpc-space-md);
+  border: 1px solid var(--ccpc-line);
+  border-radius: var(--ccpc-radius-md);
+  font-family: var(--ccpc-font-ui);
+  font-size: 1rem;
+  color: var(--ccpc-ink);
+  background: var(--ccpc-surface);
+  transition: all 0.2s ease;
+}
+
+.ccpc-input:focus,
+.ccpc-select:focus,
+.ccpc-textarea:focus {
+  outline: none;
+  border-color: var(--ccpc-primary);
+  box-shadow: 0 0 0 3px rgba(52, 121, 102, 0.1);
+  background: var(--ccpc-surface);
+}
+
+.ccpc-label {
+  display: block;
+  margin-bottom: var(--ccpc-space-sm);
+  font-weight: 600;
+  color: var(--ccpc-ink);
+}
+
+/* ── Navigation ─────────────────────────────────────────────────── */
+.ccpc-nav-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding-bottom: var(--ccpc-space-2xl);
+  background: linear-gradient(to top, var(--ccpc-surface) 70%, transparent);
+}
+
+.ccpc-nav-pills {
+  margin: 0 var(--ccpc-space-lg);
+  background: var(--ccpc-ink);
+  border-radius: var(--ccpc-radius-xl);
+  padding: var(--ccpc-space-sm);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+
+.ccpc-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--ccpc-space-sm) var(--ccpc-space-md);
+  border-radius: var(--ccpc-radius-lg);
+  color: var(--ccpc-surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ccpc-nav-item.active {
+  background: var(--ccpc-accent);
+  color: var(--ccpc-primary-ink);
+}
+
+.ccpc-nav-item-icon {
+  font-size: 1.25rem;
+}
+
+.ccpc-nav-item-label {
+  font-family: var(--ccpc-font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+/* ── Badges & Pills ─────────────────────────────────────────────── */
+.ccpc-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--ccpc-radius-sm);
+  font-family: var(--ccpc-font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ccpc-badge-primary {
+  background: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+}
+
+.ccpc-badge-accent {
+  background: var(--ccpc-accent);
+  color: var(--ccpc-primary-ink);
+  border: 1px solid var(--ccpc-accent-ink);
+}
+
+.ccpc-badge-success {
+  background: var(--ccpc-good);
+  color: white;
+}
+
+.ccpc-badge-warn {
+  background: var(--ccpc-warn);
+  color: var(--ccpc-primary-ink);
+}
+
+.ccpc-badge-danger {
+  background: var(--ccpc-bad);
+  color: white;
+}
+
+/* ── Header Section ─────────────────────────────────────────────── */
+.ccpc-header {
+  background: var(--ccpc-primary);
+  color: var(--ccpc-surface);
+  padding: var(--ccpc-space-3xl) var(--ccpc-space-lg) var(--ccpc-space-xl);
+  border-bottom-left-radius: var(--ccpc-radius-2xl);
+  border-bottom-right-radius: var(--ccpc-radius-2xl);
+  position: relative;
+  overflow: hidden;
+}
+
+.ccpc-header::before {
+  content: '';
+  position: absolute;
+  right: -60px;
+  top: -60px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--ccpc-accent);
+  opacity: 0.15;
+}
+
+.ccpc-header-greeting {
+  font-family: var(--ccpc-font-display);
+  font-size: 1.75rem;
+  line-height: 1.05;
+  margin-top: var(--ccpc-space-md);
+}
+
+.ccpc-header-greeting .name {
+  font-style: italic;
+  color: var(--ccpc-accent);
+}
+
+/* ── Status Colors ──────────────────────────────────────────────── */
+.status-present {
+  color: var(--ccpc-good);
+}
+
+.status-late {
+  color: var(--ccpc-warn);
+}
+
+.status-absent {
+  color: var(--ccpc-bad);
+}
+
+/* ── Utility Classes ────────────────────────────────────────────── */
+.text-primary {
+  color: var(--ccpc-primary);
+}
+
+.text-accent {
+  color: var(--ccpc-accent);
+}
+
+.text-muted {
+  color: var(--ccpc-ink-dim);
+}
+
+.text-center {
+  text-align: center;
+}
+
+.mt-1 { margin-top: var(--ccpc-space-sm); }
+.mt-2 { margin-top: var(--ccpc-space-md); }
+.mt-3 { margin-top: var(--ccpc-space-lg); }
+.mt-4 { margin-top: var(--ccpc-space-xl); }
+
+.mb-1 { margin-bottom: var(--ccpc-space-sm); }
+.mb-2 { margin-bottom: var(--ccpc-space-md); }
+.mb-3 { margin-bottom: var(--ccpc-space-lg); }
+.mb-4 { margin-bottom: var(--ccpc-space-xl); }
+
+.gap-1 { gap: var(--ccpc-space-sm); }
+.gap-2 { gap: var(--ccpc-space-md); }
+.gap-3 { gap: var(--ccpc-space-lg); }
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+  }
+
+  .ccpc-header {
+    padding: var(--ccpc-space-xl) var(--ccpc-space-lg) var(--ccpc-space-lg);
+  }
+
+  .ccpc-header-greeting {
+    font-size: 1.5rem;
+  }
+
+  .ccpc-card {
+    padding: var(--ccpc-space-md);
+  }
+}
+
+/* ── Print Styles ───────────────────────────────────────────────── */
+@media print {
+  .ccpc-nav-bar,
+  .ccpc-btn,
+  .no-print {
+    display: none;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+}
