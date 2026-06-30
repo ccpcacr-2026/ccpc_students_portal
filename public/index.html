@@ -1,0 +1,2221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCPC - Student Information Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary:      #059669;
+            --primary-l:    #10b981;
+            --primary-ll:   #34d399;
+            --indigo:       #6366F1;
+            --warning:      #F59E0B;
+            --danger:       #EF4444;
+            --surface:      #ffffff;
+            --bg:           #f0fdf4;
+            --text:         #0f172a;
+            --text-2:       #374151;
+            --text-3:       #6B7280;
+            --border:       #E2E8F0;
+            --border-g:     #D1FAE5;
+            --sidebar-bg:   #0d1f16;
+            --sidebar-width: 270px;
+            --radius-xl: 28px;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+            --shadow-g:     0 8px 28px rgba(5,150,105,0.22);
+            --shadow:       0 4px 20px rgba(0,0,0,0.06);
+            --shadow-sm:    0 1px 6px rgba(0,0,0,0.05);
+            --shadow-lg:    0 12px 40px rgba(0,0,0,0.1);
+            /* compat aliases */
+            --primary-light: #10b981;
+            --secondary:     #059669;
+            --background:    #f0fdf4;
+            --text-main:     #0f172a;
+            --text-muted:    #6B7280;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Login Page ────────────────────────────────── */
+        #login-section {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at 65% -5%, #a7f3d0 0%, #ecfdf5 35%, #f0fdf4 65%, #f8fafc 100%);
+            padding: 32px 16px;
+        }
+
+        .login-brand { text-align: center; margin-bottom: 24px; }
+
+        .login-logo-ring {
+            width: 96px; height: 96px;
+            border-radius: 26px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-ll));
+            box-shadow: 0 0 0 10px rgba(16,185,129,0.1), var(--shadow-g);
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 16px; overflow: hidden;
+        }
+
+        .login-title {
+            font-size: 1rem; font-weight: 900; color: var(--text);
+            letter-spacing: -0.02em; margin: 0 0 4px; line-height: 1.3;
+        }
+
+        .login-sub {
+            font-size: 0.68rem; font-weight: 700; color: var(--text-3);
+            letter-spacing: 0.08em; text-transform: uppercase; margin: 0;
+        }
+
+        .login-card {
+            width: 100%; max-width: 430px;
+            background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.75);
+            border-radius: var(--radius-xl);
+            padding: 34px 32px;
+            box-shadow: 0 20px 60px rgba(5,150,105,0.1), 0 4px 20px rgba(0,0,0,0.06);
+        }
+
+        .login-card-title {
+            font-size: 1.1rem; font-weight: 900; color: var(--text);
+            text-align: center; margin-bottom: 26px; letter-spacing: -0.02em;
+        }
+
+        .btn-login-main {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-l) 100%);
+            border: none; width: 100%; padding: 15px;
+            border-radius: var(--radius-lg); color: #fff;
+            font-weight: 800; font-size: 0.92rem; letter-spacing: 0.02em;
+            box-shadow: var(--shadow-g);
+            transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px;
+        }
+        .btn-login-main:hover { transform: translateY(-3px); box-shadow: 0 14px 35px rgba(5,150,105,0.35); }
+        .btn-login-main:active { transform: translateY(-1px); }
+
+        .login-divider {
+            display: flex; align-items: center; gap: 12px;
+            color: var(--text-3); font-size: 0.68rem; font-weight: 700;
+            letter-spacing: 0.06em; text-transform: uppercase; margin: 20px 0;
+        }
+        .login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+        .btn-nfc {
+            width: 100%; padding: 13px; border-radius: var(--radius-lg);
+            border: 1.5px solid var(--border-g); background: #ecfdf5;
+            color: var(--primary); font-weight: 800; font-size: 0.88rem;
+            display: flex; align-items: center; justify-content: center; gap: 9px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-nfc:hover { background: #d1fae5; border-color: var(--primary-l); }
+
+        /* ── Layout ──────────────────────────────────── */
+        #main-wrapper { display: flex; min-height: 100vh; }
+
+        /* ── Sidebar ─────────────────────────────────── */
+        .sidebar-nav {
+            width: var(--sidebar-width);
+            background: var(--sidebar-bg);
+            position: fixed; height: 100vh; left: 0; top: 0;
+            display: none; flex-direction: column; padding: 0; z-index: 1000;
+        }
+
+        .sidebar-brand {
+            display: flex; align-items: center; gap: 12px;
+            padding: 22px 20px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+
+        .sidebar-logo-box {
+            width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--primary), var(--primary-l));
+            box-shadow: 0 4px 14px rgba(16,185,129,0.4);
+            display: flex; align-items: center; justify-content: center; overflow: hidden;
+        }
+
+        .sidebar-brand-text .t1 { font-size: 0.8rem; font-weight: 900; color: #fff; letter-spacing: 0.01em; line-height: 1.2; }
+        .sidebar-brand-text .t2 { font-size: 0.6rem; font-weight: 600; color: rgba(255,255,255,0.38); letter-spacing: 0.04em; }
+
+        .sidebar-nav-list { padding: 16px 12px; flex: 1; overflow-y: auto; }
+        .sidebar-nav-list::-webkit-scrollbar { width: 3px; }
+        .sidebar-nav-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+        /* ── Nav Items ───────────────────────────────── */
+        .nav-item-btn {
+            display: flex; align-items: center; gap: 13px;
+            background: none; border: none;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.88rem; font-weight: 700;
+            padding: 12px 15px; margin-bottom: 3px;
+            width: 100%; border-radius: var(--radius-md);
+            transition: all 0.2s ease;
+            text-decoration: none !important; text-align: left; cursor: pointer;
+        }
+
+        .nav-item-btn i { font-size: 1.15rem; width: 20px; text-align: center; flex-shrink: 0; }
+        .nav-item-btn:hover { color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.07); transform: translateX(4px); }
+        .nav-item-btn.active { color: #fff; background: linear-gradient(135deg, var(--primary) 0%, #0ea570 100%); box-shadow: 0 4px 18px rgba(5,150,105,0.35); }
+        .nav-item-btn.text-danger { color: rgba(252,129,129,0.75) !important; }
+        .nav-item-btn.text-danger:hover { color: #fca5a5 !important; background: rgba(252,129,129,0.1) !important; }
+
+        /* ── Content Area ────────────────────────────── */
+        .content-area { flex: 1; background: var(--bg); padding: 40px; min-height: 100vh; transition: margin 0.3s ease; }
+
+        @media (min-width: 992px) {
+            .sidebar-nav { display: flex; }
+            .content-area { margin-left: var(--sidebar-width); }
+        }
+
+        @media (max-width: 991px) {
+            .content-area { padding: 18px; padding-top: 88px; padding-bottom: 90px; }
+        }
+
+        /* ── Mobile Header ───────────────────────────── */
+        .mobile-header {
+            position: fixed; top: 0; left: 0; right: 0; height: 70px;
+            background: rgba(255,255,255,0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-g); z-index: 1040;
+            padding: 0 16px; display: none; align-items: center; gap: 12px;
+            box-shadow: 0 2px 12px rgba(5,150,105,0.07);
+        }
+
+        @media (max-width: 991px) { .mobile-header { display: flex; } }
+
+        /* ── Bottom Nav ──────────────────────────────── */
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; right: 0; height: 68px;
+            background: rgba(255,255,255,0.97); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
+            display: none; align-items: center; z-index: 1050;
+            border-top: 1px solid var(--border-g); box-shadow: 0 -3px 18px rgba(0,0,0,0.05);
+            padding: 0 8px; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+            -webkit-overflow-scrolling: touch; scrollbar-width: none;
+            gap: 4px;
+        }
+        .bottom-nav::-webkit-scrollbar { display: none; }
+
+        @media (max-width: 991px) { .bottom-nav { display: flex; } }
+
+        .bottom-nav .nav-item-btn {
+            flex-direction: column; font-size: 0.58rem; padding: 7px 5px;
+            margin-bottom: 0; width: 68px; min-width: 68px; max-width: 68px;
+            border-radius: 10px; text-align: center; color: var(--text-3);
+            background: none; gap: 3px; flex-shrink: 0;
+            transform: none !important; overflow: hidden;
+        }
+        .bottom-nav .nav-item-btn span {
+            display: -webkit-box; width: 100%;
+            -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; word-break: break-word; line-height: 1.2;
+        }
+        .bottom-nav .nav-item-btn i { font-size: 1.2rem; width: auto; display: block; }
+        .bottom-nav .nav-item-btn:hover { color: var(--primary); background: #f0fdf4; }
+        .bottom-nav .nav-item-btn.active { color: var(--primary); background: #ecfdf5; box-shadow: none; }
+
+        /* ── Include-Field Chips ─────────────────────── */
+        .include-field-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 5px 12px; border-radius: 20px; cursor: pointer;
+            border: 1.5px solid var(--border); background: #fff;
+            font-size: 0.72rem; font-weight: 700; color: var(--text-3);
+            transition: all 0.18s; user-select: none;
+        }
+        .include-field-chip input[type="checkbox"] { display: none; }
+        .include-field-chip:hover { border-color: var(--primary-l); color: var(--primary); background: #f0fdf4; }
+        .include-field-chip.active { border-color: var(--primary); background: #ecfdf5; color: var(--primary); }
+        .include-field-chip.active::before { content: '\2713\00a0'; font-size: 0.6rem; }
+
+        /* ── Included Profile Data block (student view) ── */
+        .include-master-info { background: #f8fafc; border: 1px solid var(--border-g); border-radius: var(--radius-md); padding: 16px 20px; margin-bottom: 24px; }
+        .include-master-info .imi-label { font-size: 0.6rem; font-weight: 800; color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
+        .include-master-info .imi-value { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+
+        /* ── Fill % Badge ────────────────────────────── */
+        .nav-fill-badge {
+            display: inline-block; font-size: 0.48rem; font-weight: 800;
+            padding: 1px 5px; border-radius: 20px; line-height: 1.5;
+            background: #fef3c7; color: #d97706; letter-spacing: 0.01em;
+            transition: background 0.3s, color 0.3s; margin-top: 1px;
+        }
+        .nav-fill-badge.full  { background: #d1fae5; color: var(--primary); }
+        .nav-fill-badge.empty { background: #f3f4f6; color: var(--text-3); }
+        .sidebar-nav .nav-item-btn .nav-fill-badge { margin-left: auto; font-size: 0.6rem; margin-top: 0; }
+
+        /* ── Unfilled Red Dot ────────────────────────── */
+        .nav-item-btn { position: relative; }
+        .nav-unfilled-dot {
+            position: absolute; top: 6px; right: 6px;
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 0 2px #fff;
+            animation: dot-pulse 2s ease-in-out infinite;
+            pointer-events: none;
+        }
+        .bottom-nav .nav-unfilled-dot { top: 5px; right: 8px; width: 7px; height: 7px; }
+        @keyframes dot-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50%       { transform: scale(1.35); opacity: 0.7; }
+        }
+
+        /* ── Tab Fill Progress Bar ───────────────────── */
+        .tab-fill-progress { margin: -6px 0 22px; display: flex; flex-direction: column; gap: 5px; }
+        .tab-fill-bar-bg { height: 5px; background: var(--border); border-radius: 10px; overflow: hidden; }
+        .tab-fill-bar { height: 100%; border-radius: 10px; transition: width 0.6s cubic-bezier(0.16,1,0.3,1); }
+        .tab-fill-label { font-size: 0.68rem; font-weight: 700; color: var(--text-3); }
+
+        /* ── Logout Button ───────────────────────────── */
+        .btn-logout {
+            position: fixed; top: 17px; right: 22px; z-index: 2100;
+            padding: 10px 20px; border-radius: 50px;
+            background: rgba(255,255,255,0.93); backdrop-filter: blur(14px);
+            border: 1.5px solid rgba(239,68,68,0.2); color: #EF4444;
+            font-weight: 800; font-size: 0.77rem;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.07);
+            transition: all 0.2s cubic-bezier(0.16,1,0.3,1);
+            display: flex; align-items: center; gap: 8px;
+            text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer;
+        }
+        .btn-logout:hover { background: #EF4444; color: #fff; border-color: transparent; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(239,68,68,0.3); }
+
+        @media (max-width: 991px) {
+            .btn-logout { top: 12px; right: 13px; padding: 9px 15px; font-size: 0.71rem; }
+            .mobile-header { padding-right: 118px !important; }
+        }
+
+        /* ── Logo Container ──────────────────────────── */
+        .institute-logo-container {
+            background: linear-gradient(135deg, var(--primary), var(--primary-l));
+            border-radius: 22px; display: flex; align-items: center; justify-content: center;
+            overflow: hidden; box-shadow: var(--shadow-g);
+        }
+        .institute-logo-img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* ── Hub Tabs ────────────────────────────────── */
+        .hub-tab-container {
+            display: flex; gap: 6px; padding: 6px;
+            background: #fff; border-radius: 20px; margin-bottom: 24px;
+            border: 1px solid var(--border-g); box-shadow: var(--shadow-sm);
+        }
+
+        .hub-tab-btn {
+            flex: 1; border: none; background: transparent; padding: 11px 8px;
+            border-radius: 16px; font-weight: 800; font-size: 0.82rem; color: var(--text-3);
+            transition: all 0.22s cubic-bezier(0.16,1,0.3,1);
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+            cursor: pointer; white-space: nowrap;
+        }
+        .hub-tab-btn i { font-size: 1rem; }
+        .hub-tab-btn:hover { color: var(--primary); background: #f0fdf4; }
+        .hub-tab-btn.active { background: linear-gradient(135deg, var(--primary), var(--primary-l)); color: #fff; box-shadow: 0 4px 16px rgba(5,150,105,0.3); }
+
+        .hub-tab-pane { display: none; }
+        .hub-tab-pane.active { display: block; animation: fadeUp 0.38s ease; }
+
+        /* ── Cards ───────────────────────────────────── */
+        .card {
+            border: 1px solid #E9F5F0; border-radius: var(--radius-xl);
+            background: var(--surface); box-shadow: var(--shadow);
+            padding: 2.2rem; margin-bottom: 2rem; transition: box-shadow 0.2s;
+        }
+        .card:hover { box-shadow: var(--shadow-lg); }
+
+        /* ── Section Title ───────────────────────────── */
+        .section-title {
+            color: var(--text); font-weight: 900; font-size: 1.5rem;
+            letter-spacing: -0.03em; margin-bottom: 2rem;
+            display: flex; align-items: center; gap: 14px;
+        }
+        .section-title::before {
+            content: ''; width: 5px; height: 26px; flex-shrink: 0;
+            background: linear-gradient(180deg, var(--primary), var(--primary-l));
+            border-radius: 5px;
+        }
+
+        /* ── Profile Group Label ─────────────────────── */
+        .profile-group-label {
+            font-size: 0.72rem; font-weight: 900; color: var(--primary);
+            text-transform: uppercase; letter-spacing: 0.1em;
+            margin: 20px 0 14px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .profile-group-label::before { content: ''; width: 14px; height: 3px; background: var(--primary-l); border-radius: 3px; }
+
+        /* ── Detail Items ────────────────────────────── */
+        .detail-item {
+            padding: 15px; background: var(--surface); border-radius: var(--radius-md);
+            margin-bottom: 12px; border: 1px solid var(--border);
+            transition: all 0.2s; height: 100%;
+        }
+        .detail-item:hover { border-color: var(--border-g); background: #f9fffe; transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+
+        .detail-label { font-size: 0.63rem; color: var(--text-3); font-weight: 800; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .detail-value { font-size: 1rem; color: var(--text); font-weight: 700; }
+
+        /* ── Forms ───────────────────────────────────── */
+        .form-control, .form-select {
+            border-radius: var(--radius-md); padding: 14px 18px;
+            border: 1.5px solid var(--border); background: #f8fafc;
+            font-weight: 600; color: var(--text); transition: all 0.2s; font-size: 0.92rem;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary); background: #fff;
+            box-shadow: 0 0 0 4px rgba(16,185,129,0.1); outline: none;
+        }
+
+        /* ── Buttons ─────────────────────────────────── */
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-l));
+            border: none; padding: 14px 28px; border-radius: var(--radius-lg);
+            font-weight: 800; box-shadow: var(--shadow-g); color: #fff; transition: all 0.22s;
+        }
+        .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(5,150,105,0.35); color: #fff; }
+        .btn-outline-primary { border-color: var(--primary); color: var(--primary); font-weight: 700; }
+        .btn-outline-primary:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+        .btn-premium-save {
+            background: linear-gradient(135deg, var(--primary), var(--primary-l));
+            border: none; padding: 16px 28px; border-radius: var(--radius-lg);
+            color: #fff; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em;
+            font-size: 0.88rem; box-shadow: var(--shadow-g);
+            transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .btn-premium-save:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(5,150,105,0.35); }
+
+        /* ── Premium Form Group ──────────────────────── */
+        .premium-form-group { position: relative; margin-bottom: 0.5rem; }
+
+        .premium-form-group .form-control,
+        .premium-form-group .form-select {
+            font-size: 0.92rem; font-weight: 600; color: var(--text);
+            background: #f8fafc; border: 1.5px solid var(--border); border-radius: var(--radius-md);
+            padding: 24px 18px 8px 18px !important; height: 60px; transition: all 0.22s;
+        }
+
+        .premium-form-group label {
+            position: absolute; top: 50%; left: 18px; transform: translateY(-50%);
+            font-size: 0.78rem; font-weight: 800; color: var(--text-3);
+            text-transform: uppercase; letter-spacing: 0.07em;
+            pointer-events: none; transition: all 0.22s cubic-bezier(0.16,1,0.3,1); margin-bottom: 0; z-index: 10;
+        }
+
+        .premium-form-group .form-control:focus ~ label,
+        .premium-form-group .form-control:not(:placeholder-shown) ~ label,
+        .premium-form-group .form-select:focus ~ label,
+        .premium-form-group .form-select:valid ~ label,
+        .premium-form-group .form-select[value]:not([value=""]) ~ label { top: 13px; font-size: 0.6rem; color: var(--primary); letter-spacing: 0.1em; }
+
+        .premium-form-group .form-control:focus,
+        .premium-form-group .form-select:focus { background: #fff; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(16,185,129,0.1); outline: none; }
+
+        .premium-form-group .form-control:disabled,
+        .premium-form-group .form-select:disabled { background: #f1f5f9 !important; border-color: var(--border) !important; color: var(--text-3); cursor: not-allowed; opacity: 0.75; }
+
+        /* ── Checkbox Group ──────────────────────────── */
+        .premium-checkbox-group { background: #f8fafc; border: 1.5px solid var(--border); border-radius: var(--radius-lg); padding: 18px; transition: border-color 0.2s; }
+        .premium-checkbox-group:hover { border-color: var(--border-g); }
+
+        .premium-checkbox-card {
+            display: flex; align-items: center; gap: 12px;
+            padding: 11px 16px; border: 1px solid var(--border); border-radius: var(--radius-md);
+            background: #fff; cursor: pointer; margin-bottom: 8px; transition: all 0.2s;
+        }
+        .premium-checkbox-card:last-child { margin-bottom: 0; }
+        .premium-checkbox-card:hover { border-color: var(--border-g); transform: translateY(-2px); }
+        .premium-checkbox-card input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+
+        /* ── Admin ───────────────────────────────────── */
+        .admin-tab-card { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; background: #fff; transition: all 0.2s; }
+        .admin-tab-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+
+        .sticky-builder-controls { position: sticky; top: -40px; z-index: 100; background: #fff; padding: 22px; margin: -2.2rem -2.2rem 1.5rem; border-bottom: 1px solid var(--border); border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+
+        /* ── Designer Credit ─────────────────────────── */
+        .designer-credit {
+            position: fixed; bottom: 20px; right: 28px; font-size: 0.7rem; color: var(--text-3);
+            font-weight: 700; z-index: 2000; padding: 7px 15px; border-radius: 50px;
+            background: rgba(255,255,255,0.88); backdrop-filter: blur(12px);
+            border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+        }
+
+        @media (max-width: 991px) {
+            .designer-credit { position: relative; bottom: 0; right: auto; text-align: center; background: transparent; backdrop-filter: none; border: none; box-shadow: none; width: 100%; margin-top: -50px; padding-bottom: 80px; pointer-events: none; }
+        }
+
+        /* ── Animations & Utilities ──────────────────── */
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; animation: fadeUp 0.38s ease; }
+        .hidden { display: none !important; }
+        .animate-in { animation: fadeUp 0.5s cubic-bezier(0.16,1,0.3,1); }
+
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.6; } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-pulse { animation: pulse 2s infinite; }
+
+        /* ── Responsive ──────────────────────────────── */
+        @media (max-width: 991px) {
+            :root { --radius-xl: 22px; --radius-lg: 16px; }
+            .content-area { padding: 14px !important; padding-top: 86px !important; padding-bottom: 90px !important; }
+            .card { padding: 1.2rem !important; margin-bottom: 1rem !important; border-radius: 20px !important; }
+            .section-title { font-size: 1.15rem !important; margin-bottom: 1.2rem !important; }
+            .hub-tab-container { padding: 5px; gap: 4px; border-radius: 18px; }
+            .hub-tab-btn { padding: 10px 6px; font-size: 0.76rem; border-radius: 14px; gap: 5px; }
+            .hub-tab-btn i { font-size: 0.95rem; }
+            .detail-item { padding: 12px !important; margin-bottom: 8px !important; border-radius: 12px !important; }
+            .detail-label { font-size: 0.58rem !important; }
+            .detail-value { font-size: 0.88rem !important; word-break: break-word; }
+            .profile-group-label { font-size: 0.68rem !important; margin-bottom: 10px !important; }
+            .premium-form-group .form-control, .premium-form-group .form-select { height: 56px !important; padding: 22px 14px 6px !important; font-size: 0.88rem !important; border-radius: 12px !important; }
+            .premium-form-group label { left: 14px !important; font-size: 0.72rem !important; }
+            .premium-form-group .form-control:focus ~ label, .premium-form-group .form-control:not(:placeholder-shown) ~ label, .premium-form-group .form-select:focus ~ label, .premium-form-group .form-select:valid ~ label, .premium-form-group .form-select[value]:not([value=""]) ~ label { top: 11px !important; font-size: 0.58rem !important; }
+            .form-control:not(.premium-form-group .form-control), .form-select:not(.premium-form-group .form-select) { padding: 12px 14px !important; font-size: 0.88rem !important; border-radius: 12px !important; }
+            .btn-primary { padding: 13px 22px !important; font-size: 0.9rem !important; border-radius: 14px !important; }
+            .profile-group-label { font-size: 0.68rem !important; }
+        }
+
+        @media (max-width: 575px) {
+            .content-area { padding: 12px !important; padding-top: 86px !important; padding-bottom: 88px !important; }
+            .login-card { padding: 22px 18px; }
+            .login-logo-ring { width: 80px; height: 80px; border-radius: 22px; }
+            .login-title { font-size: 0.92rem; }
+            .card { padding: 1rem !important; border-radius: 18px !important; }
+            .section-title { font-size: 1.05rem !important; }
+            .detail-value { font-size: 0.82rem !important; }
+        }
+
+        /* ── Sidebar Student Card ──────────────────────────────── */
+        .sidebar-student-card {
+            margin: 0 10px 6px; padding: 11px 13px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: var(--radius-sm);
+            display: none; align-items: center; gap: 10px;
+        }
+        .sidebar-student-avatar {
+            width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--primary), var(--primary-l));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.78rem; font-weight: 900; color: #fff;
+            border: 2px solid rgba(255,255,255,0.18);
+        }
+        .sidebar-student-name { font-size: 0.75rem; font-weight: 800; color: #fff; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar-student-id   { font-size: 0.59rem; font-weight: 600; color: rgba(255,255,255,0.42); margin-top: 1px; }
+
+        /* ── Student Strip (mobile / all) ──────────────────────── */
+        .student-strip {
+            display: flex; align-items: center; gap: 12px;
+            background: linear-gradient(135deg, var(--primary), #0ea570);
+            border-radius: var(--radius-md); padding: 10px 15px;
+            margin-bottom: 16px; color: #fff; box-shadow: var(--shadow-g);
+            position: sticky; top: 0; z-index: 90;
+        }
+        .student-strip-avatar {
+            width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+            background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.85rem; font-weight: 900;
+        }
+        .student-strip-name { font-size: 0.88rem; font-weight: 900; line-height: 1.2; }
+        .student-strip-meta { font-size: 0.6rem; font-weight: 600; opacity: 0.78; margin-top: 1px; }
+
+        /* Hide strip on desktop (sidebar card is used instead) */
+        @media (min-width: 992px) {
+            .student-strip { display: none !important; }
+            .sidebar-student-card { display: flex !important; }
+        }
+        /* On mobile strip sticks below the fixed mobile header */
+        @media (max-width: 991px) {
+            .student-strip { border-radius: 0 0 var(--radius-md) var(--radius-md); margin: -20px -18px 14px; top: 68px; }
+        }
+
+        /* ── Dynamic nav tab accent ────────────────────────────── */
+        .nav-item-btn.nav-dynamic { border-left: 3px solid rgba(16,185,129,0.45); padding-left: 10px; }
+        .nav-item-btn.nav-dynamic.active { border-left-color: rgba(255,255,255,0.25); }
+        .bottom-nav .nav-item-btn.nav-dynamic { border-left: none; border-bottom: 2px solid rgba(5,150,105,0.5); padding-bottom: 3px; }
+        .bottom-nav .nav-item-btn.nav-dynamic.active { border-bottom-color: rgba(5,150,105,0.8); }
+
+        /* ── Compressed profile grid ───────────────────────────── */
+        .profile-grid-compressed { padding: 14px 16px !important; }
+        .profile-grid-compressed .profile-group-label { margin: 10px 0 6px; font-size: 0.62rem !important; }
+        .profile-grid-compressed .detail-item { padding: 9px 12px !important; margin-bottom: 0 !important; border-radius: var(--radius-sm) !important; }
+        .profile-grid-compressed .detail-label { font-size: 0.56rem !important; margin-bottom: 2px !important; }
+        .profile-grid-compressed .detail-value { font-size: 0.83rem !important; }
+        .profile-grid-compressed .row.g-3 > [class*="col"] { padding-top: 5px !important; padding-bottom: 5px !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Header -->
+    <header class="mobile-header hidden" id="mobile-header">
+        <div class="institute-logo-container" style="width:40px;height:40px;border-radius:11px;flex-shrink:0">
+            <img id="mobile-logo" class="institute-logo-img" alt="Logo">
+        </div>
+        <div>
+            <div style="font-size:0.78rem;font-weight:900;color:var(--primary);letter-spacing:0.01em;line-height:1.2">CCPC Portal</div>
+            <div style="font-size:0.58rem;font-weight:700;color:var(--text-3);letter-spacing:0.05em;text-transform:uppercase">Student Information System</div>
+        </div>
+    </header>
+
+    <div id="main-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar-nav hidden" id="sidebar-container">
+            <div class="sidebar-brand">
+                <div class="sidebar-logo-box">
+                    <img id="sidebar-logo" class="institute-logo-img" alt="CCPC" style="width:40px;height:40px">
+                </div>
+                <div class="sidebar-brand-text">
+                    <div class="t1">CCPC Portal</div>
+                    <div class="t2">Student Information System</div>
+                </div>
+            </div>
+            <div id="sidebar-student-card" class="sidebar-student-card">
+                <div id="sidebar-student-avatar" class="sidebar-student-avatar">?</div>
+                <div style="min-width:0">
+                    <div id="sidebar-student-name" class="sidebar-student-name">—</div>
+                    <div id="sidebar-student-id-label" class="sidebar-student-id">—</div>
+                </div>
+            </div>
+            <div class="sidebar-nav-list" id="sidebar-items"></div>
+        </aside>
+
+        <main class="content-area">
+            <div class="container animate-in">
+
+                <!-- Login -->
+                <div id="login-section">
+                    <div class="login-brand">
+                        <div class="login-logo-ring">
+                            <img id="login-logo" class="institute-logo-img" alt="Logo">
+                        </div>
+                        <h1 class="login-title">Chattogram Cantonment Public College</h1>
+                        <p class="login-sub">Student Information Portal</p>
+                    </div>
+                    <div class="login-card">
+                        <div class="login-card-title">Sign In to Portal</div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-800" style="color:var(--text-3);text-transform:uppercase;letter-spacing:0.07em;font-size:0.67rem">Student ID Number</label>
+                            <div style="position:relative">
+                                <i class="bi bi-person-fill" style="position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--text-3);font-size:0.95rem;pointer-events:none;z-index:2"></i>
+                                <input type="text" id="student_id" class="form-control" placeholder="Enter Student ID" style="padding-left:42px!important">
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label small fw-800" style="color:var(--text-3);text-transform:uppercase;letter-spacing:0.07em;font-size:0.67rem">Guardian Phone Number</label>
+                            <div style="position:relative">
+                                <i class="bi bi-phone-fill" style="position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--text-3);font-size:0.95rem;pointer-events:none;z-index:2"></i>
+                                <input type="text" id="phone_number" class="form-control" placeholder="01*********" style="padding-left:42px!important">
+                            </div>
+                        </div>
+                        <button id="btn-login" onclick="login()" class="btn-login-main">
+                            <i class="bi bi-shield-lock-fill"></i> Authenticate Identity
+                        </button>
+                        <div class="login-divider">Or login via</div>
+                        <button id="btn-nfc-login" class="btn-nfc">
+                            <i class="bi bi-nfc fs-5 animate-pulse"></i> Tap NFC Card
+                        </button>
+                    </div>
+                </div>
+
+                <!-- NFC Overlay -->
+                <div id="nfc-scan-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(15,23,42,0.88);backdrop-filter:blur(14px);z-index:9999;display:none;align-items:center;justify-content:center;color:#fff">
+                    <div class="text-center p-5 rounded-5 shadow" style="max-width:380px;background:radial-gradient(circle at top right,var(--primary) -20%,#0f172a 70%);border:1px solid rgba(255,255,255,0.1)">
+                        <div class="mb-4 position-relative">
+                            <div style="width:100px;height:100px;border-radius:50%;background:rgba(16,185,129,0.15);margin:0 auto;display:flex;align-items:center;justify-content:center;border:2px dashed rgba(16,185,129,0.4);animation:spin 10s linear infinite"></div>
+                            <i class="bi bi-nfc position-absolute top-50 start-50 translate-middle" style="font-size:3rem;color:var(--primary-ll);animation:pulse 1.5s infinite"></i>
+                        </div>
+                        <h4 id="nfc-scan-title" class="fw-800 mb-2">Ready to Scan</h4>
+                        <p id="nfc-scan-desc" class="small mb-4" style="color:#94a3b8">Please tap and hold your student NFC card against the back of your phone.</p>
+                        <button id="btn-nfc-cancel" class="btn btn-sm btn-outline-light rounded-pill px-4" style="font-weight:700;opacity:0.8">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Portal Hub -->
+                <div id="form-section" class="hidden">
+                    <div id="portal-content-wrapper"></div>
+                </div>
+
+                <!-- Public Profile -->
+                <div id="public-profile-section" class="hidden">
+                    <div class="card p-4 mb-4">
+                        <div class="d-flex align-items-center gap-3 mb-4">
+                            <div style="background:linear-gradient(135deg,var(--primary),var(--primary-l));color:#fff;padding:14px;border-radius:16px;box-shadow:var(--shadow-g)">
+                                <i class="bi bi-person-badge fs-3"></i>
+                            </div>
+                            <div>
+                                <h4 class="fw-800 mb-0" style="color:var(--text)">Student Profile</h4>
+                                <p class="small mb-0 fw-700 text-uppercase" style="color:var(--text-3);letter-spacing:0.06em">Digital Identity Card</p>
+                            </div>
+                        </div>
+                        <div id="public-profile-content"></div>
+                        <div class="mt-4 pt-3 border-top">
+                            <button onclick="window.location.reload()" class="btn btn-primary w-100 py-3">
+                                <i class="bi bi-box-arrow-in-right me-2"></i> Log in to Fill Form
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Dashboard -->
+                <div id="admin-section" class="hidden">
+                    <div class="card p-0 overflow-hidden">
+                        <div class="p-4 d-flex justify-content-between align-items-center flex-wrap gap-2 text-white" style="background:linear-gradient(135deg,var(--sidebar-bg),#1a3d28)">
+                            <h5 class="m-0 fw-800">Admin Control Console</h5>
+                            <div class="nav nav-pills" role="tablist">
+                                <button class="btn btn-sm fw-800 active me-2" data-bs-toggle="tab" data-bs-target="#admin-manage" style="background:rgba(255,255,255,0.18);color:#fff;border-radius:10px;border:none">Setup</button>
+                                <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-reports" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Data</button>
+                                <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-nfc" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">NFC</button>
+                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-tracking" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Bus</button>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-white">
+                            <div class="tab-content">
+                                <div class="tab-pane active" id="admin-manage">
+                                    <div class="sticky-builder-controls shadow-sm border rounded-4">
+                                        <div class="row g-3 align-items-end">
+                                            <div class="col-md-4"><label class="small fw-800 text-muted">TAB NAME</label><input type="text" id="new-tab-name" class="form-control"></div>
+                                            <div class="col-md-3"><label class="small fw-800 text-muted">ICON (BI Class)</label><input type="text" id="new-tab-icon" class="form-control" placeholder="bi-folder-fill"></div>
+                                            <div class="col-md-3 pb-2"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="new-tab-editable" checked><label class="form-check-label fw-800">Allows Edits</label></div></div>
+                                            <div class="col-md-2"><button onclick="saveNewTab()" class="btn btn-primary w-100">Save</button></div>
+                                        </div>
+                                        <div class="row g-2 mt-4">
+                                            <div class="col-6"><button onclick="addTabRow('field')" class="btn btn-outline-primary fw-800 w-100">+ New Input</button></div>
+                                            <div class="col-6"><button onclick="addTabRow('label')" class="btn btn-outline-secondary fw-800 w-100">+ New Header</button></div>
+                                        </div>
+                                        <div class="mt-4 p-4 bg-light rounded-4 border">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <span class="small fw-800 text-muted uppercase">Logic Rules</span>
+                                                <button onclick="addConditionRow()" class="btn btn-xs btn-dark rounded-pill px-3">+ Add Rule</button>
+                                            </div>
+                                            <div id="conditions-list" class="d-flex flex-column gap-3"></div>
+                                        </div>
+                                        <div class="mt-4 p-4 bg-light rounded-4 border">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <span class="small fw-800 text-muted text-uppercase">Include from Student Profile</span>
+                                                <span class="small fw-700 text-muted" id="include-fields-count">0 selected</span>
+                                            </div>
+                                            <p class="small text-muted mb-3" style="font-size:0.7rem">Selected fields will appear as read-only info inside the form and will be saved as extra columns in the sheet.</p>
+                                            <div id="include-fields-list" class="d-flex flex-wrap gap-2">
+                                                <span class="text-muted small fst-italic">Loading profile columns...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="fields-list" class="mt-5"></div>
+                                    <hr class="my-5 opacity-25">
+                                    <div id="admin-tabs-list" class="row g-4"></div>
+                                </div>
+                                <div class="tab-pane" id="admin-reports">
+                                    <div class="row g-3 mb-4">
+                                        <div class="col-md-5"><select id="summary-tab-select" class="form-select" onchange="loadSummaryData()"><option value="">Select Target...</option></select></div>
+                                        <div class="col-md-5"><input type="text" id="summary-search" class="form-control" placeholder="Filter current view..." onkeyup="filterSummaryTable()"></div>
+                                        <div class="col-md-2"><button onclick="exportSummaryData()" class="btn btn-success w-100 fw-800">Export CSV</button></div>
+                                    </div>
+                                    <div class="table-responsive rounded-4 border"><table class="table table-hover align-middle mb-0" id="summary-table"><thead class="bg-light"><tr id="summary-headers"></tr></thead><tbody id="summary-body"></tbody></table></div>
+                                </div>
+                                <div class="tab-pane" id="admin-nfc"></div>
+                                <div class="tab-pane" id="admin-tracking">
+                                    <div class="row g-4">
+                                        <div class="col-md-5">
+                                            <div class="card border-0 shadow-sm p-4 h-100" style="border-radius:24px">
+                                                <h5 class="fw-800 mb-4"><i class="bi bi-shield-lock-fill me-2" style="color:var(--primary)"></i>GP API Credentials</h5>
+                                                <div class="premium-form-group mb-3"><input type="text" id="gp-username" class="form-control" placeholder=" "><label>Username</label></div>
+                                                <div class="premium-form-group mb-3 position-relative">
+                                                    <input type="password" id="gp-password" class="form-control" placeholder=" "><label>Password</label>
+                                                    <button type="button" onclick="toggleGPPassword()" class="btn btn-sm position-absolute end-0 top-50 translate-middle-y me-2 border-0" style="z-index:20;color:var(--text-3)"><i id="gp-pass-icon" class="bi bi-eye-fill fs-5"></i></button>
+                                                </div>
+                                                <div class="premium-form-group mb-4"><select id="gp-environment" class="form-select" required><option value="production">Production</option><option value="staging">Staging</option></select><label>Environment</label></div>
+                                                <div class="premium-form-group mb-4"><input type="text" id="gp-pre-encoded" class="form-control" readonly placeholder=" "><label>Verification (username:password)</label></div>
+                                                <div class="premium-form-group mb-4"><input type="text" id="gp-api-key-display" class="form-control" readonly placeholder=" "><label>System Generated API Key (Base64)</label><div class="small text-muted mt-1" style="font-size:0.65rem">Generated automatically from your username and password.</div></div>
+                                                <div class="d-flex gap-2">
+                                                    <button onclick="saveGPConfig()" class="btn btn-primary flex-grow-1 py-3 fw-800">Update Credentials</button>
+                                                    <button id="btn-verify-gp" onclick="verifyGPConnection()" class="btn btn-outline-primary py-3 fw-800" title="Verify Connection"><i class="bi bi-patch-check"></i></button>
+                                                </div>
+                                                <div id="gp-status" class="mt-3 text-center small fw-800"></div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-7">
+                                            <div class="card border-0 shadow-sm p-4 mb-4" style="border-radius:24px">
+                                                <div class="d-flex justify-content-between align-items-center mb-4">
+                                                    <h5 class="fw-800 m-0"><i class="bi bi-bus-front-fill me-2" style="color:var(--primary)"></i>Bus Registry</h5>
+                                                    <button onclick="addBusRow()" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-800">+ Add Bus</button>
+                                                </div>
+                                                <div class="table-responsive">
+                                                    <table class="table table-hover align-middle" id="bus-config-table">
+                                                        <thead><tr class="text-muted small fw-800 text-uppercase"><th>Bus Name</th><th>IMEI Number</th><th></th></tr></thead>
+                                                        <tbody id="bus-config-body"></tbody>
+                                                    </table>
+                                                </div>
+                                                <button onclick="saveBusConfig()" class="btn btn-dark w-100 py-3 mt-3 fw-800">Save Registry</button>
+                                            </div>
+                                            <div class="card border-0 shadow-sm p-4" style="border-radius:24px">
+                                                <div class="d-flex justify-content-between align-items-center mb-4">
+                                                    <h5 class="fw-800 m-0"><i class="bi bi-geo-alt-fill me-2" style="color:var(--primary)"></i>Places Registry (Geofencing)</h5>
+                                                    <button onclick="addPlaceRow()" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-800">+ Add Place</button>
+                                                </div>
+                                                <div class="table-responsive">
+                                                    <table class="table table-hover align-middle">
+                                                        <thead><tr class="text-muted small fw-800 text-uppercase"><th>Place Name</th><th>Coordinates (Lat, Lng)</th><th>Radius (m)</th><th></th></tr></thead>
+                                                        <tbody id="place-config-body"></tbody>
+                                                    </table>
+                                                </div>
+                                                <button onclick="savePlaceConfig()" class="btn btn-dark w-100 py-3 mt-3 fw-800">Save Places</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <nav class="bottom-nav" id="bottom-nav-container"></nav>
+    </div>
+
+    <button id="btn-logout-fixed" class="btn-logout hidden" onclick="logout()">
+        <i class="bi bi-box-arrow-right"></i> Logout
+    </button>
+
+    <div class="designer-credit">Designed & Developed by: Md. Mamunur Rashid, CCPC</div>
+
+    <script>
+        /* ── Portal API helper (replaces google.script.run) ──────────────── */
+        async function portalFetch(action, payload = {}) {
+            const r = await fetch('/api/portal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, payload })
+            });
+            if (!r.ok) throw new Error('Network error ' + r.status);
+            return r.json();
+        }
+
+        const LOGO_DATA_URL = '/logo.jpg';
+
+        /* Auto-login from URL params */
+        const _urlP = new URLSearchParams(location.search);
+        const AUTO_LOGIN_ID      = _urlP.get('id') || _urlP.get('student_id') || '';
+        const AUTO_LOGIN_PHONE   = _urlP.get('phone') || _urlP.get('phone_number') || '';
+        const AUTO_LOGIN_NFC_UID = _urlP.get('nfc_uid') || _urlP.get('uid') || '';
+
+        let loggedInStudent = null;
+        let allTabs = [];
+
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('Global Error: ' + msg + ' at ' + url + ':' + lineNo);
+            return false;
+        };
+
+        function resetUI() {
+            try {
+                const els = ['login-section', 'form-section', 'admin-section', 'btn-logout-fixed', 'sidebar-container', 'mobile-header'];
+                els.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        if (id === 'login-section') el.classList.remove('hidden');
+                        else el.classList.add('hidden');
+                    }
+                });
+                const items = document.getElementById('sidebar-items');
+                const bottom = document.getElementById('bottom-nav-container');
+                if(items) items.innerHTML = '';
+                if(bottom) bottom.innerHTML = '';
+            } catch(e) { console.error("resetUI error", e); }
+        }
+
+        window.onload = () => {
+            try {
+                const sidebarLogo = document.getElementById('sidebar-logo');
+                const loginLogo = document.getElementById('login-logo');
+                const mobileLogo = document.getElementById('mobile-logo');
+                if (sidebarLogo) sidebarLogo.src = LOGO_DATA_URL;
+                if (loginLogo) loginLogo.src = LOGO_DATA_URL;
+                if (mobileLogo) mobileLogo.src = LOGO_DATA_URL;
+
+                resetUI();
+
+                console.log("Portal Initialized. Autologin parameters from server:", {
+                    id: AUTO_LOGIN_ID,
+                    phone: AUTO_LOGIN_PHONE,
+                    nfcUid: AUTO_LOGIN_NFC_UID
+                });
+
+                // Dual-Mode NFC Logic:
+                // Case A: User tapped tag from outside -> Show Public Read-Only Profile
+                if (AUTO_LOGIN_NFC_UID) {
+                    const profileSec = document.getElementById('public-profile-section');
+                    const loginSec = document.getElementById('login-section');
+                    if (loginSec) loginSec.classList.add('hidden');
+                    if (profileSec) profileSec.classList.remove('hidden');
+
+                    {
+                        const content = document.getElementById('public-profile-content');
+                        if(content) content.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div><p class="mt-2 fw-700">Loading Student Profile...</p></div>';
+                        portalFetch('get_public_profile', { nfc_uid: AUTO_LOGIN_NFC_UID }).then(res => {
+                            if (res.result === 'success') {
+                                renderReadOnlyProfile(res.data);
+                            } else {
+                                if(content) content.innerHTML = `<div class="alert alert-danger rounded-4">${res.message || "Student profile not found."}</div>`;
+                            }
+                        }).catch(err => {
+                            if(content) content.innerHTML = `<div class="alert alert-danger rounded-4">Connection Error: ${err.message}</div>`;
+                        });
+                    }
+                    return;
+                }
+
+                // Check for URL credentials auto-login next
+                if (AUTO_LOGIN_ID && AUTO_LOGIN_PHONE) {
+                    document.getElementById('student_id').value = AUTO_LOGIN_ID;
+                    document.getElementById('phone_number').value = AUTO_LOGIN_PHONE;
+                    login();
+                    return;
+                }
+
+                const saved = localStorage.getItem('student_session');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    if (data && data.student_id === 'admin') showAdminPanel();
+                    else if (data && data.student_id && data.phone_number) {
+                        loggedInStudent = data;
+                        portalFetch('login', { student_id: data.student_id, phone_number: data.phone_number }).then(res => {
+                            if (res.result === 'success') showForm(res);
+                            else { localStorage.removeItem('student_session'); resetUI(); }
+                        }).catch(() => { localStorage.removeItem('student_session'); resetUI(); });
+                    } else {
+                        localStorage.removeItem('student_session');
+                        resetUI();
+                    }
+                }
+
+                // Assign event listeners
+                const btnLogin = document.getElementById('btn-login');
+                if (btnLogin) btnLogin.onclick = login;
+                
+                const btnNfcLogin = document.getElementById('btn-nfc-login');
+                if (btnNfcLogin) btnNfcLogin.onclick = startNFCScan;
+                
+                const btnNfcCancel = document.getElementById('btn-nfc-cancel');
+                if (btnNfcCancel) btnNfcCancel.onclick = stopNFCScan;
+
+            } catch(e) { 
+                console.error("window.onload error", e);
+                localStorage.removeItem('student_session'); 
+                resetUI();
+            }
+        };
+
+        // Web NFC Scan Logic
+        let nfcAbortController = null;
+        let nfcStatusTimeout = null;
+
+        function updateNFCStatus(title, desc, isError = false) {
+            const titleEl = document.getElementById('nfc-scan-title');
+            const descEl = document.getElementById('nfc-scan-desc');
+            if (titleEl) {
+                titleEl.innerText = title;
+                titleEl.style.color = isError ? '#f72585' : '#ffffff';
+            }
+            if (descEl) {
+                descEl.innerText = desc;
+                descEl.style.color = isError ? 'rgba(247, 37, 133, 0.8)' : '#94a3b8';
+            }
+        }
+
+        async function startNFCScan() {
+            if (!('NDEFReader' in window)) {
+                alert("NFC Tap to Login is supported on Google Chrome/Opera for Android.\n\nTo log in via NFC on iOS/Safari or desktop:\n1. Open an NFC writing app (like NFC Tools) on your mobile device.\n2. Write your login URL as a URL record:\n   https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?id=STUDENT_ID&phone=PHONE_NUMBER\n3. Simply tap your tag on your phone to open the site and log in automatically!");
+                return;
+            }
+
+            const overlay = document.getElementById('nfc-scan-overlay');
+            if (overlay) {
+                overlay.style.display = 'flex';
+                overlay.classList.remove('hidden');
+            }
+
+            if (nfcStatusTimeout) {
+                clearTimeout(nfcStatusTimeout);
+                nfcStatusTimeout = null;
+            }
+            if (nfcAbortController) {
+                try {
+                    nfcAbortController.abort();
+                } catch(e) {}
+            }
+
+            updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone.");
+
+            try {
+                nfcAbortController = new AbortController();
+                const ndef = new NDEFReader();
+
+                // Register events before calling scan() to ensure proper capture sequence
+                ndef.addEventListener("readingerror", () => {
+                    updateNFCStatus("Scan Failed", "Could not read data from the NFC card. Please try holding it closer.", true);
+                    if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                    nfcStatusTimeout = setTimeout(() => {
+                        updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone.");
+                    }, 2500);
+                });
+
+                ndef.addEventListener("reading", event => {
+                    const serialNumber = event.serialNumber || "";
+                    const records = (event.message && event.message.records) ? event.message.records : [];
+                    
+                    console.log("NFC tapped! Serial:", serialNumber, "Records:", records.length);
+                    updateNFCStatus("Card Detected", "Verifying identity, please hold still...", false);
+
+                    function readNDEFRecords(recs) {
+                        const decoder = new TextDecoder();
+                        for (const record of recs) {
+                            let dataStr = "";
+                            if (record.recordType === "text" || record.recordType === "url") {
+                                dataStr = decoder.decode(record.data);
+                            }
+                            
+                            if (dataStr) {
+                                console.log("NFC NDEF Record Payload:", dataStr);
+                                let id = "";
+                                let phone = "";
+                                
+                                // Case 1: URL record
+                                if (dataStr.includes("?") || dataStr.includes("exec")) {
+                                    try {
+                                        const url = new URL(dataStr);
+                                        id = url.searchParams.get("id") || url.searchParams.get("student_id") || "";
+                                        phone = url.searchParams.get("phone") || url.searchParams.get("phone_number") || "";
+                                    } catch(urlErr) {
+                                        const matchId = dataStr.match(/[?&](id|student_id)=([^&]+)/);
+                                        const matchPhone = dataStr.match(/[?&](phone|phone_number)=([^&]+)/);
+                                        if (matchId) id = matchId[2];
+                                        if (matchPhone) phone = matchPhone[2];
+                                    }
+                                } 
+                                
+                                // Case 2: Comma or space separated plain text
+                                if (!id && !phone) {
+                                    const parts = dataStr.split(/[\s,]+/);
+                                    if (parts.length >= 1) id = parts[0].trim();
+                                    if (parts.length >= 2) phone = parts[1].trim();
+                                }
+                                
+                                if (id) {
+                                    document.getElementById('student_id').value = id;
+                                    if (phone) {
+                                        document.getElementById('phone_number').value = phone;
+                                    }
+                                    updateNFCStatus("Authenticated!", "Loading your student profile...", false);
+                                    setTimeout(() => {
+                                        stopNFCScan();
+                                        login();
+                                    }, 800);
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    }
+
+                    if (serialNumber) {
+                        const cleanUid = serialNumber.replace(/[\s:]/g, '').toLowerCase();
+                        console.log("Database lookup for NFC UID:", cleanUid);
+
+                        portalFetch('nfc_login', { nfc_uid: serialNumber }).then(json => {
+                            if (json.result === 'success') {
+                                updateNFCStatus("Access Granted!", "Authenticating profile, welcome...", false);
+                                setTimeout(() => { stopNFCScan(); showForm(json); }, 800);
+                            } else {
+                                const found = readNDEFRecords(records);
+                                if (!found) {
+                                    updateNFCStatus("Card Unregistered", "This card is not registered. Scanning again...", true);
+                                    if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                                    nfcStatusTimeout = setTimeout(() => updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone."), 3000);
+                                }
+                            }
+                        }).catch(err => {
+                            console.error("NFC UID validation failed:", err);
+                            const found = readNDEFRecords(records);
+                            if (!found) {
+                                updateNFCStatus("Verification Error", "Error validating identity. Scanning again...", true);
+                                if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                                nfcStatusTimeout = setTimeout(() => updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone."), 3000);
+                            }
+                        });
+                    } else {
+                        const found = readNDEFRecords(records);
+                        if (!found) {
+                            updateNFCStatus("Card Empty", "This tag has no registered identity and no records. Scanning again...", true);
+                            if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                            nfcStatusTimeout = setTimeout(() => {
+                                updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone.");
+                            }, 3000);
+                        }
+                    }
+                });
+
+                await ndef.scan({ signal: nfcAbortController.signal });
+                console.log("NFC Reader scan initiated.");
+
+            } catch (error) {
+                console.error("Failed to start Web NFC scanning:", error);
+                if (error.name === "AbortError") {
+                    return;
+                }
+                
+                let errorMsg = "NFC Scanning failed to start.";
+                if (error.name === "NotAllowedError") {
+                    errorMsg = "Permission denied. Please allow NFC access for this page in your settings.";
+                } else if (error.name === "NotSupportedError") {
+                    errorMsg = "NFC is not supported or is disabled on this device.";
+                } else {
+                    errorMsg = error.message || "An unknown error occurred.";
+                }
+                
+                updateNFCStatus("NFC Error", errorMsg, true);
+                if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                nfcStatusTimeout = setTimeout(() => {
+                    stopNFCScan();
+                }, 4000);
+            }
+        }
+
+        function stopNFCScan() {
+            if (nfcAbortController) {
+                try {
+                    nfcAbortController.abort();
+                } catch(e) {}
+                nfcAbortController = null;
+            }
+            if (nfcStatusTimeout) {
+                clearTimeout(nfcStatusTimeout);
+                nfcStatusTimeout = null;
+            }
+            const overlay = document.getElementById('nfc-scan-overlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                overlay.classList.add('hidden');
+            }
+        }
+
+        function renderReadOnlyProfile(data) {
+            const content = document.getElementById('public-profile-content');
+            if(!content) return;
+            
+            let html = `<div class="row g-3">`;
+            const exclude = ['id', 'nfc_uid', 'created_at'];
+            
+            Object.entries(data).forEach(([key, val]) => {
+                if (exclude.includes(key.toLowerCase())) return;
+                const label = key.replace(/_/g, ' ').toUpperCase();
+                html += `
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded-4 bg-light shadow-sm h-100">
+                            <div class="small fw-800 text-muted uppercase mb-1" style="font-size:0.6rem;">${label}</div>
+                            <div class="fw-700 text-dark">${val || '---'}</div>
+                        </div>
+                    </div>`;
+            });
+            html += `</div>`;
+            content.innerHTML = html;
+        }
+
+        async function scanForRegistration() {
+            if (!('NDEFReader' in window)) return alert("NFC scanning requires Chrome on Android.");
+            
+            const status = document.getElementById('reg-status');
+            const uidInput = document.getElementById('reg-nfc-uid');
+            if(status) status.innerText = "Ready to scan... Tap tag now.";
+            
+            try {
+                const ndef = new NDEFReader();
+                await ndef.scan();
+                ndef.onreading = event => {
+                    if (uidInput) uidInput.value = event.serialNumber;
+                    if (status) {
+                        status.className = "mt-4 text-center small fw-800 text-success";
+                        status.innerText = "Tag detected! Serial: " + event.serialNumber;
+                    }
+                };
+            } catch (e) {
+                alert("NFC Registration Scan Error: " + e.toString());
+            }
+        }
+
+        function saveNFCRegistration() {
+            const id = document.getElementById('reg-student-id').value.trim();
+            const uid = document.getElementById('reg-nfc-uid').value.trim();
+            const status = document.getElementById('reg-status');
+            
+            if (!id || !uid) return alert("Student ID and Tag UID are both required.");
+            
+            if(status) {
+                status.className = "mt-4 text-center small fw-800 text-primary";
+                status.innerText = "Saving to database...";
+            }
+            
+            portalFetch('register_nfc', { student_id: id, nfc_uid: uid }).then(res => {
+                if (res.result === 'success') {
+                    if(status) { status.className = "mt-4 text-center small fw-800 text-success"; status.innerHTML = "&#10003; " + res.message; }
+                    document.getElementById('reg-student-id').value = '';
+                    document.getElementById('reg-nfc-uid').value = '';
+                } else {
+                    if(status) { status.className = "mt-4 text-center small fw-800 text-danger"; status.innerHTML = "&#10007; " + res.message; }
+                }
+            });
+        }
+
+        function login() {
+            const id = document.getElementById('student_id').value.trim();
+            const phone = document.getElementById('phone_number').value.trim();
+            if (!id || !phone) return alert("Credentials required");
+
+            const btn = document.getElementById('btn-login');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = "Authenticating...";
+            }
+
+            portalFetch('login', { student_id: id, phone_number: phone }).then(json => {
+                if (btn) { btn.disabled = false; btn.innerText = "Authenticate Identity"; }
+                if (json.result === 'success') {
+                    loggedInStudent = { student_id: id, phone_number: phone, role: json.role || 'student' };
+                    localStorage.setItem('student_session', JSON.stringify(loggedInStudent));
+                    if (json.role === 'admin') showAdminPanel();
+                    else showForm(json);
+                } else {
+                    alert(json.message);
+                }
+            }).catch(err => {
+                if (btn) { btn.disabled = false; btn.innerText = "Authenticate Identity"; }
+                alert("Login Error: " + err.message);
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('student_session');
+            loggedInStudent = null;
+            resetUI();
+        }
+
+        function showAdminPanel() {
+            try {
+                const els = ['login-section', 'admin-section', 'btn-logout-fixed', 'sidebar-container', 'mobile-header'];
+                els.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        if (id === 'login-section') el.classList.add('hidden');
+                        else el.classList.remove('hidden');
+                    }
+                });
+
+                // Populate Mobile Nav for Admin
+                const bottom = document.getElementById('bottom-nav-container');
+                const sidebar = document.getElementById('sidebar-items');
+                const content = document.getElementById('portal-content-wrapper');
+                
+                if(bottom) bottom.innerHTML = '';
+                if(sidebar) sidebar.innerHTML = '';
+
+                addNav('admin-home', 'Admin Panel', 'bi-shield-lock-fill', true);
+                addNav('bus-tracking', 'Bus Tracker', 'bi-bus-front-fill');
+                
+                // Ensure bus tracking content exists for admin
+                if (content && !document.getElementById('bus-tracking-content')) {
+                    const trackPane = document.createElement('div');
+                    trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
+                    trackPane.style.height = 'calc(100vh - 120px)';
+                    trackPane.innerHTML = `<iframe style="width:100%; height:100%; border:none; border-radius:24px; box-shadow: var(--shadow);" id="bus-iframe"></iframe>`;
+                    content.appendChild(trackPane);
+                }
+
+                // Add Admin Logout to mobile nav
+                const bLog = document.createElement('button');
+                bLog.className = 'nav-item-btn text-danger';
+                bLog.innerHTML = `<i class="bi bi-box-arrow-right"></i> <span>Logout</span>`;
+                bLog.onclick = logout;
+                if(bottom) bottom.appendChild(bLog);
+
+                loadAdminTabs();
+                loadIncludeFields();
+                loadTrackingConfig();
+            } catch(e) {
+                console.error("showAdminPanel error", e);
+                alert("Error loading Admin Panel.");
+            }
+        }
+
+        function loadTrackingConfig() {
+            portalFetch('get_tracking_config', {}).then(res => {
+                if (res.busRegistry) {
+                    const tbody = document.getElementById('bus-config-body');
+                    if (tbody) {
+                        tbody.innerHTML = '';
+                        res.busRegistry.forEach(r => addBusRow({name: r[0], imei: r[1]}));
+                    }
+                }
+                if (res.placeRegistry) {
+                    const tbody = document.getElementById('place-config-body');
+                    if (tbody) {
+                        tbody.innerHTML = '';
+                        res.placeRegistry.forEach(r => addPlaceRow({name: r[0], coords: r[1], radius: r[2]}));
+                    }
+                }
+                if (res.credentials) {
+                    const u = document.getElementById('gp-username');
+                    const p = document.getElementById('gp-password');
+                    const env = document.getElementById('gp-environment');
+                    const keyDisp = document.getElementById('gp-api-key-display');
+                    const preDisp = document.getElementById('gp-pre-encoded');
+                    if(u) u.value = res.credentials.username || '';
+                    if(p) p.value = res.credentials.password || '';
+                    if(env) env.value = res.credentials.environment || 'production';
+                    if(keyDisp) keyDisp.value = res.credentials.apiKey || '';
+                    if(preDisp) preDisp.value = (res.credentials.username && res.credentials.password) ? `${res.credentials.username}:${res.credentials.password}` : '';
+                }
+            });
+        }
+
+        function addPlaceRow(data = {name:'', coords:'', radius:'50'}) {
+            const tbody = document.getElementById('place-config-body');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" class="form-control form-control-sm p-name" value="${data.name}" placeholder="Main Gate"></td>
+                <td><input type="text" class="form-control form-control-sm p-coords" value="${data.coords}" placeholder="22.35, 91.78"></td>
+                <td><input type="number" class="form-control form-control-sm p-radius" value="${data.radius}" style="width: 80px;"></td>
+                <td class="text-end">
+                    <button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm text-danger"><i class="bi bi-trash3"></i></button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        function savePlaceConfig() {
+            const rows = [];
+            document.querySelectorAll('#place-config-body tr').forEach(tr => {
+                const name = tr.querySelector('.p-name').value.trim();
+                const coords = tr.querySelector('.p-coords').value.trim();
+                const radius = tr.querySelector('.p-radius').value.trim();
+                if(name && coords) rows.push([name, coords, radius || '50']);
+            });
+            portalFetch('save_place_registry', { rows }).then(() => alert("Places Registry Updated!"));
+        }
+
+        function switchHubTab(tabId) {
+            document.querySelectorAll('.hub-tab-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.hub-tab-btn').forEach(b => b.classList.remove('active'));
+            
+            const target = document.getElementById(`hub-${tabId}-pane`);
+            if (target) target.classList.add('active');
+            
+            // Highlight button
+            const btns = document.querySelectorAll('.hub-tab-btn');
+            btns.forEach(btn => {
+                const btnText = btn.innerText.toLowerCase();
+                if (btnText.includes(tabId)) {
+                    btn.classList.add('active');
+                }
+            });
+
+            if (tabId === 'teachers') {
+                loadTeacherDirectory();
+            }
+        }
+
+        let teacherDataCache = [];
+
+        function loadTeacherDirectory() {
+            const container = document.getElementById('teachers-directory-section');
+            if (!container) return;
+            if (teacherDataCache.length > 0) return; // Already loaded
+
+            container.innerHTML = `<div class="text-center p-5"><div class="spinner-border text-primary"></div><p class="mt-2 fw-700">Fetching Directory...</p></div>`;
+
+            portalFetch('get_teacher_directory', {}).then(teachers => {
+                teacherDataCache = teachers;
+                renderTeacherDirectory(teachers);
+            });
+        }
+
+        function renderTeacherDirectory(teachers) {
+            const container = document.getElementById('teachers-directory-section');
+            if (!container || !teachers.length) {
+                container.innerHTML = `<div class="alert alert-info rounded-4 fw-800">No teacher data found.</div>`;
+                return;
+            }
+
+            let html = `<div class="row g-3">`;
+            teachers.forEach((t, idx) => {
+                const scheduleInfo = t.schedule && t.schedule.length > 0 
+                    ? `<span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-2 py-1 fw-700" style="font-size:0.6rem;">${t.schedule.length} Periods Today</span>`
+                    : `<span class="badge bg-light text-muted rounded-pill px-2 py-1 fw-700" style="font-size:0.6rem;">No Classes Today</span>`;
+
+                html += `
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card p-3 h-100 border shadow-sm hover-up" onclick="showTeacherModal(${idx})" style="cursor:pointer; transition: transform 0.2s;">
+                            <div class="d-flex align-items-center gap-3">
+                                <img src="${t.photo || 'https://www.w3schools.com/howto/img_avatar.png'}" 
+                                     class="rounded-circle border" style="width:55px; height:55px; object-fit:cover;">
+                                <div class="overflow-hidden">
+                                    <h6 class="fw-800 mb-0 text-truncate">${t.name}</h6>
+                                    <p class="text-muted small mb-1 fw-600">${t.shortName || 'Teacher'}</p>
+                                    ${scheduleInfo}
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
+        function showTeacherModal(idx) {
+            const t = teacherDataCache[idx];
+            if (!t) return;
+
+            // Create modal if not exists
+            let modalEl = document.getElementById('teacher-info-modal');
+            if (!modalEl) {
+                modalEl = document.createElement('div');
+                modalEl.id = 'teacher-info-modal';
+                modalEl.className = 'modal fade';
+                modalEl.tabIndex = -1;
+                modalEl.innerHTML = `
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg" style="border-radius: 28px; overflow: hidden;">
+                            <div class="modal-header border-0 pb-0 justify-content-end">
+                                <button type="button" class="btn-close m-0" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body text-center p-4 pt-0" id="teacher-modal-body"></div>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modalEl);
+            }
+
+            const body = document.getElementById('teacher-modal-body');
+            let scheduleHtml = '';
+            if (t.schedule && t.schedule.length > 0) {
+                scheduleHtml = `<div class="mt-4 text-start">
+                    <h6 class="fw-800 text-primary small uppercase mb-3 border-bottom pb-2">Today's Schedule</h6>
+                    <div class="list-group list-group-flush">
+                        ${t.schedule.map(s => `
+                            <div class="list-group-item px-0 border-0 bg-transparent d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="badge bg-light text-dark fw-800 me-2" style="font-size:0.65rem;">${s.period}</span>
+                                    <span class="fw-700 text-dark" style="font-size:0.85rem;">${s.subject}</span>
+                                </div>
+                                <span class="text-muted fw-800" style="font-size:0.75rem;">${s.class}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+            }
+
+            body.innerHTML = `
+                <img src="${t.photo || 'https://www.w3schools.com/howto/img_avatar.png'}" 
+                     class="rounded-circle border mb-3 shadow-sm" style="width:120px; height:120px; object-fit:cover;">
+                <h4 class="fw-800 mb-1">${t.name}</h4>
+                <p class="text-muted fw-700 mb-4 uppercase" style="font-size:0.75rem;">${t.shortName || 'Senior Teacher'}</p>
+                
+                <div class="row g-2 mb-4">
+                    <div class="col-6">
+                        <a href="tel:${t.mobile}" class="btn btn-light w-100 py-3 rounded-4 border d-flex flex-column align-items-center gap-1">
+                            <i class="bi bi-telephone-fill text-success fs-4"></i>
+                            <span class="small fw-800 text-dark">Call Teacher</span>
+                        </a>
+                    </div>
+                    <div class="col-6">
+                        <a href="mailto:${t.email}" class="btn btn-light w-100 py-3 rounded-4 border d-flex flex-column align-items-center gap-1">
+                            <i class="bi bi-envelope-at-fill text-primary fs-4"></i>
+                            <span class="small fw-800 text-dark">Send Email</span>
+                        </a>
+                    </div>
+                </div>
+
+                ${scheduleHtml}
+            `;
+
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        // Global helper for teacher lookup and modal show
+        function showTeacherInfoByName(name) {
+            if (teacherDataCache.length === 0) {
+                portalFetch('get_teacher_directory', {}).then(teachers => {
+                    teacherDataCache = teachers;
+                    const idx = teachers.findIndex(t => t.name === name || t.shortName === name || name.includes(t.shortName));
+                    if (idx !== -1) showTeacherModal(idx);
+                });
+            } else {
+                const idx = teacherDataCache.findIndex(t => t.name === name || t.shortName === name || name.includes(t.shortName));
+                if (idx !== -1) showTeacherModal(idx);
+            }
+        }
+
+        function switchTab(id) {
+            // Hide all potential content areas
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            document.getElementById('admin-section').classList.add('hidden');
+            document.getElementById('form-section').classList.add('hidden');
+
+            if (id === 'admin-home') {
+                document.getElementById('admin-section').classList.remove('hidden');
+                document.querySelectorAll('.nav-item-btn').forEach(btn => {
+                   if (btn.dataset.tabId === id) btn.classList.add('active'); else btn.classList.remove('active');
+                });
+                return;
+            }
+
+            // Student tabs or Bus Tracking
+            document.getElementById('form-section').classList.remove('hidden');
+            const target = document.getElementById(`${id}-content`);
+            if (target) {
+                target.classList.add('active');
+                if (id === 'bus-tracking') {
+                    const iframe = target.querySelector('iframe');
+                    if (iframe && !iframe.src) {
+                        iframe.src = '/bus_tracking.html';
+                    }
+                }
+                if (id === 'attendance') {
+                    loadAttendanceHistory();
+                }
+                if (id === 'teachers') {
+                    loadTeacherDirectory();
+                }
+            }
+            
+            document.querySelectorAll('.nav-item-btn').forEach(btn => {
+                if (btn.dataset.tabId === id) btn.classList.add('active'); else btn.classList.remove('active');
+            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function renderField(f, val, readOnly) {
+            const v = val || '';
+            const opts = f.options || [];
+            if (f.type === 'paragraph') {
+                return `
+                    <div class="premium-form-group">
+                        <textarea name="${f.data_key}" class="form-control" placeholder=" " rows="4" ${readOnly?'disabled':''}>${v}</textarea>
+                        <label>${f.name}</label>
+                    </div>`;
+            }
+            if (f.type === 'choose') {
+                return `
+                    <div class="premium-form-group">
+                        <select name="${f.data_key}" class="form-select" required ${readOnly?'disabled':''}>
+                            <option value="" ${v===''?'selected':''}></option>
+                            ${opts.map(o => `<option value="${o}" ${v===o?'selected':''}>${o}</option>`).join('')}
+                        </select>
+                        <label>${f.name}</label>
+                    </div>`;
+            }
+            if (f.type === 'checkbox') {
+                return `
+                    <div class="mb-2">
+                        <span class="small fw-800 text-muted uppercase mb-3 d-block">${f.name}</span>
+                        <div class="premium-checkbox-group">
+                            ${opts.map(o => `
+                                <label class="premium-checkbox-card">
+                                    <input type="checkbox" name="${f.data_key}" value="${o}" ${String(v).split(', ').includes(o)?'checked':''} ${readOnly?'disabled':''}>
+                                    <span class="fw-600">${o}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>`;
+            }
+            return `
+                <div class="premium-form-group">
+                    <input type="${f.type}" name="${f.data_key}" class="form-control" value="${v}" placeholder=" " ${readOnly?'disabled':''}>
+                    <label>${f.name}</label>
+                </div>`;
+        }
+
+        function addNav(id, name, icon, active = false) {
+            const sidebar = document.getElementById('sidebar-items');
+            const bottom = document.getElementById('bottom-nav-container');
+            
+            const btn = document.createElement('button');
+            btn.className = `nav-item-btn ${active ? 'active' : ''}`;
+            btn.dataset.tabId = id;
+            btn.innerHTML = `<i class="bi ${icon}"></i> <span>${name}</span>`;
+            
+            // Sidebar Version
+            const sBtn = btn.cloneNode(true);
+            sBtn.onclick = () => switchTab(id);
+            if(sidebar) sidebar.appendChild(sBtn);
+            
+            // Bottom Nav Version (Mobile)
+            const bBtn = btn.cloneNode(true);
+            bBtn.onclick = () => switchTab(id);
+            if(bottom) bottom.appendChild(bBtn);
+        }
+
+        function showForm(json) {
+            console.log("Entering showForm", json);
+            try {
+                if (json && json.data) {
+                    const master = json.data;
+                    const existing = json.existingInfo || {};
+                    // Ensure loggedInStudent is an object before merging
+                    if (!loggedInStudent) loggedInStudent = {};
+                    loggedInStudent = { ...loggedInStudent, ...master, ...existing };
+
+                    const findIn = (obj, target) => {
+                        if (!obj) return null;
+                        const keys = Object.keys(obj);
+                        const t = target.toLowerCase().replace(/[\s_]/g, '');
+                        const match = keys.find(k => {
+                            const kn = k.toLowerCase().replace(/[\s_]/g, '');
+                            return kn === t || kn === t.replace('student', '') || t === kn.replace('student', '');
+                        });
+                        return match ? obj[match] : null;
+                    };
+
+                    ['name', 'class_name', 'section', 'roll', 'session', 'nick_name', 'blood', 'house', 'card_status'].forEach(key => {
+                        const eVal = findIn(existing, key);
+                        const mVal = findIn(master, key);
+                        if (!eVal || eVal === "") loggedInStudent[key] = mVal || "";
+                        else loggedInStudent[key] = eVal;
+                    });
+                    localStorage.setItem('student_session', JSON.stringify(loggedInStudent));
+                    console.log("Session saved successfully");
+                }
+
+                if (!loggedInStudent) {
+                    console.error("No student data available");
+                    resetUI();
+                    return;
+                }
+
+                const loginSec = document.getElementById('login-section');
+                const formSec = document.getElementById('form-section');
+                const logoutBtn = document.getElementById('btn-logout-fixed');
+                const sidebarCont = document.getElementById('sidebar-container');
+                const mobHeader = document.getElementById('mobile-header');
+
+                if(loginSec) loginSec.classList.add('hidden');
+                if(formSec) formSec.classList.remove('hidden');
+                if(logoutBtn) logoutBtn.classList.remove('hidden');
+                if(sidebarCont) sidebarCont.classList.remove('hidden');
+                if(mobHeader) mobHeader.classList.remove('hidden');
+
+                const sidebar = document.getElementById('sidebar-items');
+                const bottom = document.getElementById('bottom-nav-container');
+                const content = document.getElementById('portal-content-wrapper');
+                
+                if(sidebar) sidebar.innerHTML = '';
+                if(bottom) bottom.innerHTML = '';
+                if(content) content.innerHTML = '';
+
+                // ── Student identity ──────────────────────────────────
+                const _sName = loggedInStudent.name || loggedInStudent.student_name || '';
+                const _parts = _sName.trim().split(/\s+/).filter(Boolean);
+                const _initials = _parts.length >= 2
+                    ? (_parts[0][0] + _parts[_parts.length-1][0]).toUpperCase()
+                    : (_sName.substring(0,2) || (loggedInStudent.student_id||'').substring(0,2)).toUpperCase();
+                const _classInfo = loggedInStudent.class_name
+                    ? ' · ' + loggedInStudent.class_name + (loggedInStudent.section ? ' ' + loggedInStudent.section : '')
+                    : '';
+                // Strip (mobile)
+                const _strip = document.createElement('div');
+                _strip.className = 'student-strip';
+                _strip.id = 'student-id-strip';
+                _strip.innerHTML = `<div class="student-strip-avatar">${_initials}</div><div><div class="student-strip-name">${_sName || loggedInStudent.student_id}</div><div class="student-strip-meta">ID: ${loggedInStudent.student_id}${_classInfo}</div></div>`;
+                if(content) content.appendChild(_strip);
+                // Sidebar card (desktop)
+                const _sbCard = document.getElementById('sidebar-student-card');
+                const _sbAv   = document.getElementById('sidebar-student-avatar');
+                const _sbNm   = document.getElementById('sidebar-student-name');
+                const _sbId   = document.getElementById('sidebar-student-id-label');
+                if(_sbAv)   _sbAv.textContent = _initials;
+                if(_sbNm)   _sbNm.textContent = _sName || loggedInStudent.student_id;
+                if(_sbId)   _sbId.textContent  = 'ID: ' + loggedInStudent.student_id + _classInfo;
+                if(_sbCard) _sbCard.style.display = 'flex';
+
+                addNav('profile', 'Personal Hub', 'bi-person-badge-fill', true);
+                addNav('teachers', 'Teacher Directory', 'bi-people-fill');
+                addNav('bus-tracking', 'Live Bus Tracking', 'bi-bus-front-fill');
+                
+                const profPane = document.createElement('div');
+                profPane.className = 'tab-pane active'; profPane.id = 'profile-content';
+
+                const teacherPane = document.createElement('div');
+                teacherPane.className = 'tab-pane'; teacherPane.id = 'teachers-content';
+                teacherPane.innerHTML = `<h2 class="h4 section-title">Teacher Directory</h2><div id="teachers-directory-section"></div>`;
+                if(content) content.appendChild(teacherPane);
+
+                const trackPane = document.createElement('div');
+                trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
+                trackPane.style.height = 'calc(100vh - 120px)';
+                trackPane.innerHTML = `<iframe style="width:100%; height:100%; border:none; border-radius:24px; box-shadow: var(--shadow);" id="bus-iframe"></iframe>`;
+                if(content) content.appendChild(trackPane);
+
+                const groups = {
+                    "Academic Profile": ['name', 'student_id', 'class_name', 'section', 'roll', 'session'],
+                    "Identity Details": ['nick_name', 'blood', 'house', 'card_status', 'balance'],
+                    "Emergency Contacts": ['fathers_name', 'fathers_phone', 'mothers_name', 'mothers_phone']
+                };
+
+                const findInSession = (target) => {
+                    const keys = Object.keys(loggedInStudent);
+                    const t = target.toLowerCase().replace(/[\s_]/g, '');
+                    const match = keys.find(k => {
+                        const kn = k.toLowerCase().replace(/[\s_]/g, '');
+                        return kn === t || kn === t.replace('student', '') || t === kn.replace('student', '');
+                    });
+                    return match ? loggedInStudent[match] : '';
+                };
+
+                let profHtml = `
+                    <!-- Hub Tab Controller -->
+                    <div class="hub-tab-container">
+                        <button class="hub-tab-btn active" onclick="switchHubTab('profile')">
+                            <i class="bi bi-person-lines-fill"></i> <span>Profile</span>
+                        </button>
+                        <button class="hub-tab-btn" onclick="switchHubTab('schedule')">
+                            <i class="bi bi-calendar3"></i> <span>Schedule</span>
+                        </button>
+                        <button class="hub-tab-btn" onclick="switchHubTab('attendance')">
+                            <i class="bi bi-fingerprint"></i> <span>Attendance</span>
+                        </button>
+                    </div>
+
+                    <!-- 1. Student Information Pane (first, active) -->
+                    <div id="hub-profile-pane" class="hub-tab-pane active">
+                        <div class="card profile-grid-compressed">
+                            <div class="row g-2">`;
+                Object.entries(groups).forEach(([title, members]) => {
+                    profHtml += `<div class="col-12"><h6 class="profile-group-label">${title}</h6></div>`;
+                    members.forEach(m => {
+                        const val = findInSession(m) || '<span class="text-muted italic small">—</span>';
+                        profHtml += `<div class="col-6 col-md-4"><div class="detail-item"><div class="detail-label">${m.replace(/student_/g,'').replace(/_/g,' ')}</div><div class="detail-value">${val}</div></div></div>`;
+                    });
+                });
+                profHtml += `
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Schedule Pane -->
+                    <div id="hub-schedule-pane" class="hub-tab-pane">
+                        <h2 class="h4 section-title">Today's Schedule</h2>
+                        <div id="present-status-section"></div>
+                    </div>
+
+                    <!-- 3. Attendance Pane -->
+                    <div id="hub-attendance-pane" class="hub-tab-pane">
+                        <h2 class="h4 section-title">Recent Activity</h2>
+                        <div id="attendance-section"></div>
+                    </div>`;
+                
+                profPane.innerHTML = profHtml; 
+                if(content) content.appendChild(profPane);
+
+                console.log("Attempting to load sub-sections...");
+                try {
+                    if (typeof loadPresentStatus === 'function') loadPresentStatus();
+                } catch(e) { console.error("Error in loadPresentStatus", e); }
+                
+                try {
+                    if (typeof loadAttendanceHistoryInHub === 'function') loadAttendanceHistoryInHub();
+                } catch(e) { console.error("Error in loadAttendanceHistoryInHub", e); }
+
+                portalFetch('get_tabs', { student_id: loggedInStudent.student_id }).then(tabs => {
+                    console.log("Tabs received", tabs);
+                    if (!Array.isArray(tabs)) return;
+                    tabs.forEach((t, i) => {
+                        try {
+                            if (!t.tab_name) return;
+                            const tid = `tab-${i}`;
+                            addNav(tid, t.tab_name, t.icon_class || 'bi-journal-bookmark-fill');
+                            const _sbar = document.getElementById('sidebar-items');
+                            const _bnav = document.getElementById('bottom-nav-container');
+                            if(_sbar?.lastElementChild) _sbar.lastElementChild.classList.add('nav-dynamic');
+                            if(_bnav?.lastElementChild) _bnav.lastElementChild.classList.add('nav-dynamic');
+                            const pane = document.createElement('div');
+                            pane.className = 'tab-pane'; pane.id = `${tid}-content`;
+                            pane.innerHTML = `<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>`;
+                            if(content) content.appendChild(pane);
+
+                            portalFetch('get_student_tab_data', { student_id: loggedInStudent.student_id, tab_name: t.tab_name }).then(data => {
+                                console.log(`Data for tab ${t.tab_name} received`, data);
+                                try {
+                                    const readOnly = data?.editable === 'NO';
+                                    let fields = [];
+                                    try { 
+                                        const cleanJson = (t.fields_json || "[]").replace(/[\u0000-\u001F\u007F-\u009F]/g, "").trim();
+                                        fields = JSON.parse(cleanJson); 
+                                    } catch(e) { console.error("JSON Parse Error for " + t.tab_name, e); fields = []; }
+                                    
+                                    let html = `<div class="card shadow-lg"><h2 class="h4 section-title">${t.tab_name}</h2>`;
+                                    if(readOnly) html += `<div class="alert alert-info py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-shield-check-fill me-2 fs-5"></i>Verified & Locked</div>`;
+                                    html += `<form id="${tid}-form"><input type="hidden" name="tabName" value="${t.tab_name}"><div class="row g-4">`;
+
+                                    const findInBoth = (obj1, obj2, target) => {
+                                        const match = (obj) => {
+                                            if(!obj) return null;
+                                            const keys = Object.keys(obj);
+                                            const tStr = (target || "").toLowerCase().replace(/[\s_]/g, '');
+                                            const k = keys.find(key => {
+                                                const kn = key.toLowerCase().replace(/[\s_]/g, '');
+                                                return kn === tStr || kn === tStr.replace('student', '') || tStr === kn.replace('student', '');
+                                            });
+                                            return k ? obj[k] : null;
+                                        };
+                                        return match(obj1) || match(obj2) || '';
+                                    };
+
+                                    // ── Included profile fields (read-only info block) ──
+                                    let inclKeys = [];
+                                    try { inclKeys = JSON.parse(t.include_fields_json || '[]'); } catch(e) {}
+                                    if (inclKeys.length > 0) {
+                                        html += `<div class="include-master-info"><div class="small fw-800 text-muted text-uppercase mb-3" style="letter-spacing:0.07em;font-size:0.62rem"><i class="bi bi-person-badge me-1"></i>Student Profile Data</div><div class="row g-3">`;
+                                        inclKeys.forEach(key => {
+                                            const val = findInBoth(loggedInStudent, data, key);
+                                            html += `<div class="col-6 col-md-4"><div class="imi-label">${key.replace(/_/g,' ')}</div><div class="imi-value">${val || '—'}</div></div>`;
+                                        });
+                                        html += `</div></div>`;
+                                    }
+
+                                     fields.forEach(f => {
+                                         if(f.type === 'group_label') html += `<div class="col-12 mt-4"><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`;
+                                         else {
+                                             const val = findInBoth(data, loggedInStudent, f.data_key || f.name);
+                                             html += `<div class="col-md-6">${renderField(f, val, readOnly)}</div>`;
+                                         }
+                                     });
+ 
+                                     html += `</div>${!readOnly?`<button type="submit" class="btn btn-premium-save w-100 mt-5"><i class="bi bi-cloud-arrow-up-fill fs-5"></i> Sync & Save Information</button>`:''}<div class="status-msg text-center mt-3 small fw-bold"></div></form></div>`;
+                                    pane.innerHTML = html;
+
+                                    // ── Fill % ──────────────────────────────
+                                    const _inputFields = fields.filter(f => f.type !== 'group_label');
+                                    if (_inputFields.length > 0) {
+                                        const _filled = _inputFields.filter(f => {
+                                            const v = findInBoth(data, loggedInStudent, f.data_key || f.name);
+                                            return v !== null && v !== undefined && String(v).trim() !== '';
+                                        }).length;
+                                        const pct = Math.round((_filled / _inputFields.length) * 100);
+                                        const barColor = pct === 100 ? 'var(--primary)' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                                        const badgeClass = pct === 100 ? 'full' : pct === 0 ? 'empty' : '';
+
+                                        // Progress bar inside card
+                                        const cardTitle = pane.querySelector('.section-title');
+                                        if (cardTitle) {
+                                            const progDiv = document.createElement('div');
+                                            progDiv.className = 'tab-fill-progress';
+                                            progDiv.id = `${tid}-fill-progress`;
+                                            progDiv.innerHTML = `<div class="tab-fill-bar-bg"><div class="tab-fill-bar" style="width:${pct}%;background:${barColor}"></div></div><span class="tab-fill-label">${_filled} of ${_inputFields.length} fields filled &nbsp;·&nbsp; ${pct}%</span>`;
+                                            cardTitle.insertAdjacentElement('afterend', progDiv);
+                                        }
+
+                                        // Badge + red dot on sidebar + bottom nav buttons
+                                        document.querySelectorAll(`[data-tabId="${tid}"]`).forEach(btn => {
+                                            let badge = btn.querySelector('.nav-fill-badge');
+                                            if (!badge) { badge = document.createElement('small'); btn.appendChild(badge); }
+                                            badge.className = `nav-fill-badge ${badgeClass}`;
+                                            badge.textContent = pct + '%';
+                                            // Red dot: show when not fully filled
+                                            let dot = btn.querySelector('.nav-unfilled-dot');
+                                            if (pct < 100) {
+                                                if (!dot) { dot = document.createElement('span'); dot.className = 'nav-unfilled-dot'; btn.appendChild(dot); }
+                                            } else {
+                                                if (dot) dot.remove();
+                                            }
+                                        });
+                                    }
+
+                                    if(!readOnly) {
+                                        const form = document.getElementById(`${tid}-form`);
+                                        if(form) {
+                                            form.onsubmit = (e) => {
+                                                e.preventDefault();
+                                                const btn = form.querySelector('button[type="submit"]');
+                                                const status = form.querySelector('.status-msg');
+                                                const fd = new FormData(form);
+                                                const submission = { student_id: loggedInStudent.student_id, ...loggedInStudent, ...Object.fromEntries(fd) };
+                                                fields.filter(f => f.type === 'checkbox').forEach(f => {
+                                                    submission[f.data_key] = Array.from(form.querySelectorAll(`input[name="${f.data_key}"]:checked`)).map(c => c.value).join(', ');
+                                                });
+                                                if(btn) btn.disabled = true;
+                                                if(status) status.innerText = 'Submitting...';
+
+                                                let attempt = 0;
+                                                const maxAttempts = 3;
+                                                function trySubmit() {
+                                                    attempt++;
+                                                    portalFetch('submit', submission).then(res => {
+                                                            if(res.result === 'success') {
+                                                                if(status) {
+                                                                    status.className = 'status-msg text-center mt-3 small fw-bold text-success';
+                                                                    status.innerHTML = '&#10003; Submitted successfully!';
+                                                                }
+                                                                if(data) Object.assign(data, submission);
+                                                                if(btn) btn.disabled = false;
+                                                                // Update fill badge + bar to 100%, remove red dot
+                                                                document.querySelectorAll(`[data-tabId="${tid}"]`).forEach(btn => {
+                                                                    let badge = btn.querySelector('.nav-fill-badge');
+                                                                    if (!badge) { badge = document.createElement('small'); btn.appendChild(badge); }
+                                                                    badge.className = 'nav-fill-badge full';
+                                                                    badge.textContent = '100%';
+                                                                    const dot = btn.querySelector('.nav-unfilled-dot');
+                                                                    if (dot) dot.remove();
+                                                                });
+                                                                const prog = document.getElementById(`${tid}-fill-progress`);
+                                                                if (prog) {
+                                                                    prog.querySelector('.tab-fill-bar').style.cssText = `width:100%;background:var(--primary)`;
+                                                                    prog.querySelector('.tab-fill-label').textContent = `All fields filled · 100%`;
+                                                                }
+                                                            } else if(attempt < maxAttempts) {
+                                                                if(status) status.innerText = 'Retrying... (' + attempt + '/' + maxAttempts + ')';
+                                                                setTimeout(trySubmit, 1000 * attempt);
+                                                            } else {
+                                                                if(status) {
+                                                                    status.className = 'status-msg text-center mt-3 small fw-bold text-danger';
+                                                                    status.innerText = res.message || 'Submission failed. Please try again.';
+                                                                }
+                                                                if(btn) btn.disabled = false;
+                                                            }
+                                                        })
+                                                        .withFailureHandler(err => {
+                                                            if(attempt < maxAttempts) {
+                                                                if(status) status.innerText = 'Retrying... (' + attempt + '/' + maxAttempts + ')';
+                                                                setTimeout(trySubmit, 1000 * attempt);
+                                                            } else {
+                                                                if(status) {
+                                                                    status.className = 'status-msg text-center mt-3 small fw-bold text-danger';
+                                                                    status.innerText = 'Connection error. Please try again.';
+                                                                }
+                                                                if(btn) btn.disabled = false;
+                                                            }
+                                                        })
+                                                        .handleSubmit(submission);
+                                                }
+                                                trySubmit();
+                                            };
+                                        }
+                                    }
+                                } catch (e) { console.error("Error rendering tab " + t.tab_name, e); }
+                            }).getStudentTabData(loggedInStudent.student_id, t.tab_name);
+                        } catch (e) { console.error("Error in tabs loop", e); }
+                    });
+
+                    // Redundant logout buttons removed to keep top-right as primary
+                }).getTabs(loggedInStudent.student_id);
+            } catch(e) {
+                console.error("showForm critical error", e);
+                alert("An error occurred while loading your profile. Please try again.");
+                resetUI();
+            }
+        }
+
+        function loadIncludeFields(selectedKeys = []) {
+            portalFetch('get_student_data_headers', {}).then(headers => {
+                const container = document.getElementById('include-fields-list');
+                if (!container) return;
+                const skip = new Set(['student_id','studentid','nfc_uid','nfcuid']);
+                const rows = (headers || []).filter(h => !skip.has(h.toLowerCase().replace(/[\s_]/g,'')));
+                if (rows.length === 0) { container.innerHTML = '<span class="text-muted small fst-italic">No profile columns found.</span>'; return; }
+                container.innerHTML = rows.map(h => {
+                    const checked = selectedKeys.includes(h);
+                    return `<label class="include-field-chip ${checked ? 'active' : ''}">
+                        <input type="checkbox" value="${h}" ${checked ? 'checked' : ''} onchange="this.closest('label').classList.toggle('active',this.checked);updateIncludeCount()">
+                        ${h.replace(/_/g,' ')}
+                    </label>`;
+                }).join('');
+                updateIncludeCount();
+            });
+        }
+
+        function updateIncludeCount() {
+            const count = document.querySelectorAll('#include-fields-list input[type="checkbox"]:checked').length;
+            const el = document.getElementById('include-fields-count');
+            if (el) el.textContent = count + ' selected';
+        }
+
+        function loadAdminTabs() {
+            try {
+                portalFetch('get_tabs', {}).then(tabs => {
+                    try {
+                        if (!Array.isArray(tabs)) return;
+                        allTabs = tabs;
+                        const list = document.getElementById('admin-tabs-list');
+                        if(list) {
+                            list.innerHTML = tabs.map((t, i) => `
+                                <div class="col-md-6">
+                                    <div class="card p-3 mb-0 d-flex flex-row justify-content-between align-items-center shadow-sm border-0">
+                                        <div class="text-truncate"><strong><i class="bi ${t.icon_class||'bi-folder'} me-2 text-primary"></i>${t.tab_name}</strong></div>
+                                        <div class="d-flex gap-2">
+                                            <button onclick="editTab(${i})" class="btn btn-xs btn-primary rounded-pill px-3">Edit</button>
+                                            <button onclick="deleteTabConfig(${i})" class="btn btn-xs btn-danger rounded-pill px-3">Del</button>
+                                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" ${t.is_enabled?'checked':''} onchange="toggleStatus(${i}, this.checked)"></div>
+                                        </div>
+                                    </div>
+                                </div>`).join('');
+                        }
+                        const sel = document.getElementById('summary-tab-select');
+                        if(sel) {
+                            sel.innerHTML = '<option value="">Select Target...</option><option value="info">General Info</option>' + tabs.map(t => `<option value="${t.tab_name}">${t.tab_name}</option>`).join('');
+                        }
+                    } catch(e) { console.error("loadAdminTabs success callback error", e); }
+                });
+            } catch(e) { console.error("loadAdminTabs error", e); }
+        }
+
+        function addTabRow(type, data = null) {
+            const container = document.getElementById('fields-list');
+            const row = document.createElement('div');
+            row.className = 'row g-3 mb-3 p-4 border rounded-4 bg-white align-items-center draggable-row shadow-sm';
+            row.id = `f-row-${container.children.length}`;
+            row.draggable = true;
+            row.ondragstart = (e) => { e.dataTransfer.setData('text', row.id); row.style.opacity = '0.4'; };
+            row.ondragend = () => row.style.opacity = '1';
+            row.ondragover = (e) => {
+                e.preventDefault();
+                const dr = document.querySelector('[style*="opacity: 0.4"]');
+                if (dr && dr !== row) {
+                    const c = [...container.children];
+                    if (c.indexOf(dr) < c.indexOf(row)) row.after(dr); else row.before(dr);
+                }
+            };
+            const grip = `<div class="col-auto"><i class="bi bi-grip-vertical fs-3 text-muted" style="cursor:grab"></i></div>`;
+            if (type === 'label') {
+                row.innerHTML = `${grip}<div class="col"><input type="text" placeholder="Identity Header" class="form-control fw-800 text-primary" value="${data?.label||''}"></div><input type="hidden" class="f-type" value="group_label"><div class="col-auto"><button onclick="this.parentElement.parentElement.remove()" class="btn btn-outline-danger border-0"><i class="bi bi-trash3-fill"></i></button></div>`;
+            } else {
+                row.innerHTML = `${grip}
+                    <div class="col-md-4"><input type="text" placeholder="Label" class="form-control" value="${data?.name||''}"></div>
+                    <div class="col-md-3">
+                        <select class="form-select f-type" onchange="const o = this.parentElement.parentElement.querySelector('.f-options'); if(['checkbox','choose'].includes(this.value)) o.classList.remove('hidden'); else o.classList.add('hidden');">
+                            <option value="text" ${data?.type==='text'?'selected':''}>Text Input</option>
+                            <option value="paragraph" ${data?.type==='paragraph'?'selected':''}>Paragraph</option>
+                            <option value="number" ${data?.type==='number'?'selected':''}>Number</option>
+                            <option value="checkbox" ${data?.type==='checkbox'?'selected':''}>Checkbox</option>
+                            <option value="choose" ${data?.type==='choose'?'selected':''}>Dropdown</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4"><input type="text" placeholder="Options" class="form-control f-options ${['checkbox','choose'].includes(data?.type)?'':'hidden'}" value="${(data?.options||[]).join(',')}"></div>
+                    <div class="col-auto"><button onclick="this.parentElement.parentElement.remove()" class="btn btn-outline-danger border-0"><i class="bi bi-trash3-fill"></i></button></div>`;
+            }
+            container.appendChild(row);
+        }
+
+        function addConditionRow(rule = null) {
+            const container = document.getElementById('conditions-list');
+            const row = document.createElement('div');
+            row.className = 'row g-2 align-items-center bg-white p-3 rounded-4 border shadow-sm';
+            row.innerHTML = `
+                <div class="col-md-4"><select class="form-select form-select-sm rule-col"><option value="">Column...</option></select></div>
+                <div class="col-md-3"><select class="form-select form-select-sm rule-op">
+                    <option value="eq">EQUALS</option><option value="neq">NOT EQUALS</option><option value="contains">CONTAINS</option><option value="in_sheet">IS IN SHEET</option><option value="not_in_sheet">IS NOT IN SHEET</option>
+                </select></div>
+                <div class="col-md-4"><input type="text" class="form-control form-control-sm rule-val" placeholder="Target"></div>
+                <div class="col-auto"><button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm text-danger"><i class="bi bi-trash3"></i></button></div>`;
+            container.appendChild(row);
+            portalFetch('get_student_data_headers', {}).then(headers => {
+                const s = row.querySelector('.rule-col');
+                headers.forEach(h => { const o = document.createElement('option'); o.value = h; o.textContent = h.toUpperCase().replace(/_/g,' '); if(rule?.column === h) o.selected=true; s.appendChild(o); });
+            });
+            if(rule) { row.querySelector('.rule-op').value = rule.operator; row.querySelector('.rule-val').value = rule.value; }
+        }
+
+        function saveNewTab() {
+            const name = document.getElementById('new-tab-name').value.trim();
+            const icon = document.getElementById('new-tab-icon').value.trim() || 'bi-journal-text';
+            const edit = document.getElementById('new-tab-editable').checked;
+            if (!name) return alert("Title required");
+            const fields = []; let cl = '';
+            const sz = (s) => s.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+            document.querySelectorAll('#fields-list .draggable-row').forEach(row => {
+                const type = row.querySelector('.f-type').value;
+                if (type === 'group_label') {
+                    const l = row.querySelector('input[type="text"]').value.trim();
+                    if(l) { fields.push({ type:'group_label', label:l }); cl = sz(l); }
+                } else {
+                    const fn = row.querySelector('input[placeholder*="Label"]')?.value.trim();
+                    const fo = row.querySelector('.f-options')?.value.split(',').map(s=>s.trim()).filter(s=>s);
+                    if(fn) {
+                        let k = sz(fn); if(cl) k = `${cl}_${k}`;
+                        let f = k; let c = 1; while(fields.some(fd=>fd.data_key===f)) { f = `${k}_${c++}`; }
+                        fields.push({ name:fn, type:type, options:fo, data_key:f });
+                    }
+                }
+            });
+            const rs = [];
+            document.querySelectorAll('#conditions-list .row').forEach(row => {
+                const col = row.querySelector('.rule-col').value;
+                if(col) rs.push({ column: col, operator: row.querySelector('.rule-op').value, value: row.querySelector('.rule-val').value.trim() });
+            });
+            const includeFields = Array.from(document.querySelectorAll('#include-fields-list input[type="checkbox"]:checked')).map(c => c.value);
+            const cfg = { tab_name:name, fields_json:JSON.stringify(fields), is_enabled:true, icon_class:icon, default_editable:edit?"YES":"NO", condition_json:JSON.stringify({ logic:'AND', rules:rs }), include_fields_json:JSON.stringify(includeFields) };
+            portalFetch('save_tab', cfg).then(() => { alert("Setup Saved!"); window.location.reload(); });
+        }
+
+        function editTab(i) {
+            const t = allTabs[i];
+            document.getElementById('new-tab-name').value = t.tab_name;
+            document.getElementById('new-tab-icon').value = t.icon_class || '';
+            document.getElementById('new-tab-editable').checked = t.default_editable === 'YES';
+            document.getElementById('fields-list').innerHTML = '';
+            JSON.parse(t.fields_json).forEach(f => addTabRow(f.type==='group_label'?'label':'field', f));
+            document.getElementById('conditions-list').innerHTML = '';
+            if(t.condition_json) { const l = JSON.parse(t.condition_json); (l.rules||[]).forEach(r => addConditionRow(r)); }
+            let inclKeys = [];
+            try { inclKeys = JSON.parse(t.include_fields_json || '[]'); } catch(e) {}
+            loadIncludeFields(inclKeys);
+            window.scrollTo({ top:0, behavior:'smooth' });
+        }
+
+        function deleteTabConfig(i) { if(confirm("Confirm deletion?")) portalFetch('delete_tab', { tab_name: allTabs[i].tab_name }).then(() => loadAdminTabs()); }
+        function toggleStatus(i, s) { portalFetch('save_tab', { tab_name: allTabs[i].tab_name, is_enabled: s }); }
+
+        function loadSummaryData() {
+            const t = document.getElementById('summary-tab-select').value;
+            if(!t) return;
+            document.getElementById('summary-body').innerHTML = '<tr><td colspan="100" class="text-center p-5"><div class="spinner-border text-primary"></div></td></tr>';
+            portalFetch('get_tab_data', { tab_name: t }).then(res => {
+                document.getElementById('summary-headers').innerHTML = res.headers.map(h => `<th class="small fw-800 text-muted">${h.toUpperCase()}</th>`).join('');
+                document.getElementById('summary-body').innerHTML = res.rows.map(r => `<tr>${r.map(c => `<td class="small fw-600">${c||''}</td>`).join('')}</tr>`).join('');
+            });
+        }
+
+        function exportSummaryData() {
+            const tab = document.getElementById('summary-tab-select').value;
+            if(!tab) return;
+            portalFetch('get_tab_data', { tab_name: tab }).then(res => {
+                let csv = res.headers.join(',') + '\n' + res.rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+                const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv' })); a.download = `${tab}_export.csv`; a.click();
+            });
+        }
+
+        function saveGPConfig() {
+            const u = document.getElementById('gp-username').value.trim();
+            const p = document.getElementById('gp-password').value.trim();
+            const env = document.getElementById('gp-environment').value;
+            const manualKey = document.getElementById('gp-api-key-display').value.trim();
+            const s = document.getElementById('gp-status');
+            
+            if(!u || !p) return alert("Username and Password required.");
+            
+            s.innerText = "Updating...";
+            s.className = "mt-3 text-center small fw-800 text-primary";
+            
+            portalFetch('set_gp_credentials', { username: u, password: p, channel: 'ALOEXT', environment: env, apiKey: manualKey }).then(res => {
+                s.innerText = res.message;
+                s.className = `mt-3 text-center small fw-800 ${res.result==='success'?'text-success':'text-danger'}`;
+                if(res.result === 'success') { loadTrackingConfig(); verifyGPConnection(); }
+            });
+        }
+
+        function verifyGPConnection() {
+            const btn = document.getElementById('btn-verify-gp');
+            const s = document.getElementById('gp-status');
+            const icon = btn.querySelector('i');
+            
+            btn.disabled = true;
+            icon.className = "spinner-border spinner-border-sm";
+            s.innerText = "Verifying connection...";
+            s.className = "mt-3 text-center small fw-800 text-primary";
+            
+            portalFetch('test_gp_connection', {}).then(res => {
+                btn.disabled = false;
+                icon.className = "bi bi-patch-check";
+                s.innerText = res.message;
+                s.className = `mt-3 text-center small fw-800 ${res.result==='success'?'text-success':'text-danger'}`;
+            });
+        }
+
+        function addBusRow(data = {name:'', imei:''}) {
+            const tbody = document.getElementById('bus-config-body');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" class="form-control form-control-sm b-name" value="${data.name}"></td>
+                <td><input type="text" class="form-control form-control-sm b-imei" value="${data.imei}"></td>
+                <td class="text-end">
+                    <button onclick="checkBusStatus(this)" class="btn btn-sm btn-outline-info me-1"><i class="bi bi-broadcast"></i> Check</button>
+                    <button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm text-danger"><i class="bi bi-trash3"></i></button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        function checkBusStatus(btn) {
+            const tr = btn.parentElement.parentElement;
+            const imei = tr.querySelector('.b-imei').value.trim();
+            if (!imei) return alert("Please enter an IMEI first.");
+            
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            
+            portalFetch('check_bus', { imei }).then(res => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                if (res.result === 'success') {
+                    const d = res.data;
+                    alert(`✅ BUS ONLINE\n\nName: ${tr.querySelector('.b-name').value}\nIMEI: ${imei}\nLocation: ${d.address}\nSpeed: ${d.speed} km/h\nEngine: ${d.engine}\nLast Update: ${d.time}`);
+                } else {
+                    const isAuthError = res.message.includes("401") || res.message.includes("403") || res.message.includes("Unauthorized");
+                    const header = isAuthError ? "⛔ ACCESS DENIED (API ERROR)" : "📡 BUS NOT FOUND / OFFLINE";
+                    const footer = isAuthError ? "\n\nTip: Check your Username, Password, and Channel in the 'GP API Credentials' section." : "\n\nTip: Ensure the IMEI is correct and the GPS device is powered on.";
+                    alert(`${header}\n\n${res.message}${footer}`);
+                }
+            });
+        }
+
+        function toggleGPPassword() {
+            const passInput = document.getElementById('gp-password');
+            const passIcon = document.getElementById('gp-pass-icon');
+            if (passInput.type === 'password') {
+                passInput.type = 'text';
+                passIcon.classList.remove('bi-eye-fill');
+                passIcon.classList.add('bi-eye-slash-fill');
+            } else {
+                passInput.type = 'password';
+                passIcon.classList.remove('bi-eye-slash-fill');
+                passIcon.classList.add('bi-eye-fill');
+            }
+        }
+
+        function saveBusConfig() {
+            const rows = [];
+            document.querySelectorAll('#bus-config-body tr').forEach(tr => {
+                const name = tr.querySelector('.b-name').value.trim();
+                const imei = tr.querySelector('.b-imei').value.trim();
+                if(name && imei) rows.push([name, imei]);
+            });
+            // Simple logic: save to the BusConfig sheet via a backend function
+            // I'll add this backend function next or use saveTabConfig style logic
+            portalFetch('save_bus_registry', { rows }).then(() => alert("Registry Updated!"));
+        }
+
+        // Security Polish: Disable Right-click, Selection, and Shortcuts
+        document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('selectstart', e => e.preventDefault());
+        document.onkeydown = function(e) {
+            if (e.keyCode == 123) return false; // F12
+            if (e.ctrlKey && (e.keyCode == 'U'.charCodeAt(0) || e.keyCode == 'S'.charCodeAt(0) || e.keyCode == 'H'.charCodeAt(0))) return false;
+            if (e.ctrlKey && e.shiftKey && (e.keyCode == 'I'.charCodeAt(0) || e.keyCode == 'J'.charCodeAt(0) || e.keyCode == 'C'.charCodeAt(0))) return false;
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
