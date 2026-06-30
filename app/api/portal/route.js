@@ -401,6 +401,139 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', data: rows || [] });
   }
 
+  // ── Get Attendance Summary ─────────────────────────────────────────────────
+  if (action === 'get_attendance_summary') {
+    const { student_id, year, month } = payload;
+    let query = `attendance_records?student_id=eq.${encodeURIComponent(student_id)}&order=date.asc`;
+    const rows = await sb(query);
+    if (rows?.error) return NextResponse.json({ result: 'error', message: 'Could not load attendance.' });
+
+    // Calculate summary
+    const records = rows || [];
+    const summary = {
+      total_days: new Set(records.map(r => r.date)).size,
+      present: records.filter(r => r.status === 'present').length,
+      absent: records.filter(r => r.status === 'absent').length,
+      late: records.filter(r => r.status === 'late').length,
+      percentage: 0,
+      by_month: {},
+    };
+
+    // Calculate percentage (present + late / total)
+    const attended = summary.present + summary.late;
+    summary.percentage = summary.total_days > 0 ? Math.round((attended / summary.total_days) * 100) : 0;
+
+    // Group by month
+    records.forEach(r => {
+      const dateObj = new Date(r.date);
+      const monthKey = dateObj.toISOString().substring(0, 7); // YYYY-MM
+      if (!summary.by_month[monthKey]) {
+        summary.by_month[monthKey] = { present: 0, absent: 0, late: 0, total: 0 };
+      }
+      summary.by_month[monthKey].total++;
+      summary.by_month[monthKey][r.status || 'present']++;
+    });
+
+    return NextResponse.json({ result: 'success', data: records, summary });
+  }
+
+  // ── Manual Attendance Entry ────────────────────────────────────────────────
+  if (action === 'manual_attendance_entry') {
+    const { student_id, date, entry_time, exit_time, status, method, recorded_by, notes } = payload;
+    if (!student_id || !date) {
+      return NextResponse.json({ result: 'error', message: 'Student ID and date are required.' });
+    }
+
+    // Validate date (no future dates)
+    const entryDate = new Date(date);
+    if (entryDate > new Date()) {
+      return NextResponse.json({ result: 'error', message: 'Cannot record attendance for future dates.' });
+    }
+
+    const record = {
+      student_id,
+      date,
+      entry_time: entry_time || null,
+      exit_time: exit_time || null,
+      status: status || 'present',
+      method: method || 'manual',
+      recorded_by: recorded_by || 'admin',
+      notes: notes || null,
+      recorded_at: new Date().toISOString(),
+    };
+
+    // Check for existing record
+    const existing = await sb(`attendance_records?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`);
+
+    if (existing && !existing.error && existing.length > 0) {
+      // Update existing
+      await sb(
+        `attendance_records?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`,
+        'PATCH',
+        record
+      );
+      return NextResponse.json({ result: 'success', message: 'Attendance updated.' });
+    } else {
+      // Create new
+      await sb('attendance_records', 'POST', record);
+      return NextResponse.json({ result: 'success', message: 'Attendance recorded.' });
+    }
+  }
+
+  // ── Bulk Attendance Import ─────────────────────────────────────────────────
+  if (action === 'bulk_attendance_import') {
+    const { records } = payload;
+    if (!Array.isArray(records) || records.length === 0) {
+      return NextResponse.json({ result: 'error', message: 'No records provided.' });
+    }
+
+    const results = { inserted: 0, updated: 0, skipped: 0, errors: [] };
+
+    for (const record of records) {
+      try {
+        const { student_id, date, entry_time, exit_time, status, method, recorded_by, notes } = record;
+        if (!student_id || !date) {
+          results.skipped++;
+          continue;
+        }
+
+        const data = {
+          student_id,
+          date,
+          entry_time: entry_time || null,
+          exit_time: exit_time || null,
+          status: status || 'present',
+          method: method || 'import',
+          recorded_by: recorded_by || 'bulk_import',
+          notes: notes || null,
+          recorded_at: new Date().toISOString(),
+        };
+
+        const existing = await sb(`attendance_records?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`);
+
+        if (existing && !existing.error && existing.length > 0) {
+          await sb(
+            `attendance_records?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`,
+            'PATCH',
+            data
+          );
+          results.updated++;
+        } else {
+          await sb('attendance_records', 'POST', data);
+          results.inserted++;
+        }
+      } catch (e) {
+        results.errors.push(e.message);
+      }
+    }
+
+    return NextResponse.json({
+      result: 'success',
+      message: `Imported ${results.inserted} new, updated ${results.updated}`,
+      details: results,
+    });
+  }
+
   // ── Export Tabs ────────────────────────────────────────────────────────────
   if (action === 'export_tabs') {
     const rows = await sb('portal_tabs?order=sort_order.asc');

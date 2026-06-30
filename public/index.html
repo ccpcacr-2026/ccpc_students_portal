@@ -10,6 +10,7 @@
     <link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" rel="stylesheet" />
     <link href="/css/forms.css" rel="stylesheet">
     <link href="/css/bus-tracking.css" rel="stylesheet">
+    <link href="/css/attendance.css" rel="stylesheet">
     <style>
         :root {
             --primary:      #059669;
@@ -839,25 +840,22 @@
         const container = document.getElementById('attendance-section');
         if (!container) return;
         const studentId = loggedInStudent.student_id;
-        container.innerHTML = `<div class="text-center p-4"><div class="spinner-border text-primary spinner-border-sm"></div> <span class="ms-2 fw-700">Fetching history...</span></div>`;
-        portalFetch('get_attendance', { student_id: studentId }).then(res => {
-            if (res.result === 'success') {
-                const data = res.data;
-                if (data.length === 0) { container.innerHTML = `<div class="card shadow-sm border-0 text-center p-4">No attendance records found.</div>`; return; }
-                let html = `<div class="card shadow-lg border-0"><div class="table-responsive rounded-4 border overflow-hidden"><table class="table table-hover align-middle mb-0"><thead class="bg-light"><tr class="small fw-800 text-muted uppercase"><th class="p-3">Date</th><th class="p-3">Entry</th><th class="p-3">Exit</th><th class="p-3">Status</th></tr></thead><tbody>`;
-                data.slice(0, 10).forEach(row => {
-                    let dateStr = 'N/A';
-                    if (row.date) { const [y,m,d] = row.date.split('-'); const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; dateStr = `${d} ${mo[parseInt(m)-1]}`; }
-                    const entry = row.entry_time || '--:--'; const exit = row.exit_time || '--:--';
-                    const status = row.entry_time ? '<span class="badge bg-success-subtle text-success rounded-pill fw-800" style="font-size:0.6rem">Present</span>' : '<span class="badge bg-danger-subtle text-danger rounded-pill fw-800" style="font-size:0.6rem">Absent</span>';
-                    html += `<tr><td class="p-3 fw-800 text-primary small">${dateStr}</td><td class="p-3 small fw-700"><i class="bi bi-box-arrow-in-right text-success me-1"></i>${entry}</td><td class="p-3 small fw-700"><i class="bi bi-box-arrow-right text-danger me-1"></i>${exit}</td><td class="p-3">${status}</td></tr>`;
-                });
-                html += `</tbody></table></div></div>`;
-                container.innerHTML = html;
-            } else {
-                container.innerHTML = `<div class="alert alert-danger rounded-4 fw-800">${res.message}</div>`;
-            }
-        });
+
+        // Initialize attendance dashboard container
+        container.innerHTML = `
+            <div class="attendance-container">
+                <div id="attendance-summary-container"></div>
+                <div id="attendance-history-container">
+                    <div class="text-center p-4">
+                        <div class="spinner-border text-primary spinner-border-sm"></div>
+                        <span class="ms-2 fw-700">Loading attendance...</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Load attendance data using new dashboard
+        AttendanceDashboard.loadAttendanceDashboard(studentId);
     }
     </script>
 
@@ -2394,5 +2392,6 @@
     <script src="/js/form-integration.js"></script>
     <script src="/js/admin-tabs.js"></script>
     <script src="/js/bus-tracking.js"></script>
+    <script src="/js/attendance-dashboard.js"></script>
 </body>
 </html>
