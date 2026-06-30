@@ -8,6 +8,57 @@ const ADMIN_PASS = process.env.ADMIN_PASS || 'adminccpcmrm';
 const GP_PROD_URL  = 'https://bluebird.grameenphone.com/alo-paas';
 const GP_STAGE_URL = 'https://bluebird.grameenphone.com/alo-paas-stage';
 
+// Google Sheet with teacher schedule data (legacy GAS project)
+const ROUTINE_SHEET_ID = '11l3oc1mpbR8UerpDxCatzuhcBNqkbdNzWzOTiPPdKgk';
+const ROUTINE_GID = '842228375';
+
+// Helper: parse schedule CSV exported from the Google Sheet routine tab.
+// Format (from GAS code): range E2:M — col 0 = teacher name, cols 1..N = period cells ("class;subject")
+function parseSheetSchedule(csv) {
+  const scheduleMap = {};
+  try {
+    const parseLine = (line) => {
+      const cols = []; let cur = '', inQ = false;
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      cols.push(cur.trim());
+      return cols;
+    };
+
+    const rows = csv.trim().split('\n').map(parseLine);
+    if (rows.length < 2) return scheduleMap;
+
+    // Row 0 = period header row (1st, 2nd, 3rd, 4th/Jr, 4th/Sr, 5th, 6th, 7th)
+    // Detect: find the row whose cells look like period labels
+    let hIdx = rows.findIndex(r => r.some(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c)));
+    if (hIdx === -1) hIdx = 0;
+    const headers = rows[hIdx];
+
+    // Teacher name column = first column in the range (col before period cols)
+    const firstPeriodIdx = headers.findIndex(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c));
+    const nameCol = firstPeriodIdx > 0 ? firstPeriodIdx - 1 : 0;
+
+    for (let i = hIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      const teacherName = (row[nameCol] || '').trim();
+      if (!teacherName) continue;
+      if (!scheduleMap[teacherName]) scheduleMap[teacherName] = [];
+      for (let j = firstPeriodIdx; j < headers.length; j++) {
+        const cell = (row[j] || '').trim();
+        if (!cell.includes(';')) continue;
+        const [cls, subj] = cell.split(';');
+        // Subject may end with "(INITIALS)" — strip that
+        const cleanSubj = (subj || cls).replace(/\([^)]+\)$/, '').trim();
+        scheduleMap[teacherName].push({ period: headers[j], class: cls.trim(), subject: cleanSubj });
+      }
+    }
+  } catch(_) {}
+  return scheduleMap;
+}
+
 async function sb(path, method = 'GET', body = null, extra = {}) {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
     method,
@@ -372,13 +423,39 @@ export async function POST(req) {
     }
   }
 
-  // ── Get Teacher Directory ─────────────────────────────────────────────────
+  // ── Get Teacher Directory (from teacher schema users_profile) ───────────────
   if (action === 'get_teacher_directory') {
-    const rows = await sb('portal_teachers?order=name.asc');
+    const fields = 'teacher_id,full_name,name_bengali,designation,department,category,phone,mobile,whatsapp,email,personal_email,blood_group,photo_url,gender';
+    const rows = await sb(
+      `users_profile?select=${fields}&order=full_name.asc`,
+      'GET', null,
+      { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
     if (rows?.error) return NextResponse.json([]);
-    return NextResponse.json((rows || []).map(t => ({
-      name: t.name, shortName: t.short_name || t.name, photo: t.photo || '',
-      mobile: t.mobile || '', email: t.email || '', schedule: t.schedule || [],
+
+    // Try to enrich with schedule from legacy Google Sheet
+    let scheduleMap = {};
+    try {
+      const sheetRes = await fetch(
+        `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/export?format=csv&gid=${ROUTINE_GID}`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (sheetRes.ok) scheduleMap = parseSheetSchedule(await sheetRes.text());
+    } catch(_) { /* schedule is optional */ }
+
+    return NextResponse.json((rows || []).filter(t => t.full_name).map(t => ({
+      name: t.full_name,
+      name_bengali: t.name_bengali || '',
+      designation: t.designation || '',
+      department: t.department || '',
+      category: t.category || '',
+      phone: t.phone || t.mobile || '',
+      whatsapp: t.whatsapp || '',
+      email: t.email || t.personal_email || '',
+      blood_group: t.blood_group || '',
+      photo: t.photo_url || '',
+      gender: t.gender || '',
+      schedule: scheduleMap[t.full_name] || [],
     })));
   }
 

@@ -1513,22 +1513,37 @@
                 return;
             }
 
-            let html = `<div class="row g-3">`;
+            // Search bar
+            let html = `
+                <div class="mb-3">
+                    <input type="text" id="teacher-search" class="form-control" placeholder="Search by name, department or designation…" oninput="filterTeacherCards(this.value)">
+                </div>
+                <div class="row g-3" id="teacher-cards-grid">`;
+
             teachers.forEach((t, idx) => {
-                const scheduleInfo = t.schedule && t.schedule.length > 0 
-                    ? `<span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-2 py-1 fw-700" style="font-size:0.6rem;">${t.schedule.length} Periods Today</span>`
-                    : `<span class="badge bg-light text-muted rounded-pill px-2 py-1 fw-700" style="font-size:0.6rem;">No Classes Today</span>`;
+                const initials = (t.name || '?').trim().split(/\s+/).filter(Boolean)
+                    .map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                const avatarBg = ['#059669','#6366F1','#f59e0b','#ef4444','#8b5cf6','#0ea5e9'][idx % 6];
+                const avatar = t.photo
+                    ? `<img src="${t.photo}" class="rounded-circle border" style="width:52px;height:52px;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+                    : '';
+                const fallbackAvatar = `<div class="rounded-circle d-flex align-items-center justify-content-center fw-800 text-white flex-shrink-0" style="width:52px;height:52px;background:${avatarBg};font-size:1.1rem;${t.photo ? 'display:none' : ''}">${initials}</div>`;
+                const schedBadge = t.schedule && t.schedule.length > 0
+                    ? `<span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-1" style="font-size:0.6rem;font-weight:700;">${t.schedule.length} periods</span>`
+                    : '';
+                const bgBadge = t.blood_group
+                    ? `<span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-1" style="font-size:0.6rem;font-weight:700;">${t.blood_group}</span>`
+                    : '';
 
                 html += `
-                    <div class="col-md-6 col-lg-4">
-                        <div class="card p-3 h-100 border shadow-sm hover-up" onclick="showTeacherModal(${idx})" style="cursor:pointer; transition: transform 0.2s;">
-                            <div class="d-flex align-items-center gap-3">
-                                <img src="${t.photo || 'https://www.w3schools.com/howto/img_avatar.png'}" 
-                                     class="rounded-circle border" style="width:55px; height:55px; object-fit:cover;">
-                                <div class="overflow-hidden">
-                                    <h6 class="fw-800 mb-0 text-truncate">${t.name}</h6>
-                                    <p class="text-muted small mb-1 fw-600">${t.shortName || 'Teacher'}</p>
-                                    ${scheduleInfo}
+                    <div class="col-md-6 col-lg-4 teacher-card-col" data-name="${(t.name||'').toLowerCase()}" data-dept="${(t.department||'').toLowerCase()}" data-desig="${(t.designation||'').toLowerCase()}">
+                        <div class="card p-3 h-100 border-0 shadow-sm hover-up" onclick="showTeacherModal(${idx})" style="cursor:pointer;border-radius:16px;">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="flex-shrink-0">${avatar}${fallbackAvatar}</div>
+                                <div class="overflow-hidden flex-grow-1">
+                                    <h6 class="fw-800 mb-0 text-truncate" style="font-size:0.9rem;">${t.name}</h6>
+                                    <p class="mb-1 text-truncate" style="font-size:0.72rem;color:var(--text-3);font-weight:600;">${t.designation || ''}${t.designation && t.department ? ' · ' : ''}${t.department || ''}</p>
+                                    <div class="d-flex gap-1 flex-wrap">${bgBadge}${schedBadge}</div>
                                 </div>
                             </div>
                         </div>
@@ -1538,11 +1553,18 @@
             container.innerHTML = html;
         }
 
+        function filterTeacherCards(query) {
+            const q = (query || '').toLowerCase();
+            document.querySelectorAll('.teacher-card-col').forEach(el => {
+                const match = !q || el.dataset.name.includes(q) || el.dataset.dept.includes(q) || el.dataset.desig.includes(q);
+                el.style.display = match ? '' : 'none';
+            });
+        }
+
         function showTeacherModal(idx) {
             const t = teacherDataCache[idx];
             if (!t) return;
 
-            // Create modal if not exists
             let modalEl = document.getElementById('teacher-info-modal');
             if (!modalEl) {
                 modalEl = document.createElement('div');
@@ -1550,58 +1572,75 @@
                 modalEl.className = 'modal fade';
                 modalEl.tabIndex = -1;
                 modalEl.innerHTML = `
-                    <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content border-0 shadow-lg" style="border-radius: 28px; overflow: hidden;">
-                            <div class="modal-header border-0 pb-0 justify-content-end">
-                                <button type="button" class="btn-close m-0" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <div class="modal-dialog modal-dialog-centered modal-sm">
+                        <div class="modal-content border-0 shadow-lg" style="border-radius:24px;overflow:hidden;">
+                            <div class="modal-header border-0 pb-0 justify-content-end px-3 pt-3">
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
-                            <div class="modal-body text-center p-4 pt-0" id="teacher-modal-body"></div>
+                            <div class="modal-body p-4 pt-2" id="teacher-modal-body"></div>
                         </div>
                     </div>`;
                 document.body.appendChild(modalEl);
             }
 
             const body = document.getElementById('teacher-modal-body');
-            let scheduleHtml = '';
+            const initials = (t.name || '?').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+            // Avatar
+            const avatarHtml = t.photo
+                ? `<img src="${t.photo}" class="rounded-circle border shadow-sm" style="width:90px;height:90px;object-fit:cover;" onerror="this.outerHTML='<div class=\\'rounded-circle d-flex align-items-center justify-content-center fw-800 text-white\\' style=\\'width:90px;height:90px;background:#059669;font-size:1.5rem;\\'>${initials}</div>'">`
+                : `<div class="rounded-circle d-flex align-items-center justify-content-center fw-800 text-white mx-auto" style="width:90px;height:90px;background:#059669;font-size:1.5rem;">${initials}</div>`;
+
+            // Info rows
+            const infoRow = (icon, label, val) => val ? `
+                <div class="d-flex align-items-center gap-2 py-2 border-bottom" style="font-size:0.82rem;">
+                    <i class="bi ${icon} flex-shrink-0" style="color:var(--primary);width:18px;"></i>
+                    <span class="text-muted fw-600 flex-shrink-0" style="min-width:80px;">${label}</span>
+                    <span class="fw-700 text-dark text-break">${val}</span>
+                </div>` : '';
+
+            // Schedule
+            let schedHtml = '';
             if (t.schedule && t.schedule.length > 0) {
-                scheduleHtml = `<div class="mt-4 text-start">
-                    <h6 class="fw-800 text-primary small uppercase mb-3 border-bottom pb-2">Today's Schedule</h6>
-                    <div class="list-group list-group-flush">
-                        ${t.schedule.map(s => `
-                            <div class="list-group-item px-0 border-0 bg-transparent d-flex justify-content-between align-items-center">
-                                <div>
-                                    <span class="badge bg-light text-dark fw-800 me-2" style="font-size:0.65rem;">${s.period}</span>
-                                    <span class="fw-700 text-dark" style="font-size:0.85rem;">${s.subject}</span>
-                                </div>
-                                <span class="text-muted fw-800" style="font-size:0.75rem;">${s.class}</span>
-                            </div>
-                        `).join('')}
+                schedHtml = `
+                <div class="mt-3">
+                    <div class="fw-800 small text-uppercase mb-2" style="letter-spacing:0.06em;color:var(--primary);">
+                        <i class="bi bi-calendar3 me-1"></i>Class Schedule
+                    </div>
+                    <div class="rounded-3 overflow-hidden border">
+                        ${t.schedule.map((s, i) => `
+                        <div class="d-flex align-items-center gap-2 px-3 py-2 ${i % 2 === 0 ? 'bg-light' : 'bg-white'}" style="font-size:0.78rem;">
+                            <span class="badge rounded-pill fw-800" style="background:var(--primary);font-size:0.6rem;min-width:42px;">${s.period}</span>
+                            <span class="fw-700 flex-grow-1">${s.subject}</span>
+                            <span class="text-muted fw-600">${s.class}</span>
+                        </div>`).join('')}
                     </div>
                 </div>`;
+            } else {
+                schedHtml = `<p class="text-muted small mt-3 text-center"><i class="bi bi-calendar-x me-1"></i>No schedule data available</p>`;
             }
 
-            body.innerHTML = `
-                <img src="${t.photo || 'https://www.w3schools.com/howto/img_avatar.png'}" 
-                     class="rounded-circle border mb-3 shadow-sm" style="width:120px; height:120px; object-fit:cover;">
-                <h4 class="fw-800 mb-1">${t.name}</h4>
-                <p class="text-muted fw-700 mb-4 uppercase" style="font-size:0.75rem;">${t.shortName || 'Senior Teacher'}</p>
-                
-                <div class="row g-2 mb-4">
-                    <div class="col-6">
-                        <a href="tel:${t.mobile}" class="btn btn-light w-100 py-3 rounded-4 border d-flex flex-column align-items-center gap-1">
-                            <i class="bi bi-telephone-fill text-success fs-4"></i>
-                            <span class="small fw-800 text-dark">Call Teacher</span>
-                        </a>
-                    </div>
-                    <div class="col-6">
-                        <a href="mailto:${t.email}" class="btn btn-light w-100 py-3 rounded-4 border d-flex flex-column align-items-center gap-1">
-                            <i class="bi bi-envelope-at-fill text-primary fs-4"></i>
-                            <span class="small fw-800 text-dark">Send Email</span>
-                        </a>
-                    </div>
-                </div>
+            // Contact buttons
+            const contactBtns = [];
+            if (t.phone) contactBtns.push(`<a href="tel:${t.phone}" class="btn btn-sm btn-outline-success fw-700 rounded-pill px-3"><i class="bi bi-telephone-fill me-1"></i>Call</a>`);
+            if (t.whatsapp || t.phone) contactBtns.push(`<a href="https://wa.me/${(t.whatsapp||t.phone).replace(/\D/g,'')}" target="_blank" class="btn btn-sm fw-700 rounded-pill px-3" style="background:#25D366;color:#fff;border:none;"><i class="bi bi-whatsapp me-1"></i>WhatsApp</a>`);
+            if (t.email) contactBtns.push(`<a href="mailto:${t.email}" class="btn btn-sm btn-outline-primary fw-700 rounded-pill px-3"><i class="bi bi-envelope-fill me-1"></i>Email</a>`);
 
-                ${scheduleHtml}
+            body.innerHTML = `
+                <div class="text-center mb-3">${avatarHtml}</div>
+                <h5 class="fw-800 text-center mb-0">${t.name}</h5>
+                ${t.name_bengali ? `<p class="text-center text-muted mb-1" style="font-family:'Hind Siliguri',sans-serif;font-size:0.9rem;">${t.name_bengali}</p>` : ''}
+                <p class="text-center fw-600 mb-3" style="font-size:0.75rem;color:var(--primary);">${t.designation || ''}${t.designation && t.department ? ' · ' : ''}${t.department || ''}</p>
+
+                ${contactBtns.length ? `<div class="d-flex gap-2 flex-wrap justify-content-center mb-3">${contactBtns.join('')}</div>` : ''}
+
+                <div class="px-1">
+                    ${infoRow('bi-droplet-fill', 'Blood', t.blood_group)}
+                    ${infoRow('bi-person-badge', 'Category', t.category)}
+                    ${infoRow('bi-telephone', 'Phone', t.phone)}
+                    ${infoRow('bi-envelope', 'Email', t.email)}
+                </div>
+                ${schedHtml}
             `;
 
             const modal = new bootstrap.Modal(modalEl);
@@ -1613,11 +1652,11 @@
             if (teacherDataCache.length === 0) {
                 portalFetch('get_teacher_directory', {}).then(teachers => {
                     teacherDataCache = teachers;
-                    const idx = teachers.findIndex(t => t.name === name || t.shortName === name || name.includes(t.shortName));
+                    const idx = teachers.findIndex(t => t.name === name || t.name.includes(name) || name.includes(t.name));
                     if (idx !== -1) showTeacherModal(idx);
                 });
             } else {
-                const idx = teacherDataCache.findIndex(t => t.name === name || t.shortName === name || name.includes(t.shortName));
+                const idx = teacherDataCache.findIndex(t => t.name === name || t.name.includes(name) || name.includes(t.name));
                 if (idx !== -1) showTeacherModal(idx);
             }
         }
