@@ -332,6 +332,60 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', data: (fresh && !fresh.error && fresh[0]) ? fresh[0] : clean });
   }
 
+  // ── Which tabs have been promoted into the profile ─────────────────────────
+  if (action === 'get_profile_sections') {
+    const rows = await sb('portal_settings?key=eq.profile_sections');
+    let sections = [];
+    try { sections = JSON.parse((rows && !rows.error && rows[0]?.value) || '[]'); } catch (_) {}
+    return NextResponse.json({ sections: Array.isArray(sections) ? sections : [] });
+  }
+
+  // ── Promote a whole tab into the student profile (adds real columns) ───────
+  if (action === 'promote_tab_to_profile') {
+    const { tab_name } = payload;
+    if (!tab_name) return NextResponse.json({ result: 'error', message: 'tab_name required.' });
+    const tabRows = await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(tab_name)}`);
+    if (tabRows?.error || !tabRows.length) return NextResponse.json({ result: 'error', message: 'Tab not found.' });
+    let fields = [];
+    try { fields = JSON.parse(tabRows[0].fields_json || '[]'); } catch (_) {}
+    // Only real input fields become columns; group headers are skipped. Valid pg identifiers only.
+    const valid = /^[a-z][a-z0-9_]{0,62}$/;
+    const inputFields = fields.filter(f => f.type !== 'group_label' && f.data_key && valid.test(f.data_key));
+    const cols = inputFields.map(f => f.data_key);
+    if (cols.length === 0) return NextResponse.json({ result: 'error', message: 'No valid fields to add.' });
+
+    // 1) Add the columns (SECURITY DEFINER RPC — validated identifiers, text type)
+    const addRes = await sb('rpc/add_profile_columns', 'POST', { cols });
+    if (addRes?.error) return NextResponse.json({ result: 'error', message: 'Could not add columns: ' + (addRes.error.message || addRes.error) });
+    // 2) Backfill existing submissions into the new columns
+    const syncRes = await sb('rpc/sync_tab_to_columns', 'POST', { p_tab: tab_name, keys: cols });
+    if (syncRes?.error) return NextResponse.json({ result: 'error', message: 'Columns added but backfill failed: ' + (syncRes.error.message || syncRes.error) });
+
+    // 3) Record the section so the Personal Hub shows it as a profile group
+    const secRows = await sb('portal_settings?key=eq.profile_sections');
+    let sections = [];
+    try { sections = JSON.parse((secRows && !secRows.error && secRows[0]?.value) || '[]'); } catch (_) {}
+    const fieldMeta = inputFields.map(f => ({ data_key: f.data_key, label: f.name || f.data_key, type: f.type || 'text', options: f.options || [], show_if: f.show_if || null }));
+    const title = tab_name.charAt(0).toUpperCase() + tab_name.slice(1).replace(/_/g, ' ');
+    sections = (Array.isArray(sections) ? sections : []).filter(s => s.tab_name !== tab_name);
+    sections.push({ tab_name, title, fields: fieldMeta });
+    await psSave('profile_sections', JSON.stringify(sections));
+
+    return NextResponse.json({ result: 'success', added: cols.length, columns: cols });
+  }
+
+  // ── Remove a tab from the profile view (keeps the columns & their data) ────
+  if (action === 'unpromote_tab_from_profile') {
+    const { tab_name } = payload;
+    if (!tab_name) return NextResponse.json({ result: 'error', message: 'tab_name required.' });
+    const secRows = await sb('portal_settings?key=eq.profile_sections');
+    let sections = [];
+    try { sections = JSON.parse((secRows && !secRows.error && secRows[0]?.value) || '[]'); } catch (_) {}
+    sections = (Array.isArray(sections) ? sections : []).filter(s => s.tab_name !== tab_name);
+    await psSave('profile_sections', JSON.stringify(sections));
+    return NextResponse.json({ result: 'success' });
+  }
+
   // ── Save Tab Config ───────────────────────────────────────────────────────
   if (action === 'save_tab') {
     const { tab_name, fields_json, is_enabled, condition_json, icon_class, default_editable, include_fields_json } = payload;

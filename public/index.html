@@ -1857,6 +1857,26 @@
         // System/identity fields the student can never edit, even if admin lists them
         const PROFILE_LOCKED = new Set(['id','student_id','nfc_uid','balance','daily_limit','monthly_limit','card_status','submitted_at']);
         let EDITABLE_FIELDS = [];
+        // Tabs the admin has promoted into the profile (extra groups appended below the static ones)
+        let PROFILE_SECTIONS = [];
+
+        // Unified list of profile groups: static PROFILE_GROUPS + promoted PROFILE_SECTIONS.
+        // Each field is { key, label, options } — options only for promoted choose/checkbox fields.
+        function getProfileGroups() {
+            const groups = Object.entries(PROFILE_GROUPS).map(([title, keys]) => ({
+                title,
+                fields: keys.map(k => ({ key: k, label: PROFILE_LABELS[k] || k.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()), options: PROFILE_FIELD_OPTIONS[k] || null })),
+            }));
+            (PROFILE_SECTIONS || []).forEach(sec => {
+                const fields = (sec.fields || []).map(f => ({
+                    key: f.data_key,
+                    label: f.label || f.data_key.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()),
+                    options: (f.type === 'choose' || f.type === 'checkbox') && (f.options || []).length ? f.options : null,
+                }));
+                if (fields.length) groups.push({ title: sec.title || sec.tab_name, fields });
+            });
+            return groups;
+        }
 
         function profileVal(target) {
             if (!loggedInStudent) return '';
@@ -1886,17 +1906,15 @@
 
         function buildProfileCardInner(editMode) {
             let html = '<div class="row g-2">';
-            Object.entries(PROFILE_GROUPS).forEach(([title, members]) => {
+            getProfileGroups().forEach(({ title, fields }) => {
                 html += `<div class="col-12"><h6 class="profile-group-label" style="font-family:'Instrument Serif',serif;font-size:1.1rem;">${title}</h6></div>`;
-                members.forEach(m => {
+                fields.forEach(({ key: m, label, options }) => {
                     const raw = profileVal(m);
-                    const label = PROFILE_LABELS[m] || m.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
                     const canEdit = editMode && isProfileFieldEditable(m);
                     let valHtml;
                     if (canEdit) {
-                        const opts = PROFILE_FIELD_OPTIONS[m];
-                        if (opts) {
-                            valHtml = `<select class="form-select form-select-sm profile-edit-input" data-field="${m}"><option value=""></option>${opts.map(o => `<option value="${o}" ${String(raw)===o?'selected':''}>${o}</option>`).join('')}</select>`;
+                        if (options && options.length) {
+                            valHtml = `<select class="form-select form-select-sm profile-edit-input" data-field="${m}"><option value=""></option>${options.map(o => `<option value="${o}" ${String(raw)===o?'selected':''}>${o}</option>`).join('')}</select>`;
                         } else {
                             const safe = raw == null ? '' : String(raw).replace(/"/g,'&quot;');
                             valHtml = `<input type="text" class="form-control form-control-sm profile-edit-input" data-field="${m}" value="${safe}">`;
@@ -1919,7 +1937,7 @@
             if (card) card.innerHTML = buildProfileCardInner(editMode);
             const bar = document.getElementById('profile-edit-bar');
             if (!bar) return;
-            const allMembers = Object.values(PROFILE_GROUPS).flat();
+            const allMembers = getProfileGroups().flatMap(g => g.fields.map(f => f.key));
             const hasEditable = allMembers.some(f => isProfileFieldEditable(f));
             if (!hasEditable) { bar.innerHTML = ''; return; }
             bar.innerHTML = editMode
@@ -1951,10 +1969,14 @@
             });
         }
 
-        // Fetch which profile fields the admin has made student-editable, then refresh the pane
+        // Fetch editable fields + promoted profile sections, then refresh the pane
         function loadEditableFields() {
-            portalFetch('get_editable_fields', {}).then(res => {
-                EDITABLE_FIELDS = (res && Array.isArray(res.fields)) ? res.fields : [];
+            Promise.all([
+                portalFetch('get_editable_fields', {}),
+                portalFetch('get_profile_sections', {}),
+            ]).then(([ef, ps]) => {
+                EDITABLE_FIELDS = (ef && Array.isArray(ef.fields)) ? ef.fields : [];
+                PROFILE_SECTIONS = (ps && Array.isArray(ps.sections)) ? ps.sections : [];
                 if (document.getElementById('hub-profile-card')) renderProfilePane(false);
             }).catch(() => {});
         }
@@ -2450,25 +2472,36 @@
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
         }
 
+        let PROMOTED_TABS = [];
         function loadAdminTabs() {
             try {
-                portalFetch('get_tabs', {}).then(tabs => {
+                Promise.all([portalFetch('get_tabs', {}), portalFetch('get_profile_sections', {})]).then(([tabs, ps]) => {
                     try {
                         if (!Array.isArray(tabs)) return;
                         allTabs = tabs;
+                        PROMOTED_TABS = (ps && Array.isArray(ps.sections)) ? ps.sections.map(s => s.tab_name) : [];
                         const list = document.getElementById('admin-tabs-list');
                         if(list) {
-                            list.innerHTML = tabs.map((t, i) => `
+                            list.innerHTML = tabs.map((t, i) => {
+                                const promoted = PROMOTED_TABS.includes(t.tab_name);
+                                const promoBtn = promoted
+                                    ? `<button onclick="unpromoteTab('${t.tab_name}')" class="btn btn-xs btn-success rounded-pill px-3" title="This tab's fields are part of the profile — click to remove"><i class="bi bi-check-circle-fill"></i> In Profile</button>`
+                                    : `<button onclick="promoteTab('${t.tab_name}')" class="btn btn-xs btn-outline-success rounded-pill px-3" title="Add this tab's fields to the student profile as columns"><i class="bi bi-plus-circle"></i> Add to Profile</button>`;
+                                return `
                                 <div class="col-md-6">
-                                    <div class="card p-3 mb-0 d-flex flex-row justify-content-between align-items-center shadow-sm border-0">
-                                        <div class="text-truncate"><strong><i class="bi ${t.icon_class||'bi-folder'} me-2 text-primary"></i>${t.tab_name}</strong></div>
-                                        <div class="d-flex gap-2">
-                                            <button onclick="editTab(${i})" class="btn btn-xs btn-primary rounded-pill px-3">Edit</button>
-                                            <button onclick="deleteTabConfig(${i})" class="btn btn-xs btn-danger rounded-pill px-3">Del</button>
-                                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" ${t.is_enabled?'checked':''} onchange="toggleStatus(${i}, this.checked)"></div>
+                                    <div class="card p-3 mb-0 shadow-sm border-0">
+                                        <div class="d-flex flex-row justify-content-between align-items-center">
+                                            <div class="text-truncate"><strong><i class="bi ${t.icon_class||'bi-folder'} me-2 text-primary"></i>${t.tab_name}</strong></div>
+                                            <div class="d-flex gap-2 align-items-center">
+                                                <button onclick="editTab(${i})" class="btn btn-xs btn-primary rounded-pill px-3">Edit</button>
+                                                <button onclick="deleteTabConfig(${i})" class="btn btn-xs btn-danger rounded-pill px-3">Del</button>
+                                                <div class="form-check form-switch"><input class="form-check-input" type="checkbox" ${t.is_enabled?'checked':''} onchange="toggleStatus(${i}, this.checked)"></div>
+                                            </div>
                                         </div>
+                                        <div class="mt-2 pt-2 border-top">${promoBtn}</div>
                                     </div>
-                                </div>`).join('');
+                                </div>`;
+                            }).join('');
                         }
                         const sel = document.getElementById('summary-tab-select');
                         if(sel) {
@@ -2477,6 +2510,32 @@
                     } catch(e) { console.error("loadAdminTabs success callback error", e); }
                 });
             } catch(e) { console.error("loadAdminTabs error", e); }
+        }
+
+        // Promote a whole tab's fields into the student profile (adds real columns + backfills)
+        function promoteTab(tabName) {
+            if (!confirm(`Add all fields from "${tabName}" to the student profile?\n\nThis creates matching columns in students_data and copies existing submissions into them. Fields you tick as editable will then be editable from the profile.`)) return;
+            if (typeof showToast === 'function') showToast('Adding fields to profile…', 'info');
+            portalFetch('promote_tab_to_profile', { tab_name: tabName }).then(res => {
+                if (res && res.result === 'success') {
+                    if (typeof showToast === 'function') showToast(`Added ${res.added} field(s) to the profile`, 'success');
+                    loadAdminTabs();
+                    loadEditableProfileFields(); // new columns now selectable as editable
+                } else {
+                    if (typeof showToast === 'function') showToast((res && res.message) || 'Failed to add to profile', 'error');
+                    else alert((res && res.message) || 'Failed');
+                }
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function unpromoteTab(tabName) {
+            if (!confirm(`Remove "${tabName}" from the student profile view?\n\nThe columns and their data stay in the database — they just won't show in the profile anymore.`)) return;
+            portalFetch('unpromote_tab_from_profile', { tab_name: tabName }).then(res => {
+                if (res && res.result === 'success') {
+                    if (typeof showToast === 'function') showToast('Removed from profile', 'success');
+                    loadAdminTabs();
+                } else if (typeof showToast === 'function') showToast('Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
         }
 
         // Turn a show_if.value into a display string for the editor
@@ -2637,6 +2696,7 @@
                 if (conds.length === 1) return conds[0];
                 return { all: conds };
             };
+            const optionless = [];
             document.querySelectorAll('#fields-list .draggable-row').forEach(row => {
                 const type = row.querySelector('.f-type').value;
                 const showIf = readShowIf(row);
@@ -2647,6 +2707,8 @@
                     const fn = row.querySelector('input[placeholder*="Label"]')?.value.trim();
                     const fo = row.querySelector('.f-options')?.value.split(',').map(s=>s.trim()).filter(s=>s);
                     if(fn) {
+                        // A dropdown/checkbox with no options renders as an empty control — warn the admin
+                        if ((type === 'choose' || type === 'checkbox') && fo.length === 0) optionless.push(fn);
                         // Preserve the field's original data_key when editing; otherwise derive it
                         let f = row.querySelector('.f-key')?.value.trim();
                         if (!f) { let k = sz(fn); if(cl) k = `${cl}_${k}`; f = k; let c = 1; while(fields.some(fd=>fd.data_key===f)) { f = `${k}_${c++}`; } }
@@ -2656,6 +2718,9 @@
                     }
                 }
             });
+            if (optionless.length) {
+                if (!confirm(`These dropdown/checkbox fields have no options and will show as empty:\n\n• ${optionless.join('\n• ')}\n\nAdd comma-separated options in the "Options" box. Save anyway?`)) return;
+            }
             const rs = [];
             document.querySelectorAll('#conditions-list .row').forEach(row => {
                 const col = row.querySelector('.rule-col').value;
