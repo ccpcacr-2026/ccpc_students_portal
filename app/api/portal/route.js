@@ -290,6 +290,48 @@ export async function POST(req) {
     return NextResponse.json(['student_id', 'student_name', 'class', 'section', 'roll']);
   }
 
+  // ── Get list of profile fields the admin marked student-editable ───────────
+  if (action === 'get_editable_fields') {
+    const setRows = await sb('portal_settings?key=eq.editable_profile_fields');
+    let fields = [];
+    try { fields = JSON.parse((setRows && !setRows.error && setRows[0]?.value) || '[]'); } catch (_) {}
+    return NextResponse.json({ fields: Array.isArray(fields) ? fields : [] });
+  }
+
+  // ── Admin saves which profile fields students may edit ─────────────────────
+  if (action === 'save_editable_fields') {
+    const fields = Array.isArray(payload.fields) ? payload.fields : [];
+    await psSave('editable_profile_fields', JSON.stringify(fields));
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Student updates their own profile (only admin-approved fields) ─────────
+  if (action === 'update_student_profile') {
+    const { student_id, updates } = payload;
+    if (!student_id || student_id === 'admin' || !updates || typeof updates !== 'object') {
+      return NextResponse.json({ result: 'error', message: 'Invalid request.' });
+    }
+    const setRows = await sb('portal_settings?key=eq.editable_profile_fields');
+    let allowed = [];
+    try { allowed = JSON.parse((setRows && !setRows.error && setRows[0]?.value) || '[]'); } catch (_) {}
+    if (!Array.isArray(allowed) || allowed.length === 0) {
+      return NextResponse.json({ result: 'error', message: 'Profile editing is currently disabled.' });
+    }
+    // Never allow identity/system columns to be overwritten, even if listed
+    const locked = new Set(['id', 'student_id', 'nfc_uid', 'balance', 'daily_limit', 'monthly_limit', 'card_status', 'submitted_at']);
+    const clean = {};
+    for (const [k, v] of Object.entries(updates)) {
+      if (allowed.includes(k) && !locked.has(k)) clean[k] = v;
+    }
+    if (Object.keys(clean).length === 0) {
+      return NextResponse.json({ result: 'error', message: 'No editable fields to update.' });
+    }
+    const r = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', clean);
+    if (r?.error) return NextResponse.json({ result: 'error', message: 'Update failed.' });
+    const fresh = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=*`);
+    return NextResponse.json({ result: 'success', data: (fresh && !fresh.error && fresh[0]) ? fresh[0] : clean });
+  }
+
   // ── Save Tab Config ───────────────────────────────────────────────────────
   if (action === 'save_tab') {
     const { tab_name, fields_json, is_enabled, condition_json, icon_class, default_editable, include_fields_json } = payload;

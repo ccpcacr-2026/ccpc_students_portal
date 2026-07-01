@@ -12,7 +12,7 @@
     <link href="/css/design-bootstrap-overrides.css" rel="stylesheet">
     <link href="/css/design-themes.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" rel="stylesheet" />
 
     <!-- Portal Features -->
@@ -53,7 +53,7 @@
         }
 
         body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-family: 'Geist', 'Inter', -apple-system, sans-serif;
             background: var(--bg);
             color: var(--text);
             margin: 0;
@@ -727,6 +727,22 @@
                                         </div>
                                     </div>
                                     <div id="fields-list" class="mt-5"></div>
+
+                                    <!-- Student-editable profile fields (global setting) -->
+                                    <div class="mt-5 p-4 rounded-4 border shadow-sm" style="background:#fff">
+                                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                            <span class="fw-800"><i class="bi bi-pencil-square text-primary me-2"></i>Student-Editable Profile Fields</span>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <span class="small fw-700 text-muted" id="editable-fields-count">0 selected</span>
+                                                <button onclick="saveEditableProfileFields()" class="btn btn-sm btn-primary rounded-pill px-3">Save Editable Fields</button>
+                                            </div>
+                                        </div>
+                                        <p class="small text-muted mb-3" style="font-size:0.72rem">Ticked fields get an <strong>Edit</strong> button in the student's Personal Hub so students can update them. ID / wallet / card fields are always locked.</p>
+                                        <div id="editable-fields-list" class="d-flex flex-wrap gap-2">
+                                            <span class="text-muted small fst-italic">Loading profile columns...</span>
+                                        </div>
+                                    </div>
+
                                     <hr class="my-5 opacity-25">
                                     <div id="admin-tabs-list" class="row g-4"></div>
                                 </div>
@@ -927,6 +943,25 @@
             });
             if (!r.ok) throw new Error('Network error ' + r.status);
             return r.json();
+        }
+
+        // Lightweight toast notifications
+        function showToast(message, type = 'info') {
+            let host = document.getElementById('toast-host');
+            if (!host) {
+                host = document.createElement('div');
+                host.id = 'toast-host';
+                host.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;';
+                document.body.appendChild(host);
+            }
+            const colors = { success: '#16a34a', error: '#dc2626', info: '#334155' };
+            const icons  = { success: 'bi-check-circle-fill', error: 'bi-exclamation-triangle-fill', info: 'bi-info-circle-fill' };
+            const t = document.createElement('div');
+            t.style.cssText = `background:${colors[type]||colors.info};color:#fff;padding:10px 18px;border-radius:999px;font-size:0.82rem;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,0.18);opacity:0;transform:translateY(10px);transition:all .25s;display:flex;align-items:center;gap:8px;max-width:90vw;`;
+            t.innerHTML = `<i class="bi ${icons[type]||icons.info}"></i><span>${message}</span>`;
+            host.appendChild(t);
+            requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; });
+            setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(10px)'; setTimeout(() => t.remove(), 300); }, 3000);
         }
 
         const LOGO_DATA_URL = '/logo.jpg';
@@ -1407,6 +1442,7 @@
 
                 loadAdminTabs();
                 loadIncludeFields();
+                loadEditableProfileFields();
                 loadTrackingConfig();
             } catch(e) {
                 console.error("showAdminPanel error", e);
@@ -1741,14 +1777,40 @@
                 </div>`;
         }
 
-        // ── Conditional ("dependable") fields: show/hide based on another field's value ──
+        // ── Conditional ("dependable") fields ──────────────────────────────────────
+        // show_if supports three shapes:
+        //   { field, value }                     → single condition (value may be an array = OR)
+        //   { all: [ {field,value}, ... ] }       → every condition must match (AND, for nested logic)
+        //   { any: [ {field,value}, ... ] }       → at least one matches (OR)
+        function matchSingle(cond, currentVal) {
+            const cur = String(currentVal == null ? '' : currentVal).toLowerCase().trim();
+            const targets = Array.isArray(cond.value) ? cond.value
+                : Array.isArray(cond.values) ? cond.values
+                : [cond.value];
+            return targets.some(t => String(t == null ? '' : t).toLowerCase().trim() === cur);
+        }
+
+        // Back-compat single-value matcher (kept for existing callers)
         function matchShowIf(showIf, currentVal) {
             if (!showIf) return true;
-            const cur = String(currentVal || '').toLowerCase().trim();
-            const targets = Array.isArray(showIf.value) ? showIf.value
-                : Array.isArray(showIf.values) ? showIf.values
-                : [showIf.value];
-            return targets.some(t => String(t || '').toLowerCase().trim() === cur);
+            if (Array.isArray(showIf.all) || Array.isArray(showIf.any)) return true; // needs form context; handled by matchShowIfForm
+            return matchSingle(showIf, currentVal);
+        }
+
+        // Evaluate a show_if against a live <form> (used for real-time show/hide)
+        function matchShowIfForm(showIf, form) {
+            if (!showIf) return true;
+            if (Array.isArray(showIf.all)) return showIf.all.every(c => matchSingle(c, getFieldValue(form, c.field)));
+            if (Array.isArray(showIf.any)) return showIf.any.some(c => matchSingle(c, getFieldValue(form, c.field)));
+            return matchSingle(showIf, getFieldValue(form, showIf.field));
+        }
+
+        // Evaluate a show_if against a data object (used for initial render visibility)
+        function matchShowIfData(showIf, lookup) {
+            if (!showIf) return true;
+            if (Array.isArray(showIf.all)) return showIf.all.every(c => matchSingle(c, lookup(c.field)));
+            if (Array.isArray(showIf.any)) return showIf.any.some(c => matchSingle(c, lookup(c.field)));
+            return matchSingle(showIf, lookup(showIf.field));
         }
 
         function getFieldValue(form, name) {
@@ -1766,10 +1828,135 @@
             form.querySelectorAll('[data-show-if]').forEach(el => {
                 try {
                     const showIf = JSON.parse(el.dataset.showIf);
-                    const curVal = getFieldValue(form, showIf.field);
-                    el.style.display = matchShowIf(showIf, curVal) ? '' : 'none';
+                    el.style.display = matchShowIfForm(showIf, form) ? '' : 'none';
                 } catch(e) {}
             });
+        }
+
+        // ── Personal Hub profile: mapping, formatting & inline editing ─────────────
+        // Mapping mirrors the legacy Student Portal (old column names → new schema).
+        const PROFILE_GROUPS = {
+            "Academic Profile":   ['student_name', 'student_id', 'class', 'section', 'roll', 'session'],
+            "Identity Details":   ['nick_name', 'blood', 'house', 'card_status', 'balance'],
+            "Emergency Contacts": ['fathers_name', 'father_phone', 'mothers_name', 'mother_phone'],
+        };
+        const PROFILE_LABELS = {
+            student_name: 'Full Name', student_id: 'Student ID', class: 'Class', section: 'Section',
+            roll: 'Roll', session: 'Session', nick_name: 'Nick Name', blood: 'Blood Group',
+            house: 'House', card_status: 'Card Status', balance: 'Wallet Balance',
+            fathers_name: "Father's Name", father_phone: "Father's Phone",
+            mothers_name: "Mother's Name", mother_phone: "Mother's Phone",
+            gender: 'Gender', version: 'Version', shift: 'Shift', phone_number: 'Phone',
+            daily_limit: 'Daily Limit', monthly_limit: 'Monthly Limit',
+        };
+        // Fields rendered as dropdowns while editing
+        const PROFILE_FIELD_OPTIONS = {
+            blood: ['A+','A-','B+','B-','AB+','AB-','O+','O-'],
+            gender: ['Male','Female'], version: ['Bangla','English'], shift: ['Morning','Day','Evening'],
+        };
+        // System/identity fields the student can never edit, even if admin lists them
+        const PROFILE_LOCKED = new Set(['id','student_id','nfc_uid','balance','daily_limit','monthly_limit','card_status','submitted_at']);
+        let EDITABLE_FIELDS = [];
+
+        function profileVal(target) {
+            if (!loggedInStudent) return '';
+            const keys = Object.keys(loggedInStudent);
+            const t = String(target).toLowerCase().replace(/[\s_]/g, '');
+            const match = keys.find(k => {
+                const kn = k.toLowerCase().replace(/[\s_]/g, '');
+                return kn === t || kn === t.replace('student', '') || t === kn.replace('student', '');
+            });
+            return match ? loggedInStudent[match] : '';
+        }
+
+        function formatProfileVal(key, raw) {
+            if (raw === null || raw === undefined || raw === '') return '<span class="text-muted small">—</span>';
+            if (key === 'balance') return `<strong style="color:var(--primary)">৳${Number(raw).toLocaleString()}</strong>`;
+            if (key === 'daily_limit' || key === 'monthly_limit') return `৳${Number(raw).toLocaleString()}`;
+            if (key === 'card_status') {
+                const color = raw === 'Active' ? 'success' : (raw === 'Blocked' ? 'danger' : 'secondary');
+                return `<span class="badge bg-${color}-subtle text-${color} border border-${color}-subtle rounded-pill px-2">${raw}</span>`;
+            }
+            return String(raw);
+        }
+
+        function isProfileFieldEditable(key) {
+            return EDITABLE_FIELDS.includes(key) && !PROFILE_LOCKED.has(key);
+        }
+
+        function buildProfileCardInner(editMode) {
+            let html = '<div class="row g-2">';
+            Object.entries(PROFILE_GROUPS).forEach(([title, members]) => {
+                html += `<div class="col-12"><h6 class="profile-group-label" style="font-family:'Instrument Serif',serif;font-size:1.1rem;">${title}</h6></div>`;
+                members.forEach(m => {
+                    const raw = profileVal(m);
+                    const label = PROFILE_LABELS[m] || m.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+                    const canEdit = editMode && isProfileFieldEditable(m);
+                    let valHtml;
+                    if (canEdit) {
+                        const opts = PROFILE_FIELD_OPTIONS[m];
+                        if (opts) {
+                            valHtml = `<select class="form-select form-select-sm profile-edit-input" data-field="${m}"><option value=""></option>${opts.map(o => `<option value="${o}" ${String(raw)===o?'selected':''}>${o}</option>`).join('')}</select>`;
+                        } else {
+                            const safe = raw == null ? '' : String(raw).replace(/"/g,'&quot;');
+                            valHtml = `<input type="text" class="form-control form-control-sm profile-edit-input" data-field="${m}" value="${safe}">`;
+                        }
+                    } else {
+                        const badge = (!editMode && isProfileFieldEditable(m)) ? ' <i class="bi bi-pencil-square text-primary" style="font-size:0.62rem" title="You can edit this"></i>' : '';
+                        valHtml = `<div class="detail-label">${label}${badge}</div><div class="detail-value">${formatProfileVal(m, raw)}</div>`;
+                        html += `<div class="col-6 col-md-4"><div class="detail-item">${valHtml}</div></div>`;
+                        return;
+                    }
+                    html += `<div class="col-6 col-md-4"><div class="detail-item"><div class="detail-label">${label}</div>${valHtml}</div></div>`;
+                });
+            });
+            html += '</div>';
+            return html;
+        }
+
+        function renderProfilePane(editMode) {
+            const card = document.getElementById('hub-profile-card');
+            if (card) card.innerHTML = buildProfileCardInner(editMode);
+            const bar = document.getElementById('profile-edit-bar');
+            if (!bar) return;
+            const allMembers = Object.values(PROFILE_GROUPS).flat();
+            const hasEditable = allMembers.some(f => isProfileFieldEditable(f));
+            if (!hasEditable) { bar.innerHTML = ''; return; }
+            bar.innerHTML = editMode
+                ? `<button class="btn btn-sm btn-success rounded-pill px-3" onclick="saveProfileEdits()"><i class="bi bi-check-lg"></i> Save</button> <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="renderProfilePane(false)">Cancel</button>`
+                : `<button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="renderProfilePane(true)"><i class="bi bi-pencil-square"></i> Edit Profile</button>`;
+        }
+
+        function saveProfileEdits() {
+            const updates = {};
+            document.querySelectorAll('.profile-edit-input').forEach(el => { updates[el.dataset.field] = el.value; });
+            const sid = loggedInStudent && loggedInStudent.student_id;
+            const bar = document.getElementById('profile-edit-bar');
+            if (bar) bar.innerHTML = '<span class="small text-muted"><i class="bi bi-arrow-repeat"></i> Saving…</span>';
+            portalFetch('update_student_profile', { student_id: sid, updates }).then(res => {
+                if (res && res.result === 'success') {
+                    if (res.data) {
+                        loggedInStudent = { ...loggedInStudent, ...res.data };
+                        try { localStorage.setItem('student_session', JSON.stringify(loggedInStudent)); } catch(e) {}
+                    }
+                    renderProfilePane(false);
+                    if (typeof showToast === 'function') showToast('Profile updated successfully', 'success');
+                } else {
+                    renderProfilePane(true);
+                    if (typeof showToast === 'function') showToast((res && res.message) || 'Update failed', 'error');
+                }
+            }).catch(() => {
+                renderProfilePane(true);
+                if (typeof showToast === 'function') showToast('Network error while saving', 'error');
+            });
+        }
+
+        // Fetch which profile fields the admin has made student-editable, then refresh the pane
+        function loadEditableFields() {
+            portalFetch('get_editable_fields', {}).then(res => {
+                EDITABLE_FIELDS = (res && Array.isArray(res.fields)) ? res.fields : [];
+                if (document.getElementById('hub-profile-card')) renderProfilePane(false);
+            }).catch(() => {});
         }
 
         function addNav(id, name, icon, active = false) {
@@ -1813,7 +2000,7 @@
                         return match ? obj[match] : null;
                     };
 
-                    ['student_name', 'class', 'section', 'roll', 'gender', 'version', 'shift', 'phone_number', 'father_phone', 'mother_phone'].forEach(key => {
+                    ['student_name', 'nick_name', 'class', 'section', 'roll', 'session', 'house', 'gender', 'blood', 'version', 'shift', 'phone_number', 'father_phone', 'mother_phone', 'fathers_name', 'mothers_name', 'card_status', 'balance', 'daily_limit', 'monthly_limit', 'photo'].forEach(key => {
                         const eVal = findIn(existing, key);
                         const mVal = findIn(master, key);
                         if (!eVal || eVal === "") loggedInStudent[key] = mVal || "";
@@ -1874,6 +2061,9 @@
                 const _initials = _parts.length >= 2
                     ? (_parts[0][0] + _parts[_parts.length-1][0]).toUpperCase()
                     : (_sName.substring(0,2) || (loggedInStudent.student_id||'').substring(0,2)).toUpperCase();
+                const _avatarStyle = loggedInStudent.photo
+                    ? `background:url('${loggedInStudent.photo}') center/cover no-repeat`
+                    : `background:var(--primary)`;
                 const _classInfo = loggedInStudent.class
                     ? ' · ' + loggedInStudent.class + (loggedInStudent.section ? ' ' + loggedInStudent.section : '')
                     : '';
@@ -1881,14 +2071,23 @@
                 const _strip = document.createElement('div');
                 _strip.className = 'student-strip';
                 _strip.id = 'student-id-strip';
-                _strip.innerHTML = `<div class="student-strip-avatar">${_initials}</div><div><div class="student-strip-name">${_sName || loggedInStudent.student_id}</div><div class="student-strip-meta">ID: ${loggedInStudent.student_id}${_classInfo}</div></div>`;
+                _strip.innerHTML = `<div class="student-strip-avatar" style="${_avatarStyle}">${loggedInStudent.photo ? '' : _initials}</div><div><div class="student-strip-name">${_sName || loggedInStudent.student_id}</div><div class="student-strip-meta">ID: ${loggedInStudent.student_id}${_classInfo}</div></div>`;
                 if(content) content.appendChild(_strip);
                 // Sidebar card (desktop)
                 const _sbCard = document.getElementById('sidebar-student-card');
                 const _sbAv   = document.getElementById('sidebar-student-avatar');
                 const _sbNm   = document.getElementById('sidebar-student-name');
                 const _sbId   = document.getElementById('sidebar-student-id-label');
-                if(_sbAv)   _sbAv.textContent = _initials;
+                if(_sbAv) {
+                    if (loggedInStudent.photo) {
+                        _sbAv.style.backgroundImage = `url('${loggedInStudent.photo}')`;
+                        _sbAv.style.backgroundSize = 'cover';
+                        _sbAv.style.backgroundPosition = 'center';
+                        _sbAv.textContent = '';
+                    } else {
+                        _sbAv.textContent = _initials;
+                    }
+                }
                 if(_sbNm)   _sbNm.textContent = _sName || loggedInStudent.student_id;
                 if(_sbId)   _sbId.textContent  = 'ID: ' + loggedInStudent.student_id + _classInfo;
                 if(_sbCard) _sbCard.style.display = 'flex';
@@ -1941,22 +2140,6 @@
                   }
                 }, 500);
 
-                const groups = {
-                    "Academic Profile": ['student_name', 'student_id', 'class', 'section', 'roll'],
-                    "Identity Details": ['gender', 'version', 'shift', 'phone_number'],
-                    "Emergency Contacts": ['father_phone', 'mother_phone']
-                };
-
-                const findInSession = (target) => {
-                    const keys = Object.keys(loggedInStudent);
-                    const t = target.toLowerCase().replace(/[\s_]/g, '');
-                    const match = keys.find(k => {
-                        const kn = k.toLowerCase().replace(/[\s_]/g, '');
-                        return kn === t || kn === t.replace('student', '') || t === kn.replace('student', '');
-                    });
-                    return match ? loggedInStudent[match] : '';
-                };
-
                 let profHtml = `
                     <!-- Hub Tab Controller -->
                     <div class="hub-tab-container">
@@ -1973,18 +2156,11 @@
 
                     <!-- 1. Student Information Pane (first, active) -->
                     <div id="hub-profile-pane" class="hub-tab-pane active">
-                        <div class="card profile-grid-compressed">
-                            <div class="row g-2">`;
-                Object.entries(groups).forEach(([title, members]) => {
-                    profHtml += `<div class="col-12"><h6 class="profile-group-label">${title}</h6></div>`;
-                    members.forEach(m => {
-                        const val = findInSession(m) || '<span class="text-muted italic small">—</span>';
-                        profHtml += `<div class="col-6 col-md-4"><div class="detail-item"><div class="detail-label">${m.replace(/student_/g,'').replace(/_/g,' ')}</div><div class="detail-value">${val}</div></div></div>`;
-                    });
-                });
-                profHtml += `
-                            </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h2 class="h5 section-title mb-0" style="font-family:'Instrument Serif',serif;">My Information</h2>
+                            <div id="profile-edit-bar" class="d-flex gap-2"></div>
                         </div>
+                        <div id="hub-profile-card" class="card profile-grid-compressed">${buildProfileCardInner(false)}</div>
                     </div>
 
                     <!-- 2. Schedule Pane -->
@@ -1998,9 +2174,11 @@
                         <h2 class="h4 section-title">Recent Activity</h2>
                         <div id="attendance-section"></div>
                     </div>`;
-                
-                profPane.innerHTML = profHtml; 
+
+                profPane.innerHTML = profHtml;
                 if(content) content.appendChild(profPane);
+                // Load admin-approved editable fields, then show Edit button + pencil badges
+                loadEditableFields();
 
                 console.log("Attempting to load sub-sections...");
                 try {
@@ -2069,8 +2247,7 @@
                                     }
 
                                      fields.forEach(f => {
-                                         const controllerVal = f.show_if ? findInBoth(data, loggedInStudent, f.show_if.field) : null;
-                                         const visible = !f.show_if || matchShowIf(f.show_if, controllerVal);
+                                         const visible = !f.show_if || matchShowIfData(f.show_if, (fld) => findInBoth(data, loggedInStudent, fld));
                                          const showIfAttr = f.show_if ? ` data-show-if='${JSON.stringify(f.show_if).replace(/'/g, "&#39;")}'` : '';
                                          const hideStyle = visible ? '' : ' style="display:none"';
                                          if(f.type === 'group_label') html += `<div class="col-12 mt-4"${showIfAttr}${hideStyle}><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`;
@@ -2231,6 +2408,48 @@
             if (el) el.textContent = count + ' selected';
         }
 
+        // ── Admin: choose which profile fields students may edit ───────────────────
+        const EDITABLE_LOCKED = new Set(['id','student_id','nfc_uid','balance','daily_limit','monthly_limit','card_status','submitted_at']);
+        function loadEditableProfileFields() {
+            Promise.all([
+                portalFetch('get_student_data_headers', {}),
+                portalFetch('get_editable_fields', {}),
+            ]).then(([headers, res]) => {
+                const container = document.getElementById('editable-fields-list');
+                if (!container) return;
+                const selected = (res && Array.isArray(res.fields)) ? res.fields : [];
+                const skip = new Set(['id','studentid','nfcuid','submittedat']);
+                const rows = (headers || []).filter(h => !skip.has(h.toLowerCase().replace(/[\s_]/g,'')));
+                if (rows.length === 0) { container.innerHTML = '<span class="text-muted small fst-italic">No profile columns found.</span>'; return; }
+                container.innerHTML = rows.map(h => {
+                    const locked = EDITABLE_LOCKED.has(h);
+                    const checked = selected.includes(h);
+                    if (locked) {
+                        return `<span class="include-field-chip opacity-50" style="cursor:not-allowed" title="Always locked"><i class="bi bi-lock-fill me-1"></i>${h.replace(/_/g,' ')}</span>`;
+                    }
+                    return `<label class="include-field-chip ${checked ? 'active' : ''}">
+                        <input type="checkbox" value="${h}" ${checked ? 'checked' : ''} onchange="this.closest('label').classList.toggle('active',this.checked);updateEditableCount()">
+                        ${h.replace(/_/g,' ')}
+                    </label>`;
+                }).join('');
+                updateEditableCount();
+            });
+        }
+
+        function updateEditableCount() {
+            const count = document.querySelectorAll('#editable-fields-list input[type="checkbox"]:checked').length;
+            const el = document.getElementById('editable-fields-count');
+            if (el) el.textContent = count + ' selected';
+        }
+
+        function saveEditableProfileFields() {
+            const fields = Array.from(document.querySelectorAll('#editable-fields-list input[type="checkbox"]:checked')).map(c => c.value);
+            portalFetch('save_editable_fields', { fields }).then(res => {
+                if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Editable fields saved', 'success'); else alert('Saved'); }
+                else { if (typeof showToast === 'function') showToast('Save failed', 'error'); }
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
         function loadAdminTabs() {
             try {
                 portalFetch('get_tabs', {}).then(tabs => {
@@ -2260,6 +2479,44 @@
             } catch(e) { console.error("loadAdminTabs error", e); }
         }
 
+        // Turn a show_if.value into a display string for the editor
+        function _showIfValStr(v) { return Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v)); }
+
+        // Normalise any stored show_if into up to 2 editor condition slots
+        function parseShowIfForEditor(showIf) {
+            const empty = [{ field: '', value: '' }, { field: '', value: '' }];
+            if (!showIf) return empty;
+            const list = Array.isArray(showIf.all) ? showIf.all
+                : Array.isArray(showIf.any) ? showIf.any
+                : [{ field: showIf.field, value: showIf.value }];
+            return [
+                { field: list[0]?.field || '', value: _showIfValStr(list[0]?.value) },
+                { field: list[1]?.field || '', value: _showIfValStr(list[1]?.value) },
+            ];
+        }
+
+        // Build the "Show only if" line for a field/label row, pre-filled from data.show_if
+        function showIfBlockHtml(data) {
+            const c = parseShowIfForEditor(data?.show_if);
+            const has = !!(data && data.show_if);
+            return `
+                <div class="col-12 mt-2">
+                    <div class="showif-block ${has ? '' : 'hidden'} p-2 rounded-3" style="background:#f1f5f9">
+                        <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:0.78rem">
+                            <span class="fw-800 text-muted"><i class="bi bi-diagram-3-fill me-1"></i>Show only if</span>
+                            <select class="form-select form-select-sm showif-field" style="max-width:210px"><option value="">(always visible)</option></select>
+                            <span class="text-muted fw-700">=</span>
+                            <input type="text" class="form-control form-control-sm showif-value" placeholder="value" style="max-width:150px" value="${(c[0].value||'').replace(/"/g,'&quot;')}">
+                            <span class="badge bg-dark-subtle text-dark">AND</span>
+                            <select class="form-select form-select-sm showif-field2" style="max-width:210px"><option value="">(none)</option></select>
+                            <span class="text-muted fw-700">=</span>
+                            <input type="text" class="form-control form-control-sm showif-value2" placeholder="value" style="max-width:150px" value="${(c[1].value||'').replace(/"/g,'&quot;')}">
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 mt-1 showif-toggle" style="font-size:0.72rem" onclick="const b=this.previousElementSibling; b.classList.toggle('hidden'); this.innerHTML = b.classList.contains('hidden') ? '<i class=\\'bi bi-plus-circle\\'></i> Add condition (dependable)' : '<i class=\\'bi bi-dash-circle\\'></i> Hide condition';">${has ? '<i class="bi bi-dash-circle"></i> Hide condition' : '<i class="bi bi-plus-circle"></i> Add condition (dependable)'}</button>
+                </div>`;
+        }
+
         function addTabRow(type, data = null) {
             const container = document.getElementById('fields-list');
             const row = document.createElement('div');
@@ -2277,13 +2534,15 @@
                 }
             };
             const grip = `<div class="col-auto"><i class="bi bi-grip-vertical fs-3 text-muted" style="cursor:grab"></i></div>`;
+            // Preserve the field's stable data_key so conditional references don't break on edit
+            const keyInput = `<input type="hidden" class="f-key" value="${data?.data_key || ''}">`;
             if (type === 'label') {
-                row.innerHTML = `${grip}<div class="col"><input type="text" placeholder="Identity Header" class="form-control fw-800 text-primary" value="${data?.label||''}"></div><input type="hidden" class="f-type" value="group_label"><div class="col-auto"><button onclick="this.parentElement.parentElement.remove()" class="btn btn-outline-danger border-0"><i class="bi bi-trash3-fill"></i></button></div>`;
+                row.innerHTML = `${grip}<div class="col"><input type="text" placeholder="Identity Header" class="form-control fw-800 text-primary" value="${data?.label||''}"></div><input type="hidden" class="f-type" value="group_label">${keyInput}<div class="col-auto"><button onclick="this.closest('.draggable-row').remove()" class="btn btn-outline-danger border-0"><i class="bi bi-trash3-fill"></i></button></div>${showIfBlockHtml(data)}`;
             } else {
                 row.innerHTML = `${grip}
                     <div class="col-md-4"><input type="text" placeholder="Label" class="form-control" value="${data?.name||''}"></div>
                     <div class="col-md-3">
-                        <select class="form-select f-type" onchange="const o = this.parentElement.parentElement.querySelector('.f-options'); if(['checkbox','choose'].includes(this.value)) o.classList.remove('hidden'); else o.classList.add('hidden');">
+                        <select class="form-select f-type" onchange="const o = this.closest('.draggable-row').querySelector('.f-options'); if(['checkbox','choose'].includes(this.value)) o.classList.remove('hidden'); else o.classList.add('hidden');">
                             <option value="text" ${data?.type==='text'?'selected':''}>Text Input</option>
                             <option value="paragraph" ${data?.type==='paragraph'?'selected':''}>Paragraph</option>
                             <option value="number" ${data?.type==='number'?'selected':''}>Number</option>
@@ -2291,10 +2550,52 @@
                             <option value="choose" ${data?.type==='choose'?'selected':''}>Dropdown</option>
                         </select>
                     </div>
-                    <div class="col-md-4"><input type="text" placeholder="Options" class="form-control f-options ${['checkbox','choose'].includes(data?.type)?'':'hidden'}" value="${(data?.options||[]).join(',')}"></div>
-                    <div class="col-auto"><button onclick="this.parentElement.parentElement.remove()" class="btn btn-outline-danger border-0"><i class="bi bi-trash3-fill"></i></button></div>`;
+                    <div class="col-md-4"><input type="text" placeholder="Options (comma separated)" class="form-control f-options ${['checkbox','choose'].includes(data?.type)?'':'hidden'}" value="${(data?.options||[]).join(',')}"></div>
+                    ${keyInput}
+                    <div class="col-auto"><button onclick="this.closest('.draggable-row').remove()" class="btn btn-outline-danger border-0"><i class="bi bi-trash3-fill"></i></button></div>
+                    ${showIfBlockHtml(data)}`;
             }
             container.appendChild(row);
+            // Populate the two controller dropdowns and pre-select stored values
+            const cond = parseShowIfForEditor(data?.show_if);
+            populateShowIfSelect(row.querySelector('.showif-field'), cond[0].field);
+            populateShowIfSelect(row.querySelector('.showif-field2'), cond[1].field);
+            refreshAllShowIfControllers();
+        }
+
+        // All selectable controller fields currently in the builder (data_key → label)
+        function getBuilderFieldKeys() {
+            const sz = (s) => s.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+            const out = [];
+            let cl = '';
+            document.querySelectorAll('#fields-list .draggable-row').forEach(row => {
+                const type = row.querySelector('.f-type')?.value;
+                if (type === 'group_label') { const l = row.querySelector('input[type="text"]')?.value.trim(); if (l) cl = sz(l); return; }
+                const label = row.querySelector('input[placeholder*="Label"]')?.value.trim();
+                if (!label) return;
+                let key = row.querySelector('.f-key')?.value.trim();
+                if (!key) { key = sz(label); if (cl) key = `${cl}_${key}`; }
+                out.push({ key, label });
+            });
+            return out;
+        }
+
+        function populateShowIfSelect(sel, selectedKey) {
+            if (!sel) return;
+            const isSecond = sel.classList.contains('showif-field2');
+            const keys = getBuilderFieldKeys();
+            sel.innerHTML = `<option value="">${isSecond ? '(none)' : '(always visible)'}</option>` +
+                keys.map(k => `<option value="${k.key}" ${k.key===selectedKey?'selected':''}>${k.label}</option>`).join('');
+            if (selectedKey && !keys.some(k => k.key === selectedKey)) {
+                // Preserve a reference to a field that may sit later in the list
+                const o = document.createElement('option'); o.value = selectedKey; o.textContent = selectedKey; o.selected = true; sel.appendChild(o);
+            }
+        }
+
+        function refreshAllShowIfControllers() {
+            document.querySelectorAll('#fields-list .showif-field, #fields-list .showif-field2').forEach(sel => {
+                populateShowIfSelect(sel, sel.value);
+            });
         }
 
         function addConditionRow(rule = null) {
@@ -2323,18 +2624,35 @@
             if (!name) return alert("Title required");
             const fields = []; let cl = '';
             const sz = (s) => s.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+            // Read the "Show only if" controls of a row → a show_if object (or null)
+            const readShowIf = (row) => {
+                const f1 = row.querySelector('.showif-field')?.value.trim();
+                const v1 = row.querySelector('.showif-value')?.value.trim();
+                const f2 = row.querySelector('.showif-field2')?.value.trim();
+                const v2 = row.querySelector('.showif-value2')?.value.trim();
+                const conds = [];
+                if (f1) conds.push({ field: f1, value: v1 });
+                if (f2) conds.push({ field: f2, value: v2 });
+                if (conds.length === 0) return null;
+                if (conds.length === 1) return conds[0];
+                return { all: conds };
+            };
             document.querySelectorAll('#fields-list .draggable-row').forEach(row => {
                 const type = row.querySelector('.f-type').value;
+                const showIf = readShowIf(row);
                 if (type === 'group_label') {
                     const l = row.querySelector('input[type="text"]').value.trim();
-                    if(l) { fields.push({ type:'group_label', label:l }); cl = sz(l); }
+                    if(l) { const g = { type:'group_label', label:l }; if (showIf) g.show_if = showIf; fields.push(g); cl = sz(l); }
                 } else {
                     const fn = row.querySelector('input[placeholder*="Label"]')?.value.trim();
                     const fo = row.querySelector('.f-options')?.value.split(',').map(s=>s.trim()).filter(s=>s);
                     if(fn) {
-                        let k = sz(fn); if(cl) k = `${cl}_${k}`;
-                        let f = k; let c = 1; while(fields.some(fd=>fd.data_key===f)) { f = `${k}_${c++}`; }
-                        fields.push({ name:fn, type:type, options:fo, data_key:f });
+                        // Preserve the field's original data_key when editing; otherwise derive it
+                        let f = row.querySelector('.f-key')?.value.trim();
+                        if (!f) { let k = sz(fn); if(cl) k = `${cl}_${k}`; f = k; let c = 1; while(fields.some(fd=>fd.data_key===f)) { f = `${k}_${c++}`; } }
+                        const obj = { name:fn, type:type, options:fo, data_key:f };
+                        if (showIf) obj.show_if = showIf;
+                        fields.push(obj);
                     }
                 }
             });
@@ -2355,6 +2673,8 @@
             document.getElementById('new-tab-editable').checked = t.default_editable === 'YES';
             document.getElementById('fields-list').innerHTML = '';
             JSON.parse(t.fields_json).forEach(f => addTabRow(f.type==='group_label'?'label':'field', f));
+            // Now that every row exists, repopulate controller dropdowns (selections are preserved)
+            refreshAllShowIfControllers();
             document.getElementById('conditions-list').innerHTML = '';
             if(t.condition_json) { const l = JSON.parse(t.condition_json); (l.rules||[]).forEach(r => addConditionRow(r)); }
             let inclKeys = [];
