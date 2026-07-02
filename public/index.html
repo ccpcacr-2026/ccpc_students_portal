@@ -136,6 +136,112 @@
         }
         .btn-nfc:hover { background: #d1fae5; border-color: var(--primary-l); }
 
+        /* ── Login Notice Carousel (Forest + Saffron design tokens, scoped) ── */
+        .notice-carousel {
+            --n-primary: oklch(0.34 0.06 155); --n-primary-ink: oklch(0.22 0.05 155);
+            --n-accent: oklch(0.74 0.16 70); --n-accent-ink: oklch(0.45 0.14 65);
+            --n-surface: oklch(0.975 0.012 85); --n-surface-alt: oklch(0.95 0.018 85);
+            --n-ink: oklch(0.20 0.015 60); --n-ink-dim: oklch(0.45 0.015 60);
+            --n-line: oklch(0.88 0.018 80);
+            width: 100%; max-width: 430px; position: relative; margin-bottom: 18px;
+        }
+        .notice-carousel.hidden { display: none; }
+        .notice-viewport { position: relative; overflow: hidden; border-radius: var(--radius-xl); }
+        .notice-track { display: flex; transition: transform 0.45s cubic-bezier(0.16,1,0.3,1); }
+        .notice-slide {
+            flex: 0 0 100%; box-sizing: border-box; background: var(--n-surface);
+            border: 1px solid var(--n-line); border-radius: var(--radius-xl);
+            padding: 22px 26px; min-height: 92px; position: relative; overflow: hidden;
+        }
+        .notice-slide::before {
+            content: ''; position: absolute; right: -60px; bottom: -60px; width: 180px; height: 180px;
+            border-radius: 50%; background: var(--n-accent); opacity: 0.14;
+        }
+        .notice-slide-title {
+            font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.35rem;
+            color: var(--n-primary-ink); line-height: 1.15; position: relative; margin-bottom: 4px;
+        }
+        .notice-slide-subtitle {
+            font-family: 'Geist Mono', monospace; font-size: 0.62rem; letter-spacing: 0.12em;
+            text-transform: uppercase; color: var(--n-accent-ink); font-weight: 700;
+            position: relative; margin-bottom: 8px;
+        }
+        .notice-slide-body { font-size: 0.85rem; line-height: 1.55; color: var(--n-ink); position: relative; }
+        .notice-dots { display: flex; justify-content: center; gap: 6px; margin-top: 12px; }
+        .notice-dot {
+            width: 7px; height: 7px; border-radius: 50%; background: var(--n-line);
+            cursor: pointer; transition: all 0.25s; border: none; padding: 0;
+        }
+        .notice-dot.active { background: var(--n-primary); width: 20px; border-radius: 4px; }
+        .notice-arrow {
+            position: absolute; top: 50%; transform: translateY(-50%); z-index: 5;
+            width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer;
+            background: rgba(255,255,255,0.85); color: var(--n-primary-ink); box-shadow: var(--shadow-sm);
+            display: flex; align-items: center; justify-content: center; font-size: 0.9rem;
+            opacity: 0; transition: opacity 0.2s;
+        }
+        .notice-carousel:hover .notice-arrow { opacity: 1; }
+        .notice-arrow-l { left: 8px; } .notice-arrow-r { right: 8px; }
+
+        /* ── New feature pages (Wallet / Canteen / Stationary) — Forest+Saffron tokens ── */
+        .ccpc-page {
+            --p-primary: oklch(0.34 0.06 155); --p-primary-l: oklch(0.44 0.08 155); --p-primary-ink: oklch(0.22 0.05 155);
+            --p-accent: oklch(0.74 0.16 70); --p-accent-ink: oklch(0.45 0.14 65);
+            --p-surface: oklch(0.975 0.012 85); --p-surface-alt: oklch(0.95 0.018 85);
+            --p-ink: oklch(0.20 0.015 60); --p-ink-dim: oklch(0.45 0.015 60);
+            --p-line: oklch(0.88 0.018 80);
+        }
+        .ccpc-page-title {
+            font-family: 'Instrument Serif', serif; font-size: 1.9rem; color: var(--p-ink);
+            margin-bottom: 4px; line-height: 1.1;
+        }
+        .ccpc-page-title em { color: var(--p-primary-ink); font-style: italic; }
+        .ccpc-page-sub { font-size: 0.85rem; color: var(--p-ink-dim); margin-bottom: 24px; }
+
+        .wallet-hero {
+            background: linear-gradient(135deg, var(--p-primary), var(--p-primary-l));
+            border-radius: 26px; padding: 30px 28px; color: var(--p-surface); position: relative;
+            overflow: hidden; margin-bottom: 22px;
+        }
+        .wallet-hero::before {
+            content: ''; position: absolute; right: -70px; top: -70px; width: 220px; height: 220px;
+            border-radius: 50%; background: var(--p-accent); opacity: 0.22;
+        }
+        .wallet-hero-label {
+            font-family: 'Geist Mono', monospace; font-size: 0.65rem; letter-spacing: 0.14em;
+            text-transform: uppercase; opacity: 0.8; position: relative;
+        }
+        .wallet-hero-amount {
+            font-family: 'Instrument Serif', serif; font-size: 3rem; line-height: 1; margin: 10px 0 18px; position: relative;
+        }
+        .wallet-hero-row { display: flex; gap: 10px; flex-wrap: wrap; position: relative; }
+        .wallet-hero-chip {
+            background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 999px; padding: 6px 14px; font-size: 0.72rem; font-weight: 700;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .wallet-stat-card {
+            background: var(--p-surface); border: 1px solid var(--p-line); border-radius: 18px;
+            padding: 18px 20px;
+        }
+        .wallet-stat-label {
+            font-family: 'Geist Mono', monospace; font-size: 0.6rem; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--p-ink-dim); margin-bottom: 6px;
+        }
+        .wallet-stat-value { font-size: 1.3rem; font-weight: 800; color: var(--p-ink); }
+
+        .ccpc-coming-soon {
+            background: var(--p-surface); border: 1px dashed var(--p-line); border-radius: 26px;
+            padding: 60px 30px; text-align: center;
+        }
+        .ccpc-coming-soon-icon {
+            width: 76px; height: 76px; border-radius: 50%; background: var(--p-surface-alt);
+            display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;
+            color: var(--p-primary-ink); font-size: 2rem;
+        }
+        .ccpc-coming-soon-title { font-family: 'Instrument Serif', serif; font-size: 1.6rem; color: var(--p-ink); margin-bottom: 8px; }
+        .ccpc-coming-soon-sub { font-size: 0.85rem; color: var(--p-ink-dim); max-width: 360px; margin: 0 auto; line-height: 1.6; }
+
         /* ── Layout ──────────────────────────────────── */
         #main-wrapper { display: flex; min-height: 100vh; }
 
@@ -634,6 +740,14 @@
                         <h1 class="login-title">Chattogram Cantonment Public College</h1>
                         <p class="login-sub">Student Information Portal</p>
                     </div>
+                    <div id="login-notice-carousel" class="notice-carousel hidden">
+                        <div class="notice-viewport">
+                            <div class="notice-track" id="notice-track"></div>
+                            <button type="button" class="notice-arrow notice-arrow-l" onclick="noticeGo(-1)"><i class="bi bi-chevron-left"></i></button>
+                            <button type="button" class="notice-arrow notice-arrow-r" onclick="noticeGo(1)"><i class="bi bi-chevron-right"></i></button>
+                        </div>
+                        <div class="notice-dots" id="notice-dots"></div>
+                    </div>
                     <div class="login-card">
                         <div class="login-card-title">Sign In to Portal</div>
                         <div class="mb-3">
@@ -708,7 +822,8 @@
                                 <button class="btn btn-sm fw-800 active me-2" data-bs-toggle="tab" data-bs-target="#admin-manage" style="background:rgba(255,255,255,0.18);color:#fff;border-radius:10px;border:none">Setup</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-reports" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Data</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-nfc" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">NFC</button>
-                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-tracking" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Bus</button>
+                                <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-tracking" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Bus</button>
+                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-notices" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Notices</button>
                             </div>
                         </div>
                         <div class="p-4 bg-white">
@@ -821,6 +936,16 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                                <div class="tab-pane" id="admin-notices">
+                                    <div class="d-flex justify-content-between align-items-center mb-4">
+                                        <div>
+                                            <h5 class="fw-800 m-0"><i class="bi bi-megaphone-fill me-2" style="color:var(--primary)"></i>Login Page Notices</h5>
+                                            <p class="small text-muted mb-0" style="font-size:0.72rem">Shown as a sliding carousel above the sign-in form. Each notice has its own Title, Subtitle and Body — write raw HTML (e.g. &lt;span style="color:red"&gt;text&lt;/span&gt;) for full control over color, font and style per word or letter.</p>
+                                        </div>
+                                        <button onclick="addNoticeRow()" class="btn btn-primary rounded-pill px-4 fw-800 flex-shrink-0"><i class="bi bi-plus-lg me-1"></i>Add Notice</button>
+                                    </div>
+                                    <div id="notices-admin-list" class="d-flex flex-column gap-4"></div>
                                 </div>
                             </div>
                         </div>
@@ -981,6 +1106,67 @@
             setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(10px)'; setTimeout(() => t.remove(), 300); }, 3000);
         }
 
+        // ── Login page notice carousel ──────────────────────────────────────────
+        // Notices are authored as raw HTML by the admin (same trust model as the
+        // tab builder), so title/subtitle/body render unescaped by design.
+        let NOTICE_SLIDES = [];
+        let noticeIdx = 0;
+        let noticeTimer = null;
+
+        function loadLoginNotices() {
+            portalFetch('get_notices', {}).then(rows => {
+                NOTICE_SLIDES = Array.isArray(rows) ? rows : [];
+                const wrap = document.getElementById('login-notice-carousel');
+                if (!wrap) return;
+                if (NOTICE_SLIDES.length === 0) { wrap.classList.add('hidden'); return; }
+                wrap.classList.remove('hidden');
+                const track = document.getElementById('notice-track');
+                const dots = document.getElementById('notice-dots');
+                track.innerHTML = NOTICE_SLIDES.map(n => `
+                    <div class="notice-slide">
+                        ${n.title ? `<div class="notice-slide-title">${n.title}</div>` : ''}
+                        ${n.subtitle ? `<div class="notice-slide-subtitle">${n.subtitle}</div>` : ''}
+                        ${n.body ? `<div class="notice-slide-body">${n.body}</div>` : ''}
+                    </div>`).join('');
+                dots.innerHTML = NOTICE_SLIDES.length > 1
+                    ? NOTICE_SLIDES.map((_, i) => `<button type="button" class="notice-dot" onclick="noticeGoTo(${i})"></button>`).join('')
+                    : '';
+                noticeIdx = 0;
+                noticeRender();
+                if (NOTICE_SLIDES.length > 1) noticeStartAuto();
+                // Swipe support
+                let touchX = null;
+                const viewport = wrap.querySelector('.notice-viewport');
+                viewport.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+                viewport.addEventListener('touchend', e => {
+                    if (touchX === null) return;
+                    const dx = e.changedTouches[0].clientX - touchX;
+                    if (Math.abs(dx) > 40) noticeGo(dx > 0 ? -1 : 1);
+                    touchX = null;
+                }, { passive: true });
+            }).catch(() => {});
+        }
+
+        function noticeRender() {
+            const track = document.getElementById('notice-track');
+            if (track) track.style.transform = `translateX(-${noticeIdx * 100}%)`;
+            document.querySelectorAll('.notice-dot').forEach((d, i) => d.classList.toggle('active', i === noticeIdx));
+        }
+
+        function noticeGo(delta) {
+            if (NOTICE_SLIDES.length === 0) return;
+            noticeIdx = (noticeIdx + delta + NOTICE_SLIDES.length) % NOTICE_SLIDES.length;
+            noticeRender();
+            noticeStartAuto();
+        }
+
+        function noticeGoTo(i) { noticeIdx = i; noticeRender(); noticeStartAuto(); }
+
+        function noticeStartAuto() {
+            if (noticeTimer) clearInterval(noticeTimer);
+            if (NOTICE_SLIDES.length > 1) noticeTimer = setInterval(() => noticeGo(1), 6000);
+        }
+
         const LOGO_DATA_URL = '/logo.jpg';
 
         /* Auto-login from URL params */
@@ -1024,6 +1210,7 @@
                 if (mobileLogo) mobileLogo.src = LOGO_DATA_URL;
 
                 resetUI();
+                loadLoginNotices();
 
                 console.log("Portal Initialized. Autologin parameters from server:", {
                     id: AUTO_LOGIN_ID,
@@ -1461,6 +1648,7 @@
                 loadIncludeFields();
                 loadEditableProfileFields();
                 loadTrackingConfig();
+                loadNoticesAdmin();
             } catch(e) {
                 console.error("showAdminPanel error", e);
                 alert("Error loading Admin Panel.");
@@ -2132,11 +2320,70 @@
                 if(_sbCard) _sbCard.style.display = 'flex';
 
                 addNav('profile', 'Personal Hub', 'bi-person-badge-fill', true);
+                addNav('wallet', 'Wallet', 'bi-wallet2');
+                addNav('canteen', 'Canteen', 'bi-cup-hot-fill');
+                addNav('stationary', 'Stationary', 'bi-bag-fill');
                 addNav('teachers', 'Teacher Directory', 'bi-people-fill');
                 addNav('bus-tracking', 'Live Bus Tracking', 'bi-bus-front-fill');
-                
+
                 const profPane = document.createElement('div');
                 profPane.className = 'tab-pane active'; profPane.id = 'profile-content';
+
+                // ── Wallet (real data: balance / card status / limits) ──
+                const walletPane = document.createElement('div');
+                walletPane.className = 'tab-pane ccpc-page'; walletPane.id = 'wallet-content';
+                {
+                    const bal = Number(loggedInStudent.balance || 0).toLocaleString();
+                    const dailyLim = Number(loggedInStudent.daily_limit || 0).toLocaleString();
+                    const monthlyLim = Number(loggedInStudent.monthly_limit || 0).toLocaleString();
+                    const cardStatus = loggedInStudent.card_status || 'Unknown';
+                    const statusColor = cardStatus === 'Active' ? '#bbf7d0' : (cardStatus === 'Blocked' ? '#fecaca' : 'rgba(255,255,255,0.3)');
+                    walletPane.innerHTML = `
+                        <h2 class="ccpc-page-title">Your <em>Wallet</em></h2>
+                        <p class="ccpc-page-sub">Canteen card balance and spending limits.</p>
+                        <div class="wallet-hero">
+                            <div class="wallet-hero-label">Available Balance</div>
+                            <div class="wallet-hero-amount">৳${bal}</div>
+                            <div class="wallet-hero-row">
+                                <span class="wallet-hero-chip"><i class="bi bi-circle-fill" style="font-size:0.5rem;color:${statusColor}"></i>Card ${cardStatus}</span>
+                                ${loggedInStudent.nfc_uid ? `<span class="wallet-hero-chip"><i class="bi bi-credit-card-2-front-fill"></i>${loggedInStudent.nfc_uid}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="row g-3 mb-4">
+                            <div class="col-6"><div class="wallet-stat-card"><div class="wallet-stat-label">Daily Limit</div><div class="wallet-stat-value">৳${dailyLim}</div></div></div>
+                            <div class="col-6"><div class="wallet-stat-card"><div class="wallet-stat-label">Monthly Limit</div><div class="wallet-stat-value">৳${monthlyLim}</div></div></div>
+                        </div>
+                        <button class="btn w-100 py-3 fw-800" disabled style="border-radius:16px;background:var(--p-surface-alt);color:var(--p-ink-dim);border:1px dashed var(--p-line)">
+                            <i class="bi bi-clock-history me-2"></i>Online Top-up — Coming Soon (top up at the canteen counter)
+                        </button>`;
+                }
+                if(content) content.appendChild(walletPane);
+
+                // ── Canteen (coming soon) ──
+                const canteenPane = document.createElement('div');
+                canteenPane.className = 'tab-pane ccpc-page'; canteenPane.id = 'canteen-content';
+                canteenPane.innerHTML = `
+                    <h2 class="ccpc-page-title">Campus <em>Canteen</em></h2>
+                    <p class="ccpc-page-sub">Order food straight to your class or pick it up yourself.</p>
+                    <div class="ccpc-coming-soon">
+                        <div class="ccpc-coming-soon-icon"><i class="bi bi-cup-hot-fill"></i></div>
+                        <div class="ccpc-coming-soon-title">Ordering opens soon</div>
+                        <div class="ccpc-coming-soon-sub">We're building the food menu and ordering flow. You'll be able to browse today's menu, add items to a cart, and pay from your wallet right here.</div>
+                    </div>`;
+                if(content) content.appendChild(canteenPane);
+
+                // ── Stationary store (coming soon) ──
+                const stationaryPane = document.createElement('div');
+                stationaryPane.className = 'tab-pane ccpc-page'; stationaryPane.id = 'stationary-content';
+                stationaryPane.innerHTML = `
+                    <h2 class="ccpc-page-title">Stationary <em>Store</em></h2>
+                    <p class="ccpc-page-sub">Books, notebooks and supplies from the campus store.</p>
+                    <div class="ccpc-coming-soon">
+                        <div class="ccpc-coming-soon-icon"><i class="bi bi-bag-fill"></i></div>
+                        <div class="ccpc-coming-soon-title">Store opens soon</div>
+                        <div class="ccpc-coming-soon-sub">A catalog of stationary items with wallet checkout is on the way.</div>
+                    </div>`;
+                if(content) content.appendChild(stationaryPane);
 
                 const teacherPane = document.createElement('div');
                 teacherPane.className = 'tab-pane'; teacherPane.id = 'teachers-content';
@@ -2553,6 +2800,117 @@
                     loadAdminTabs();
                 } else if (typeof showToast === 'function') showToast('Failed', 'error');
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        // ── Admin: Login Page Notices (carousel, edited section-by-section) ────────
+        let ADMIN_NOTICES = [];
+
+        function loadNoticesAdmin() {
+            portalFetch('get_notices_admin', {}).then(rows => {
+                ADMIN_NOTICES = Array.isArray(rows) ? rows : [];
+                renderNoticesAdmin();
+            }).catch(() => {});
+        }
+
+        function renderNoticesAdmin() {
+            const list = document.getElementById('notices-admin-list');
+            if (!list) return;
+            if (ADMIN_NOTICES.length === 0) {
+                list.innerHTML = '<div class="text-center text-muted small fst-italic py-5">No notices yet — click "Add Notice" to create the first slide.</div>';
+                return;
+            }
+            list.innerHTML = ADMIN_NOTICES.map((n, i) => `
+                <div class="card border-0 shadow-sm p-4" style="border-radius:20px" data-notice-idx="${i}">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="fw-800 text-muted small text-uppercase" style="letter-spacing:0.06em"><i class="bi bi-grip-vertical me-1"></i>Notice ${i + 1}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <button onclick="moveNotice(${i},-1)" class="btn btn-xs btn-outline-secondary" ${i===0?'disabled':''} title="Move up"><i class="bi bi-arrow-up"></i></button>
+                            <button onclick="moveNotice(${i},1)" class="btn btn-xs btn-outline-secondary" ${i===ADMIN_NOTICES.length-1?'disabled':''} title="Move down"><i class="bi bi-arrow-down"></i></button>
+                            <div class="form-check form-switch ms-2 mb-0"><input class="form-check-input notice-enabled" type="checkbox" ${n.is_enabled?'checked':''} onchange="previewNotice(${i})"><label class="form-check-label small fw-700">Shown</label></div>
+                            <button onclick="deleteNoticeRow(${i}, ${n.id||'null'})" class="btn btn-xs btn-outline-danger ms-2"><i class="bi bi-trash3-fill"></i></button>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="small fw-800 text-muted mb-1 d-block">Title (HTML)</label>
+                            <input type="text" class="form-control notice-title" placeholder="e.g. <i>Exam</i> Routine Published" value="${(n.title||'').replace(/"/g,'&quot;')}" oninput="previewNotice(${i})">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-800 text-muted mb-1 d-block">Subtitle (HTML, optional)</label>
+                            <input type="text" class="form-control notice-subtitle" placeholder="e.g. GENERAL NOTICE" value="${(n.subtitle||'').replace(/"/g,'&quot;')}" oninput="previewNotice(${i})">
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-800 text-muted mb-1 d-block">Body (HTML) — style any word or letter with inline &lt;span style="..."&gt;</label>
+                            <textarea class="form-control notice-body" rows="3" placeholder="e.g. Half-yearly exam routine is out. Check the <b>Academics</b> tab." oninput="previewNotice(${i})">${n.body||''}</textarea>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="small fw-800 text-muted text-uppercase mb-2" style="font-size:0.62rem;letter-spacing:0.08em"><i class="bi bi-eye-fill me-1"></i>Live Preview</div>
+                        <div class="notice-carousel" style="max-width:100%;margin-bottom:0">
+                            <div class="notice-viewport"><div class="notice-track" style="transform:none"><div class="notice-slide" id="notice-preview-${i}"></div></div></div>
+                        </div>
+                    </div>
+                    <button onclick="saveNoticeRow(${i})" class="btn btn-primary w-100 py-2 mt-3 fw-800"><i class="bi bi-cloud-arrow-up-fill me-1"></i>Save Notice</button>
+                </div>`).join('');
+            ADMIN_NOTICES.forEach((_, i) => previewNotice(i));
+        }
+
+        function noticeRowValues(i) {
+            const card = document.querySelector(`[data-notice-idx="${i}"]`);
+            if (!card) return null;
+            return {
+                title: card.querySelector('.notice-title').value,
+                subtitle: card.querySelector('.notice-subtitle').value,
+                body: card.querySelector('.notice-body').value,
+                is_enabled: card.querySelector('.notice-enabled').checked,
+            };
+        }
+
+        function previewNotice(i) {
+            const v = noticeRowValues(i);
+            const el = document.getElementById(`notice-preview-${i}`);
+            if (!v || !el) return;
+            el.innerHTML = `
+                ${v.title ? `<div class="notice-slide-title">${v.title}</div>` : ''}
+                ${v.subtitle ? `<div class="notice-slide-subtitle">${v.subtitle}</div>` : ''}
+                ${v.body ? `<div class="notice-slide-body">${v.body}</div>` : ''}`;
+        }
+
+        function addNoticeRow() {
+            ADMIN_NOTICES.push({ id: null, title: '', subtitle: '', body: '', is_enabled: true });
+            renderNoticesAdmin();
+        }
+
+        function saveNoticeRow(i) {
+            const v = noticeRowValues(i);
+            const n = ADMIN_NOTICES[i];
+            if (!v) return;
+            portalFetch('save_notice', { id: n.id, ...v }).then(res => {
+                if (res && res.result === 'success') {
+                    if (res.id) n.id = res.id;
+                    Object.assign(n, v);
+                    if (typeof showToast === 'function') showToast('Notice saved', 'success');
+                } else if (typeof showToast === 'function') showToast('Save failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function deleteNoticeRow(i, id) {
+            if (!confirm('Delete this notice?')) return;
+            const remove = () => { ADMIN_NOTICES.splice(i, 1); renderNoticesAdmin(); };
+            if (!id) { remove(); return; }
+            portalFetch('delete_notice', { id }).then(res => {
+                if (res && res.result === 'success') remove();
+                else if (typeof showToast === 'function') showToast('Delete failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function moveNotice(i, dir) {
+            const j = i + dir;
+            if (j < 0 || j >= ADMIN_NOTICES.length) return;
+            [ADMIN_NOTICES[i], ADMIN_NOTICES[j]] = [ADMIN_NOTICES[j], ADMIN_NOTICES[i]];
+            renderNoticesAdmin();
+            const ids = ADMIN_NOTICES.map(n => n.id).filter(Boolean);
+            if (ids.length) portalFetch('reorder_notices', { ids }).catch(() => {});
         }
 
         // Turn a show_if.value into a display string for the editor

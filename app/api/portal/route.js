@@ -124,6 +124,45 @@ export async function POST(req) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }); }
   const { action, payload = {} } = body;
 
+  // ── Login-page notices (public, no auth) ────────────────────────────────────
+  if (action === 'get_notices') {
+    const rows = await sb('portal_notices?is_enabled=eq.true&order=sort_order.asc,id.asc');
+    return NextResponse.json((rows && !rows.error) ? rows : []);
+  }
+
+  // ── Admin: full notice list, CRUD & reorder ─────────────────────────────────
+  if (action === 'get_notices_admin') {
+    const rows = await sb('portal_notices?order=sort_order.asc,id.asc');
+    return NextResponse.json((rows && !rows.error) ? rows : []);
+  }
+
+  if (action === 'save_notice') {
+    const { id, title, subtitle, body: noticeBody, is_enabled } = payload;
+    const rowData = { title: title || '', subtitle: subtitle || '', body: noticeBody || '', is_enabled: is_enabled !== false, updated_at: new Date().toISOString() };
+    if (id) {
+      await sb(`portal_notices?id=eq.${encodeURIComponent(id)}`, 'PATCH', rowData);
+      return NextResponse.json({ result: 'success', id });
+    }
+    const existing = await sb('portal_notices?select=sort_order&order=sort_order.desc&limit=1');
+    const nextOrder = (existing && !existing.error && existing.length) ? existing[0].sort_order + 1 : 0;
+    const created = await sb('portal_notices', 'POST', { ...rowData, sort_order: nextOrder });
+    return NextResponse.json({ result: 'success', id: (created && !created.error && created[0]) ? created[0].id : null });
+  }
+
+  if (action === 'delete_notice') {
+    const { id } = payload;
+    if (!id) return NextResponse.json({ result: 'error', message: 'id required.' });
+    await sb(`portal_notices?id=eq.${encodeURIComponent(id)}`, 'DELETE');
+    return NextResponse.json({ result: 'success' });
+  }
+
+  if (action === 'reorder_notices') {
+    const { ids } = payload;
+    if (!Array.isArray(ids)) return NextResponse.json({ result: 'error', message: 'ids array required.' });
+    await Promise.all(ids.map((id, i) => sb(`portal_notices?id=eq.${encodeURIComponent(id)}`, 'PATCH', { sort_order: i })));
+    return NextResponse.json({ result: 'success' });
+  }
+
   // ── Login ─────────────────────────────────────────────────────────────────
   if (action === 'login') {
     const { student_id, phone_number } = payload;
