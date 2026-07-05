@@ -969,7 +969,13 @@
                                         </div>
                                         <p class="small text-muted mb-3" style="font-size:0.72rem">For each database column, pick the matching column from your file. Leave as "— Skip —" to leave it blank. <strong>Student ID</strong> is required.</p>
                                         <div id="import-mapping-list" class="d-flex flex-column gap-2"></div>
-                                        <button onclick="previewBulkImport()" class="btn btn-dark rounded-pill px-4 fw-800 mt-3"><i class="bi bi-search me-1"></i>Preview Import</button>
+                                        <div class="form-check mt-4 mb-2">
+                                            <input class="form-check-input" type="checkbox" id="import-update-existing">
+                                            <label class="form-check-label fw-700 small" for="import-update-existing">
+                                                Also update students whose Student ID already exists (fills in the mapped columns for them instead of skipping)
+                                            </label>
+                                        </div>
+                                        <button onclick="previewBulkImport()" class="btn btn-dark rounded-pill px-4 fw-800 mt-2"><i class="bi bi-search me-1"></i>Preview Import</button>
                                     </div>
 
                                     <!-- Step 3: Preview & confirm -->
@@ -3069,17 +3075,23 @@
                     return;
                 }
                 const noIdCount = rows.length - ids.length;
+                const updateExisting = document.getElementById('import-update-existing').checked;
                 const summary = document.getElementById('import-preview-summary');
+                const existingLabel = updateExisting ? 'Already Exists (will update)' : 'Already Exists (skip)';
+                const existingColor = updateExisting ? 'text-primary' : 'text-warning';
                 summary.innerHTML = `
                     <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">Total Rows</div><div class="fs-4 fw-800">${rows.length}</div></div></div>
                     <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">New (will import)</div><div class="fs-4 fw-800 text-success">${res.newCount}</div></div></div>
-                    <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">Already Exists (skip)</div><div class="fs-4 fw-800 text-warning">${res.existingCount}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">${existingLabel}</div><div class="fs-4 fw-800 ${existingColor}">${res.existingCount}</div></div></div>
                     <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">Missing Student ID</div><div class="fs-4 fw-800 text-danger">${noIdCount}</div></div></div>`;
                 const confirmBtn = document.getElementById('import-confirm-btn');
-                confirmBtn.disabled = res.newCount === 0;
-                confirmBtn.innerHTML = res.newCount === 0
-                    ? 'Nothing new to import'
-                    : `<i class="bi bi-cloud-arrow-up-fill me-1"></i>Import ${res.newCount} New Student${res.newCount===1?'':'s'}`;
+                const totalAction = res.newCount + (updateExisting ? res.existingCount : 0);
+                confirmBtn.disabled = totalAction === 0;
+                confirmBtn.innerHTML = totalAction === 0
+                    ? 'Nothing to import'
+                    : updateExisting
+                        ? `<i class="bi bi-cloud-arrow-up-fill me-1"></i>Import ${res.newCount} New + Update ${res.existingCount} Existing`
+                        : `<i class="bi bi-cloud-arrow-up-fill me-1"></i>Import ${res.newCount} New Student${res.newCount===1?'':'s'}`;
                 document.getElementById('import-preview-section').classList.remove('hidden');
                 document.getElementById('import-result-section').classList.add('hidden');
             }).catch(() => {
@@ -3090,10 +3102,14 @@
 
         function confirmBulkImport() {
             const rows = buildMappedImportRows();
+            const updateExisting = document.getElementById('import-update-existing').checked;
             const btn = document.getElementById('import-confirm-btn');
-            if (!confirm(`Import new students now? Existing Student IDs will be left untouched.`)) return;
+            const confirmMsg = updateExisting
+                ? 'Import new students AND update existing students with the mapped columns from this file?'
+                : 'Import new students now? Existing Student IDs will be left untouched.';
+            if (!confirm(confirmMsg)) return;
             if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importing…'; }
-            portalFetch('bulk_import_new_students', { rows }).then(res => {
+            portalFetch('bulk_import_new_students', { rows, update_existing: updateExisting }).then(res => {
                 const resultSection = document.getElementById('import-result-section');
                 if (!res || (res.result !== 'success' && res.result !== 'partial')) {
                     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill me-1"></i>Retry Import'; }
@@ -3104,14 +3120,15 @@
                     <h6 class="fw-800 mb-3"><i class="bi bi-check-circle-fill text-success me-2"></i>Import Complete</h6>
                     <ul class="mb-0 small">
                         <li><strong>${res.inserted}</strong> new student(s) added</li>
-                        <li><strong>${res.skipped_existing}</strong> skipped — Student ID already exists</li>
+                        ${updateExisting ? `<li><strong>${res.updated}</strong> existing student(s) updated</li>` : `<li><strong>${res.skipped_existing}</strong> skipped — Student ID already exists</li>`}
                         <li><strong>${res.skipped_missing_id}</strong> skipped — missing Student ID</li>
                         <li><strong>${res.skipped_duplicate_in_file}</strong> skipped — duplicate Student ID within the file</li>
                     </ul>
                     ${res.errors && res.errors.length ? `<div class="alert alert-warning mt-3 small mb-0">Some batches failed: ${res.errors.join('; ')}</div>` : ''}`;
                 resultSection.classList.remove('hidden');
                 if (btn) { btn.disabled = true; btn.innerHTML = 'Done'; }
-                if (typeof showToast === 'function') showToast(`Imported ${res.inserted} new student(s)`, 'success');
+                const msg = updateExisting ? `Imported ${res.inserted} new, updated ${res.updated} existing` : `Imported ${res.inserted} new student(s)`;
+                if (typeof showToast === 'function') showToast(msg, 'success');
             }).catch(() => {
                 if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill me-1"></i>Retry Import'; }
                 if (typeof showToast === 'function') showToast('Network error during import', 'error');

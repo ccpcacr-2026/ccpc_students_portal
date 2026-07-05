@@ -350,6 +350,7 @@ export async function POST(req) {
   // ── Bulk import: insert only students whose student_id is not already present ──
   if (action === 'bulk_import_new_students') {
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
+    const updateExisting = !!payload.update_existing;
     if (rows.length === 0) return NextResponse.json({ result: 'error', message: 'No rows to import.' });
 
     // Only real, existing columns may be written — never trust client-sent keys directly
@@ -374,7 +375,7 @@ export async function POST(req) {
       clean.push(cleanRow);
     }
 
-    // Find which of these student_ids already exist — never overwrite existing students
+    // Find which of these student_ids already exist
     const ids = clean.map(r => r.student_id);
     const existing = new Set();
     for (let i = 0; i < ids.length; i += 200) {
@@ -383,6 +384,7 @@ export async function POST(req) {
       if (!existRows?.error) existRows.forEach(r => existing.add(String(r.student_id)));
     }
     const toInsert = clean.filter(r => !existing.has(r.student_id));
+    const toUpdate = updateExisting ? clean.filter(r => existing.has(r.student_id)) : [];
 
     let inserted = 0;
     const insertErrors = [];
@@ -393,13 +395,28 @@ export async function POST(req) {
       else inserted += chunk.length;
     }
 
+    // Existing students: PATCH each by student_id, only with the mapped fields for that row
+    // (never blanks out columns the file didn't provide). Run with limited concurrency.
+    let updated = 0;
+    const updateErrors = [];
+    for (let i = 0; i < toUpdate.length; i += 20) {
+      const chunk = toUpdate.slice(i, i + 20);
+      const results = await Promise.all(chunk.map(row => {
+        const { student_id, ...fields } = row;
+        if (Object.keys(fields).length === 0) return Promise.resolve({ skipped: true });
+        return sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', fields);
+      }));
+      results.forEach(r => { if (r?.error) updateErrors.push(r.error); else if (!r?.skipped) updated++; });
+    }
+
     return NextResponse.json({
-      result: insertErrors.length ? 'partial' : 'success',
+      result: (insertErrors.length || updateErrors.length) ? 'partial' : 'success',
       inserted,
-      skipped_existing: existing.size,
+      updated,
+      skipped_existing: updateExisting ? 0 : existing.size,
       skipped_missing_id: skippedMissingId,
       skipped_duplicate_in_file: skippedDuplicateInFile,
-      errors: insertErrors,
+      errors: [...insertErrors, ...updateErrors],
     });
   }
 
