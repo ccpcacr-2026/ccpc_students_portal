@@ -823,7 +823,8 @@
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-reports" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Data</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-nfc" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">NFC</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-tracking" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Bus</button>
-                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-notices" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Notices</button>
+                                <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-notices" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Notices</button>
+                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-import" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Import</button>
                             </div>
                         </div>
                         <div class="p-4 bg-white">
@@ -946,6 +947,40 @@
                                         <button onclick="addNoticeRow()" class="btn btn-primary rounded-pill px-4 fw-800 flex-shrink-0"><i class="bi bi-plus-lg me-1"></i>Add Notice</button>
                                     </div>
                                     <div id="notices-admin-list" class="d-flex flex-column gap-4"></div>
+                                </div>
+                                <div class="tab-pane" id="admin-import">
+                                    <h5 class="fw-800 mb-1"><i class="bi bi-file-earmark-spreadsheet-fill me-2" style="color:var(--primary)"></i>Bulk Import Students</h5>
+                                    <p class="small text-muted mb-4" style="font-size:0.72rem">Upload an Excel/CSV file, match its columns to the student database, and add only the students whose Student ID doesn't already exist. Existing students are never modified.</p>
+
+                                    <!-- Step 1: File upload -->
+                                    <div class="p-4 rounded-4 border shadow-sm mb-4" style="background:#fff">
+                                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                                            <span class="fw-800 small text-uppercase text-muted" style="letter-spacing:0.06em">Step 1 &middot; Choose File</span>
+                                            <input type="file" id="import-file-input" class="form-control" style="max-width:360px" accept=".xlsx,.xls,.csv">
+                                            <span id="import-file-status" class="small text-muted"></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Step 2: Column mapping -->
+                                    <div id="import-mapping-section" class="p-4 rounded-4 border shadow-sm mb-4 hidden" style="background:#fff">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <span class="fw-800 small text-uppercase text-muted" style="letter-spacing:0.06em">Step 2 &middot; Match Columns</span>
+                                            <span class="small text-muted" id="import-row-count"></span>
+                                        </div>
+                                        <p class="small text-muted mb-3" style="font-size:0.72rem">For each database column, pick the matching column from your file. Leave as "— Skip —" to leave it blank. <strong>Student ID</strong> is required.</p>
+                                        <div id="import-mapping-list" class="d-flex flex-column gap-2"></div>
+                                        <button onclick="previewBulkImport()" class="btn btn-dark rounded-pill px-4 fw-800 mt-3"><i class="bi bi-search me-1"></i>Preview Import</button>
+                                    </div>
+
+                                    <!-- Step 3: Preview & confirm -->
+                                    <div id="import-preview-section" class="p-4 rounded-4 border shadow-sm mb-4 hidden" style="background:#fff">
+                                        <span class="fw-800 small text-uppercase text-muted" style="letter-spacing:0.06em">Step 3 &middot; Review &amp; Import</span>
+                                        <div id="import-preview-summary" class="row g-3 my-3"></div>
+                                        <button onclick="confirmBulkImport()" id="import-confirm-btn" class="btn btn-primary rounded-pill px-4 fw-800"><i class="bi bi-cloud-arrow-up-fill me-1"></i>Import New Students</button>
+                                    </div>
+
+                                    <!-- Step 4: Result -->
+                                    <div id="import-result-section" class="p-4 rounded-4 border shadow-sm hidden" style="background:#fff"></div>
                                 </div>
                             </div>
                         </div>
@@ -1649,6 +1684,7 @@
                 loadEditableProfileFields();
                 loadTrackingConfig();
                 loadNoticesAdmin();
+                initBulkImport();
             } catch(e) {
                 console.error("showAdminPanel error", e);
                 alert("Error loading Admin Panel.");
@@ -2913,6 +2949,175 @@
             if (ids.length) portalFetch('reorder_notices', { ids }).catch(() => {});
         }
 
+        // ── Admin: Bulk Import Students from Excel/CSV ──────────────────────────────
+        const IMPORT_LABELS = {
+            student_id: 'Student ID', student_name: 'Student Name', class: 'Class', section: 'Section',
+            roll: 'Roll', gender: 'Gender', version: 'Version', shift: 'Shift', phone_number: 'Student Phone',
+            father_phone: "Father's Phone", mother_phone: "Mother's Phone", nfc_uid: 'NFC UID',
+            fathers_name: "Father's Name", mothers_name: "Mother's Name", nick_name: 'Nick Name',
+            house: 'House', blood: 'Blood Group', balance: 'Wallet Balance', daily_limit: 'Daily Limit',
+            monthly_limit: 'Monthly Limit', card_status: 'Card Status', photo: 'Photo URL', session: 'Session',
+        };
+        let IMPORT_DB_COLUMNS = [];
+        let IMPORT_EXCEL_HEADERS = [];
+        let IMPORT_EXCEL_ROWS = [];   // array of arrays (raw sheet rows, header row excluded)
+
+        function initBulkImport() {
+            portalFetch('get_student_data_headers', {}).then(cols => {
+                IMPORT_DB_COLUMNS = (Array.isArray(cols) ? cols : []).filter(c => c !== 'id');
+            }).catch(() => {});
+            const input = document.getElementById('import-file-input');
+            if (input && !input.dataset.wired) {
+                input.dataset.wired = '1';
+                input.addEventListener('change', handleImportFile);
+            }
+        }
+
+        function normImportKey(s) { return String(s || '').toLowerCase().replace(/[\s_-]/g, ''); }
+
+        function handleImportFile(e) {
+            const file = e.target.files[0];
+            const status = document.getElementById('import-file-status');
+            ['import-mapping-section', 'import-preview-section', 'import-result-section'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            if (!file) return;
+            if (status) status.textContent = 'Reading file…';
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const wb = XLSX.read(evt.target.result, { type: 'array' });
+                    const sheet = wb.Sheets[wb.SheetNames[0]];
+                    const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+                    if (!grid.length) { if (status) status.textContent = 'File appears to be empty.'; return; }
+                    IMPORT_EXCEL_HEADERS = grid[0].map(h => String(h || '').trim());
+                    IMPORT_EXCEL_ROWS = grid.slice(1).filter(r => r.some(c => String(c || '').trim() !== ''));
+                    if (status) status.textContent = `${file.name} — ${IMPORT_EXCEL_ROWS.length} rows, ${IMPORT_EXCEL_HEADERS.length} columns.`;
+                    renderImportMapping();
+                } catch (err) {
+                    if (status) status.textContent = 'Could not read this file: ' + err.message;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function renderImportMapping() {
+            const section = document.getElementById('import-mapping-section');
+            const list = document.getElementById('import-mapping-list');
+            const rowCount = document.getElementById('import-row-count');
+            if (!section || !list) return;
+            rowCount.textContent = `${IMPORT_EXCEL_ROWS.length} rows detected`;
+
+            list.innerHTML = IMPORT_DB_COLUMNS.map(col => {
+                const label = IMPORT_LABELS[col] || col.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+                // Auto-suggest: pick the excel header whose normalised form matches the column name
+                const guessIdx = IMPORT_EXCEL_HEADERS.findIndex(h => normImportKey(h) === normImportKey(col) || normImportKey(h) === normImportKey(label));
+                const required = col === 'student_id';
+                const options = ['<option value="-1">— Skip —</option>']
+                    .concat(IMPORT_EXCEL_HEADERS.map((h, i) => `<option value="${i}" ${i===guessIdx?'selected':''}>${h || '(blank header)'}</option>`));
+                const sample = guessIdx >= 0 && IMPORT_EXCEL_ROWS[0] ? String(IMPORT_EXCEL_ROWS[0][guessIdx] ?? '') : '';
+                return `
+                    <div class="row g-2 align-items-center py-1 import-map-row" data-col="${col}">
+                        <div class="col-md-3"><span class="fw-700 small">${label}${required ? ' <span class="text-danger">*</span>' : ''}</span></div>
+                        <div class="col-md-5"><select class="form-select form-select-sm import-map-select" onchange="updateImportSample(this)">${options.join('')}</select></div>
+                        <div class="col-md-4"><span class="small text-muted fst-italic import-map-sample">${sample ? 'e.g. ' + sample : ''}</span></div>
+                    </div>`;
+            }).join('');
+            section.classList.remove('hidden');
+            document.getElementById('import-preview-section').classList.add('hidden');
+            document.getElementById('import-result-section').classList.add('hidden');
+        }
+
+        function updateImportSample(sel) {
+            const idx = parseInt(sel.value, 10);
+            const sampleEl = sel.closest('.import-map-row').querySelector('.import-map-sample');
+            const sample = idx >= 0 && IMPORT_EXCEL_ROWS[0] ? String(IMPORT_EXCEL_ROWS[0][idx] ?? '') : '';
+            sampleEl.textContent = sample ? 'e.g. ' + sample : '';
+        }
+
+        // Read the current mapping selections → { dbColumn: excelColumnIndex }
+        function getImportMapping() {
+            const mapping = {};
+            document.querySelectorAll('.import-map-row').forEach(row => {
+                const col = row.dataset.col;
+                const idx = parseInt(row.querySelector('.import-map-select').value, 10);
+                if (idx >= 0) mapping[col] = idx;
+            });
+            return mapping;
+        }
+
+        // Apply the mapping to every raw excel row → array of {dbColumn: value}
+        function buildMappedImportRows() {
+            const mapping = getImportMapping();
+            return IMPORT_EXCEL_ROWS.map(r => {
+                const obj = {};
+                Object.entries(mapping).forEach(([col, idx]) => { obj[col] = String(r[idx] ?? '').trim(); });
+                return obj;
+            });
+        }
+
+        function previewBulkImport() {
+            const mapping = getImportMapping();
+            if (!('student_id' in mapping)) { if (typeof showToast === 'function') showToast('Map a column to Student ID first', 'error'); else alert('Map a column to Student ID first'); return; }
+            const rows = buildMappedImportRows();
+            const ids = rows.map(r => r.student_id).filter(Boolean);
+            const btn = document.querySelector('[onclick="previewBulkImport()"]');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Checking…'; }
+            portalFetch('preview_bulk_import', { student_ids: ids }).then(res => {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search me-1"></i>Preview Import'; }
+                if (!res || res.result !== 'success') {
+                    if (typeof showToast === 'function') showToast((res && res.message) || 'Preview failed', 'error');
+                    return;
+                }
+                const noIdCount = rows.length - ids.length;
+                const summary = document.getElementById('import-preview-summary');
+                summary.innerHTML = `
+                    <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">Total Rows</div><div class="fs-4 fw-800">${rows.length}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">New (will import)</div><div class="fs-4 fw-800 text-success">${res.newCount}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">Already Exists (skip)</div><div class="fs-4 fw-800 text-warning">${res.existingCount}</div></div></div>
+                    <div class="col-6 col-md-3"><div class="wallet-stat-card" style="border:1px solid var(--border);border-radius:14px;padding:14px"><div class="small fw-800 text-muted text-uppercase" style="font-size:0.6rem">Missing Student ID</div><div class="fs-4 fw-800 text-danger">${noIdCount}</div></div></div>`;
+                const confirmBtn = document.getElementById('import-confirm-btn');
+                confirmBtn.disabled = res.newCount === 0;
+                confirmBtn.innerHTML = res.newCount === 0
+                    ? 'Nothing new to import'
+                    : `<i class="bi bi-cloud-arrow-up-fill me-1"></i>Import ${res.newCount} New Student${res.newCount===1?'':'s'}`;
+                document.getElementById('import-preview-section').classList.remove('hidden');
+                document.getElementById('import-result-section').classList.add('hidden');
+            }).catch(() => {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search me-1"></i>Preview Import'; }
+                if (typeof showToast === 'function') showToast('Network error during preview', 'error');
+            });
+        }
+
+        function confirmBulkImport() {
+            const rows = buildMappedImportRows();
+            const btn = document.getElementById('import-confirm-btn');
+            if (!confirm(`Import new students now? Existing Student IDs will be left untouched.`)) return;
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importing…'; }
+            portalFetch('bulk_import_new_students', { rows }).then(res => {
+                const resultSection = document.getElementById('import-result-section');
+                if (!res || (res.result !== 'success' && res.result !== 'partial')) {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill me-1"></i>Retry Import'; }
+                    if (typeof showToast === 'function') showToast((res && res.message) || 'Import failed', 'error');
+                    return;
+                }
+                resultSection.innerHTML = `
+                    <h6 class="fw-800 mb-3"><i class="bi bi-check-circle-fill text-success me-2"></i>Import Complete</h6>
+                    <ul class="mb-0 small">
+                        <li><strong>${res.inserted}</strong> new student(s) added</li>
+                        <li><strong>${res.skipped_existing}</strong> skipped — Student ID already exists</li>
+                        <li><strong>${res.skipped_missing_id}</strong> skipped — missing Student ID</li>
+                        <li><strong>${res.skipped_duplicate_in_file}</strong> skipped — duplicate Student ID within the file</li>
+                    </ul>
+                    ${res.errors && res.errors.length ? `<div class="alert alert-warning mt-3 small mb-0">Some batches failed: ${res.errors.join('; ')}</div>` : ''}`;
+                resultSection.classList.remove('hidden');
+                if (btn) { btn.disabled = true; btn.innerHTML = 'Done'; }
+                if (typeof showToast === 'function') showToast(`Imported ${res.inserted} new student(s)`, 'success');
+            }).catch(() => {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill me-1"></i>Retry Import'; }
+                if (typeof showToast === 'function') showToast('Network error during import', 'error');
+            });
+        }
+
         // Turn a show_if.value into a display string for the editor
         function _showIfValStr(v) { return Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v)); }
 
@@ -3294,6 +3499,7 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="/js/bus-tracking.js"></script>
     <script src="/js/attendance-dashboard.js"></script>
 </body>

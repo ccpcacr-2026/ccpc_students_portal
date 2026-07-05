@@ -329,6 +329,80 @@ export async function POST(req) {
     return NextResponse.json(['student_id', 'student_name', 'class', 'section', 'roll']);
   }
 
+  // ── Bulk import: check which student_ids already exist (no writes) ─────────
+  if (action === 'preview_bulk_import') {
+    const ids = Array.isArray(payload.student_ids) ? [...new Set(payload.student_ids.map(String).filter(Boolean))] : [];
+    if (ids.length === 0) return NextResponse.json({ result: 'error', message: 'No Student IDs found in the mapped file.' });
+    const existing = new Set();
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const rows = await sb(`students_data?student_id=in.(${chunk.map(encodeURIComponent).join(',')})&select=student_id`);
+      if (!rows?.error) rows.forEach(r => existing.add(String(r.student_id)));
+    }
+    return NextResponse.json({
+      result: 'success',
+      totalCount: ids.length,
+      existingCount: existing.size,
+      newCount: ids.length - existing.size,
+    });
+  }
+
+  // ── Bulk import: insert only students whose student_id is not already present ──
+  if (action === 'bulk_import_new_students') {
+    const rows = Array.isArray(payload.rows) ? payload.rows : [];
+    if (rows.length === 0) return NextResponse.json({ result: 'error', message: 'No rows to import.' });
+
+    // Only real, existing columns may be written — never trust client-sent keys directly
+    const schemaRows = await sb('students_data?limit=1');
+    if (schemaRows?.error || !schemaRows.length) return NextResponse.json({ result: 'error', message: 'Could not read student schema.' });
+    const allowedCols = new Set(Object.keys(schemaRows[0]).filter(c => c !== 'id'));
+
+    let skippedMissingId = 0;
+    const seenInFile = new Set();
+    let skippedDuplicateInFile = 0;
+    const clean = [];
+    for (const row of rows) {
+      const sid = String(row.student_id || '').trim();
+      if (!sid) { skippedMissingId++; continue; }
+      if (seenInFile.has(sid)) { skippedDuplicateInFile++; continue; }
+      seenInFile.add(sid);
+      const cleanRow = {};
+      for (const [k, v] of Object.entries(row)) {
+        if (allowedCols.has(k) && v !== '' && v !== null && v !== undefined) cleanRow[k] = v;
+      }
+      cleanRow.student_id = sid;
+      clean.push(cleanRow);
+    }
+
+    // Find which of these student_ids already exist — never overwrite existing students
+    const ids = clean.map(r => r.student_id);
+    const existing = new Set();
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const existRows = await sb(`students_data?student_id=in.(${chunk.map(encodeURIComponent).join(',')})&select=student_id`);
+      if (!existRows?.error) existRows.forEach(r => existing.add(String(r.student_id)));
+    }
+    const toInsert = clean.filter(r => !existing.has(r.student_id));
+
+    let inserted = 0;
+    const insertErrors = [];
+    for (let i = 0; i < toInsert.length; i += 200) {
+      const chunk = toInsert.slice(i, i + 200);
+      const res = await sb('students_data', 'POST', chunk);
+      if (res?.error) insertErrors.push(res.error);
+      else inserted += chunk.length;
+    }
+
+    return NextResponse.json({
+      result: insertErrors.length ? 'partial' : 'success',
+      inserted,
+      skipped_existing: existing.size,
+      skipped_missing_id: skippedMissingId,
+      skipped_duplicate_in_file: skippedDuplicateInFile,
+      errors: insertErrors,
+    });
+  }
+
   // ── Get list of profile fields the admin marked student-editable ───────────
   if (action === 'get_editable_fields') {
     const setRows = await sb('portal_settings?key=eq.editable_profile_fields');
