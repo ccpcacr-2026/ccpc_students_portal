@@ -340,7 +340,8 @@ export async function POST(req) {
   // ── Admin saves which profile fields students may edit ─────────────────────
   if (action === 'save_editable_fields') {
     const fields = Array.isArray(payload.fields) ? payload.fields : [];
-    await psSave('editable_profile_fields', JSON.stringify(fields));
+    const r = await psSave('editable_profile_fields', JSON.stringify(fields));
+    if (!r.ok) return NextResponse.json({ result: 'error', message: r.message });
     return NextResponse.json({ result: 'success' });
   }
 
@@ -408,7 +409,8 @@ export async function POST(req) {
     const title = tab_name.charAt(0).toUpperCase() + tab_name.slice(1).replace(/_/g, ' ');
     sections = (Array.isArray(sections) ? sections : []).filter(s => s.tab_name !== tab_name);
     sections.push({ tab_name, title, fields: fieldMeta });
-    await psSave('profile_sections', JSON.stringify(sections));
+    const secSave = await psSave('profile_sections', JSON.stringify(sections));
+    if (!secSave.ok) return NextResponse.json({ result: 'error', message: 'Columns added but profile section save failed: ' + secSave.message });
 
     return NextResponse.json({ result: 'success', added: cols.length, columns: cols });
   }
@@ -421,26 +423,29 @@ export async function POST(req) {
     let sections = [];
     try { sections = JSON.parse((secRows && !secRows.error && secRows[0]?.value) || '[]'); } catch (_) {}
     sections = (Array.isArray(sections) ? sections : []).filter(s => s.tab_name !== tab_name);
-    await psSave('profile_sections', JSON.stringify(sections));
+    const r = await psSave('profile_sections', JSON.stringify(sections));
+    if (!r.ok) return NextResponse.json({ result: 'error', message: r.message });
     return NextResponse.json({ result: 'success' });
   }
 
   // ── Save Tab Config ───────────────────────────────────────────────────────
   if (action === 'save_tab') {
     const { tab_name, fields_json, is_enabled, condition_json, icon_class, default_editable, include_fields_json } = payload;
+    if (!tab_name) return NextResponse.json({ result: 'error', message: 'Tab name required.' });
     const existing = await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(tab_name)}`);
+    if (existing?.error) return NextResponse.json({ result: 'error', message: 'Could not look up existing tab: ' + existing.error });
     const rowData = { tab_name, fields_json, is_enabled, condition_json, icon_class, default_editable, include_fields_json };
-    if (!existing?.error && existing.length) {
-      await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(tab_name)}`, 'PATCH', rowData);
-    } else {
-      await sb('portal_tabs', 'POST', { ...rowData, sort_order: 0 });
-    }
+    const writeRes = existing.length
+      ? await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(tab_name)}`, 'PATCH', rowData)
+      : await sb('portal_tabs', 'POST', { ...rowData, sort_order: 0 });
+    if (writeRes?.error) return NextResponse.json({ result: 'error', message: 'Save failed: ' + writeRes.error });
     return NextResponse.json({ result: 'success' });
   }
 
   // ── Delete Tab ────────────────────────────────────────────────────────────
   if (action === 'delete_tab') {
-    await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(payload.tab_name)}`, 'DELETE');
+    const r = await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(payload.tab_name)}`, 'DELETE');
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
     return NextResponse.json({ result: 'success' });
   }
 
@@ -461,14 +466,16 @@ export async function POST(req) {
   // ── Save Bus Registry ─────────────────────────────────────────────────────
   if (action === 'save_bus_registry') {
     const value = (payload.rows || []).map(r => ({ name: r[0], imei: r[1] }));
-    await psSave('bus_registry', value);
+    const r = await psSave('bus_registry', value);
+    if (!r.ok) return NextResponse.json({ result: 'error', message: r.message });
     return NextResponse.json({ result: 'success' });
   }
 
   // ── Save Place Registry ───────────────────────────────────────────────────
   if (action === 'save_place_registry') {
     const value = (payload.rows || []).map(r => ({ name: r[0], coords: r[1], radius: r[2] }));
-    await psSave('place_registry', value);
+    const r = await psSave('place_registry', value);
+    if (!r.ok) return NextResponse.json({ result: 'error', message: r.message });
     return NextResponse.json({ result: 'success' });
   }
 
@@ -480,7 +487,8 @@ export async function POST(req) {
     const pass = (password === '********' || !password) ? prevPass : password;
     const api_key = apiKey || (username && pass ? btoa(`${username}:${pass}`) : '');
     const value = { username, password: pass, channel: channel || 'ALOEXT', environment: environment || 'production', api_key };
-    await psSave('gp_credentials', value);
+    const r = await psSave('gp_credentials', value);
+    if (!r.ok) return NextResponse.json({ result: 'error', message: r.message });
     return NextResponse.json({ result: 'success', message: `Credentials updated. Environment: ${(environment || 'production').toUpperCase()}` });
   }
 
@@ -823,11 +831,14 @@ export async function POST(req) {
   return NextResponse.json({ result: 'error', message: 'Unknown action' }, { status: 400 });
 }
 
+// Returns { ok: true } or { ok: false, message } — callers must check this;
+// a write can fail (constraint violation, transient error) without sb() throwing.
 async function psSave(key, value) {
   const existing = await sb(`portal_settings?key=eq.${encodeURIComponent(key)}`);
-  if (!existing?.error && existing.length) {
-    await sb(`portal_settings?key=eq.${encodeURIComponent(key)}`, 'PATCH', { value, updated_at: new Date().toISOString() });
-  } else {
-    await sb('portal_settings', 'POST', { key, value, updated_at: new Date().toISOString() });
-  }
+  if (existing?.error) return { ok: false, message: 'Lookup failed: ' + existing.error };
+  const res = existing.length
+    ? await sb(`portal_settings?key=eq.${encodeURIComponent(key)}`, 'PATCH', { value, updated_at: new Date().toISOString() })
+    : await sb('portal_settings', 'POST', { key, value, updated_at: new Date().toISOString() });
+  if (res?.error) return { ok: false, message: 'Write failed: ' + res.error };
+  return { ok: true };
 }

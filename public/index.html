@@ -2990,11 +2990,13 @@
                     ${showIfBlockHtml(data)}`;
             }
             container.appendChild(row);
-            // Populate the two controller dropdowns and pre-select stored values
+            // Populate this row's own two controller dropdowns and pre-select stored values.
+            // (Do NOT cascade a full refresh of every other row here — for a large tab like
+            // Guardian (60+ fields) that turns an O(N) load into O(N^3) and freezes the tab.
+            // editTab() does one single refreshAllShowIfControllers() after the whole batch.)
             const cond = parseShowIfForEditor(data?.show_if);
             populateShowIfSelect(row.querySelector('.showif-field'), cond[0].field);
             populateShowIfSelect(row.querySelector('.showif-field2'), cond[1].field);
-            refreshAllShowIfControllers();
         }
 
         // All selectable controller fields currently in the builder (data_key → label)
@@ -3014,10 +3016,12 @@
             return out;
         }
 
-        function populateShowIfSelect(sel, selectedKey) {
+        // `keys`, when passed, skips recomputation — used by refreshAllShowIfControllers()
+        // to compute the field list once for the whole batch instead of once per <select>.
+        function populateShowIfSelect(sel, selectedKey, keys) {
             if (!sel) return;
             const isSecond = sel.classList.contains('showif-field2');
-            const keys = getBuilderFieldKeys();
+            keys = keys || getBuilderFieldKeys();
             sel.innerHTML = `<option value="">${isSecond ? '(none)' : '(always visible)'}</option>` +
                 keys.map(k => `<option value="${k.key}" ${k.key===selectedKey?'selected':''}>${k.label}</option>`).join('');
             if (selectedKey && !keys.some(k => k.key === selectedKey)) {
@@ -3027,8 +3031,9 @@
         }
 
         function refreshAllShowIfControllers() {
+            const keys = getBuilderFieldKeys();
             document.querySelectorAll('#fields-list .showif-field, #fields-list .showif-field2').forEach(sel => {
-                populateShowIfSelect(sel, sel.value);
+                populateShowIfSelect(sel, sel.value, keys);
             });
         }
 
@@ -3103,7 +3108,26 @@
             });
             const includeFields = Array.from(document.querySelectorAll('#include-fields-list input[type="checkbox"]:checked')).map(c => c.value);
             const cfg = { tab_name:name, fields_json:JSON.stringify(fields), is_enabled:true, icon_class:icon, default_editable:edit?"YES":"NO", condition_json:JSON.stringify({ logic:'AND', rules:rs }), include_fields_json:JSON.stringify(includeFields) };
-            portalFetch('save_tab', cfg).then(() => { alert("Setup Saved!"); window.location.reload(); });
+
+            const btn = document.querySelector('[onclick="saveNewTab()"]');
+            const btnHtml = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving…'; }
+            const restore = () => { if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; } };
+
+            portalFetch('save_tab', cfg).then(res => {
+                if (res && res.result === 'success') {
+                    if (typeof showToast === 'function') showToast('Setup saved', 'success'); else alert('Setup Saved!');
+                    window.location.reload();
+                } else {
+                    restore();
+                    const msg = (res && res.message) || 'Save failed — please retry.';
+                    if (typeof showToast === 'function') showToast(msg, 'error'); else alert(msg);
+                }
+            }).catch(() => {
+                restore();
+                if (typeof showToast === 'function') showToast('Network error while saving — please retry.', 'error');
+                else alert('Network error while saving — please retry.');
+            });
         }
 
         function editTab(i) {
@@ -3123,8 +3147,21 @@
             window.scrollTo({ top:0, behavior:'smooth' });
         }
 
-        function deleteTabConfig(i) { if(confirm("Confirm deletion?")) portalFetch('delete_tab', { tab_name: allTabs[i].tab_name }).then(() => loadAdminTabs()); }
-        function toggleStatus(i, s) { portalFetch('save_tab', { tab_name: allTabs[i].tab_name, is_enabled: s }); }
+        function deleteTabConfig(i) {
+            if (!confirm("Confirm deletion?")) return;
+            portalFetch('delete_tab', { tab_name: allTabs[i].tab_name }).then(res => {
+                if (res && res.result === 'success') loadAdminTabs();
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Delete failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error while deleting', 'error'); });
+        }
+        function toggleStatus(i, s) {
+            portalFetch('save_tab', { tab_name: allTabs[i].tab_name, is_enabled: s }).then(res => {
+                if (!res || res.result !== 'success') {
+                    if (typeof showToast === 'function') showToast((res && res.message) || 'Could not update status', 'error');
+                    loadAdminTabs(); // revert the switch to the real saved state
+                }
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); loadAdminTabs(); });
+        }
 
         function loadSummaryData() {
             const t = document.getElementById('summary-tab-select').value;
