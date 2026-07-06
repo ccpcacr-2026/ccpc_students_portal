@@ -882,7 +882,7 @@
                                 <div class="tab-pane" id="admin-reports">
                                     <div class="row g-3 mb-4">
                                         <div class="col-md-5"><select id="summary-tab-select" class="form-select" onchange="loadSummaryData()"><option value="">Select Target...</option></select></div>
-                                        <div class="col-md-5"><input type="text" id="summary-search" class="form-control" placeholder="Filter current view..." onkeyup="filterSummaryTable()"></div>
+                                        <div class="col-md-5"><input type="text" id="summary-search" class="form-control" placeholder="Filter current view..." autocomplete="off" onkeyup="filterSummaryTable()"></div>
                                         <div class="col-md-2"><button onclick="exportSummaryData()" class="btn btn-success w-100 fw-800">Export CSV</button></div>
                                     </div>
                                     <div class="table-responsive rounded-4 border"><table class="table table-hover align-middle mb-0" id="summary-table"><thead class="bg-light"><tr id="summary-headers"></tr></thead><tbody id="summary-body"></tbody></table></div>
@@ -1799,7 +1799,7 @@
             // Search bar
             let html = `
                 <div class="mb-3">
-                    <input type="text" id="teacher-search" class="form-control" placeholder="Search by name, department or designation…" oninput="filterTeacherCards(this.value)">
+                    <input type="text" id="teacher-search" class="form-control" placeholder="Search by name, department or designation…" autocomplete="off" oninput="filterTeacherCards(this.value)">
                 </div>
                 <div class="row g-3" id="teacher-cards-grid">`;
 
