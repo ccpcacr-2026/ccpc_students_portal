@@ -242,6 +242,81 @@
         .ccpc-coming-soon-title { font-family: 'Instrument Serif', serif; font-size: 1.6rem; color: var(--p-ink); margin-bottom: 8px; }
         .ccpc-coming-soon-sub { font-size: 0.85rem; color: var(--p-ink-dim); max-width: 360px; margin: 0 auto; line-height: 1.6; }
 
+        /* ── Canteen ordering ─────────────────────────── */
+        .cant-wallet-strip {
+            display: flex; align-items: center; gap: 16px; background: linear-gradient(135deg, var(--p-primary), var(--p-primary-l));
+            color: var(--p-surface); border-radius: 22px; padding: 18px 22px; margin-bottom: 20px; position: relative; overflow: hidden;
+        }
+        .cant-wallet-strip::before { content:''; position:absolute; right:-50px; top:-50px; width:160px; height:160px; border-radius:50%; background:var(--p-accent); opacity:0.20; }
+        .cant-wallet-bal { position: relative; }
+        .cant-wallet-bal .lbl { font-family:'Geist Mono',monospace; font-size:0.6rem; letter-spacing:0.12em; text-transform:uppercase; opacity:0.82; }
+        .cant-wallet-bal .amt { font-family:'Instrument Serif',serif; font-size:2rem; line-height:1; margin-top:2px; }
+        .cant-ring { position: relative; margin-left: auto; width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+        .cant-ring .inner { width: 48px; height: 48px; border-radius: 50%; background: var(--p-primary); display: grid; place-items: center; text-align: center; }
+        .cant-ring .inner b { font-size: 0.85rem; line-height: 1; }
+        .cant-ring .inner span { font-size: 0.5rem; opacity: 0.8; font-family: 'Geist Mono', monospace; }
+        .cant-lowbal { background: var(--p-accent); color: var(--p-accent-ink); border-radius: 999px; padding: 4px 12px; font-size: 0.7rem; font-weight: 800; }
+
+        .cant-section-label { font-family:'Geist Mono',monospace; font-size:0.62rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--p-ink-dim); margin: 22px 0 10px; font-weight: 700; }
+        .cant-fav-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .cant-fav-chip { border:1px solid var(--p-line); background:var(--p-surface); color:var(--p-ink); border-radius:999px; padding:7px 14px; font-size:0.8rem; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px; transition: all .15s; }
+        .cant-fav-chip:hover { border-color: var(--p-primary); color: var(--p-primary-ink); }
+        .cant-fav-chip i { color: var(--p-accent-ink); }
+
+        .cant-menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+        .cant-card { background: var(--p-surface); border: 1px solid var(--p-line); border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; transition: transform .15s, box-shadow .15s; }
+        .cant-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(0,0,0,0.08); }
+        .cant-card-img { height: 96px; background: var(--p-surface-alt) center/cover no-repeat; display:grid; place-items:center; color: var(--p-ink-dim); font-size: 1.8rem; }
+        .cant-card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+        .cant-card-name { font-weight: 800; font-size: 0.9rem; color: var(--p-ink); line-height: 1.2; }
+        .cant-card-price { color: var(--p-primary-ink); font-weight: 800; font-size: 0.85rem; }
+        .cant-card-stock { font-size: 0.66rem; color: var(--p-ink-dim); font-family:'Geist Mono',monospace; }
+        .cant-add-btn { margin-top: auto; border: none; background: var(--p-primary); color: var(--p-surface); border-radius: 12px; padding: 8px; font-weight: 800; font-size: 0.8rem; cursor: pointer; }
+        .cant-qty { display: flex; align-items: center; justify-content: space-between; margin-top: auto; background: var(--p-surface-alt); border-radius: 12px; padding: 4px; }
+        .cant-qty button { width: 30px; height: 30px; border: none; border-radius: 9px; background: var(--p-surface); color: var(--p-ink); font-weight: 900; font-size: 1rem; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+        .cant-qty b { font-weight: 800; font-size: 0.9rem; }
+
+        .cant-cart-bar { position: sticky; bottom: 12px; margin-top: 22px; background: var(--p-ink); color: var(--p-surface); border-radius: 20px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; box-shadow: 0 14px 34px rgba(0,0,0,0.22); }
+        .cant-cart-info .n { font-size: 0.72rem; opacity: 0.75; font-family:'Geist Mono',monospace; }
+        .cant-cart-info .t { font-family:'Instrument Serif',serif; font-size: 1.5rem; line-height: 1; }
+        .cant-deliv { display: flex; gap: 4px; background: rgba(255,255,255,0.12); border-radius: 12px; padding: 4px; }
+        .cant-deliv button { border: none; background: transparent; color: var(--p-surface); border-radius: 9px; padding: 7px 12px; font-size: 0.72rem; font-weight: 800; cursor: pointer; opacity: 0.7; }
+        .cant-deliv button.on { background: var(--p-surface); color: var(--p-ink); opacity: 1; }
+        .cant-place { margin-left: auto; border: none; background: var(--p-accent); color: var(--p-accent-ink); border-radius: 13px; padding: 12px 22px; font-weight: 900; font-size: 0.9rem; cursor: pointer; white-space: nowrap; }
+        .cant-place:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .cant-order-card { background: var(--p-surface); border: 1px solid var(--p-line); border-left: 4px solid var(--p-accent); border-radius: 18px; padding: 16px 18px; margin-bottom: 12px; }
+        .cant-order-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+        .cant-order-inv { font-family:'Geist Mono',monospace; font-size: 0.7rem; color: var(--p-ink-dim); }
+        .cant-order-items { font-size: 0.82rem; color: var(--p-ink); margin: 6px 0 12px; }
+        .cant-timeline { display: flex; align-items: center; gap: 0; }
+        .cant-step { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; }
+        .cant-step .dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--p-surface-alt); color: var(--p-ink-dim); font-size: 0.75rem; }
+        .cant-step.done .dot { background: var(--p-primary); color: var(--p-surface); }
+        .cant-step .cap { font-size: 0.62rem; font-weight: 700; color: var(--p-ink-dim); }
+        .cant-step.done .cap { color: var(--p-primary-ink); }
+        .cant-line { flex: 1; height: 3px; background: var(--p-surface-alt); border-radius: 2px; }
+        .cant-line.done { background: var(--p-primary); }
+        .cant-src-badge { font-size: 0.6rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--p-surface-alt); color: var(--p-ink-dim); font-family:'Geist Mono',monospace; text-transform: uppercase; }
+
+        .cant-hist-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--p-line); }
+        .cant-hist-row .meta { font-size: 0.72rem; color: var(--p-ink-dim); }
+        .cant-pill { font-size: 0.62rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; text-transform: uppercase; }
+        .cant-pill.ok { background: color-mix(in oklch, var(--p-primary) 16%, transparent); color: var(--p-primary-ink); }
+        .cant-pill.pend { background: var(--p-accent); color: var(--p-accent-ink); }
+        .cant-pill.rej { background: #fecaca; color: #991b1b; }
+
+        .cant-modal-back { position: fixed; inset: 0; background: rgba(20,25,20,0.5); display: grid; place-items: center; z-index: 3000; padding: 20px; }
+        .cant-modal { background: var(--p-surface); border-radius: 22px; padding: 26px; width: 100%; max-width: 400px; }
+        .cant-modal h3 { font-family:'Instrument Serif',serif; font-size: 1.5rem; color: var(--p-ink); margin-bottom: 4px; }
+        .cant-modal .sub { font-size: 0.8rem; color: var(--p-ink-dim); margin-bottom: 18px; }
+        .cant-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+        .cant-field label { font-size: 0.68rem; font-weight: 800; color: var(--p-ink-dim); font-family:'Geist Mono',monospace; text-transform: uppercase; letter-spacing: 0.06em; }
+        .cant-field input, .cant-field select { border: 1px solid var(--p-line); border-radius: 12px; padding: 11px 13px; font-size: 0.9rem; background: var(--p-surface); color: var(--p-ink); }
+        .cant-amt-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+        .cant-amt-quick button { border: 1px solid var(--p-line); background: var(--p-surface); border-radius: 999px; padding: 6px 14px; font-weight: 800; font-size: 0.78rem; cursor: pointer; color: var(--p-ink); }
+        .cant-empty { text-align: center; color: var(--p-ink-dim); padding: 30px 10px; font-size: 0.85rem; }
+
         /* ── Layout ──────────────────────────────────── */
         #main-wrapper { display: flex; min-height: 100vh; }
 
@@ -1975,12 +2050,245 @@
                 if (id === 'teachers') {
                     loadTeacherDirectory();
                 }
+                if (id === 'canteen') {
+                    loadCanteen();
+                }
+                if (id === 'wallet') {
+                    loadWalletTopups();
+                }
             }
             
             document.querySelectorAll('.nav-item-btn').forEach(btn => {
                 if (btn.dataset.tabId === id) btn.classList.add('active'); else btn.classList.remove('active');
             });
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        /* ── Canteen ordering (shares wallet + orders with the kiosk) ─────── */
+        const cantState = { foods: [], cart: {}, wallet: null, delivery: 'hand', activeTimer: null };
+
+        function cantSid() { return (loggedInStudent && loggedInStudent.student_id) || null; }
+        function cantEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+        async function loadCanteen() {
+            const sid = cantSid();
+            if (!sid) return;
+            try {
+                const r = await portalFetch('canteen_menu', { student_id: sid });
+                if (r.result !== 'success') { showToast(r.message || 'Could not load the canteen.', 'error'); return; }
+                cantState.foods = r.foods || [];
+                cantState.wallet = r.wallet || null;
+                // drop cart items no longer on the menu
+                const ids = new Set(cantState.foods.map(f => Number(f.id)));
+                Object.keys(cantState.cart).forEach(k => { if (!ids.has(Number(k))) delete cantState.cart[k]; });
+                renderCanteen();
+                loadCanteenActive();
+                loadCanteenHistory();
+                if (cantState.activeTimer) clearInterval(cantState.activeTimer);
+                cantState.activeTimer = setInterval(loadCanteenActive, 20000);
+            } catch (e) { showToast('Network error loading the canteen.', 'error'); }
+        }
+
+        function renderCanteen() {
+            const w = cantState.wallet || {};
+            const bal = Number(w.balance || 0);
+            const spent = Number(w.spent_today || 0), dLim = Number(w.daily_limit || 0);
+            const pct = dLim > 0 ? Math.min(100, Math.round(spent / dLim * 100)) : 0;
+            const ringColor = pct >= 100 ? 'var(--p-accent)' : 'var(--p-surface)';
+            const walletEl = document.getElementById('cant-wallet');
+            if (walletEl) walletEl.innerHTML = `
+                <div class="cant-wallet-strip">
+                    <div class="cant-wallet-bal">
+                        <div class="lbl">Wallet balance</div>
+                        <div class="amt">৳${bal.toLocaleString()}</div>
+                    </div>
+                    ${w.low_balance ? `<span class="cant-lowbal"><i class="bi bi-exclamation-triangle-fill"></i> Low — add funds</span>` : ''}
+                    ${dLim > 0 ? `<div class="cant-ring" style="background:conic-gradient(${ringColor} ${pct*3.6}deg, rgba(255,255,255,0.22) 0deg)">
+                        <div class="inner"><div><b>৳${Math.max(0, dLim - spent).toFixed(0)}</b><br><span>left today</span></div></div>
+                    </div>` : ''}
+                </div>`;
+
+            // Favourites (one-tap reorder)
+            const favs = (w.favourites || []).filter(f => cantState.foods.some(x => Number(x.id) === Number(f.id)));
+            const favWrap = document.getElementById('cant-fav-wrap');
+            if (favWrap) favWrap.innerHTML = favs.length ? `
+                <div class="cant-section-label">Your usuals — tap to add</div>
+                <div class="cant-fav-row">${favs.map(f => `<button class="cant-fav-chip" onclick="cantAdd(${Number(f.id)})"><i class="bi bi-star-fill"></i>${cantEsc(f.name)}</button>`).join('')}</div>` : '';
+
+            // Menu grid
+            const menuEl = document.getElementById('cant-menu');
+            if (menuEl) {
+                if (!cantState.foods.length) menuEl.innerHTML = `<div class="cant-empty">No items on today's menu yet. Check back later.</div>`;
+                else menuEl.innerHTML = cantState.foods.map(f => {
+                    const id = Number(f.id), qty = cantState.cart[id] || 0;
+                    const img = f.photo ? `style="background-image:url('${cantEsc(f.photo)}')"` : '';
+                    const control = qty > 0
+                        ? `<div class="cant-qty"><button onclick="cantDec(${id})">−</button><b>${qty}</b><button onclick="cantAdd(${id})">+</button></div>`
+                        : `<button class="cant-add-btn" onclick="cantAdd(${id})">Add</button>`;
+                    return `<div class="cant-card">
+                        <div class="cant-card-img" ${img}>${f.photo ? '' : '🍽️'}</div>
+                        <div class="cant-card-body">
+                            <div class="cant-card-name">${cantEsc(f.name)}</div>
+                            <div class="cant-card-price">৳${Number(f.unit_price).toFixed(2)}</div>
+                            <div class="cant-card-stock">${Number(f.qty) < 10 ? 'Only ' + f.qty + ' left' : 'In stock'}</div>
+                            ${control}
+                        </div></div>`;
+                }).join('');
+            }
+            renderCantCart();
+        }
+
+        function cantAdd(id) { cantState.cart[id] = (cantState.cart[id] || 0) + 1; renderCanteen(); }
+        function cantDec(id) { const n = (cantState.cart[id] || 0) - 1; if (n <= 0) delete cantState.cart[id]; else cantState.cart[id] = n; renderCanteen(); }
+        function cantSetDelivery(mode) { cantState.delivery = mode; renderCantCart(); }
+
+        function renderCantCart() {
+            const el = document.getElementById('cant-cart');
+            if (!el) return;
+            const entries = Object.entries(cantState.cart).filter(([, q]) => q > 0);
+            if (!entries.length) { el.innerHTML = ''; return; }
+            let total = 0, count = 0;
+            for (const [id, q] of entries) {
+                const f = cantState.foods.find(x => Number(x.id) === Number(id));
+                if (f) { total += Number(f.unit_price) * q; count += q; }
+            }
+            const w = cantState.wallet || {};
+            const cap = Number(w.balance || 0) + Number(w.lending_limit || 0);
+            const over = total > cap;
+            el.innerHTML = `
+                <div class="cant-cart-bar">
+                    <div class="cant-cart-info"><div class="n">${count} item${count === 1 ? '' : 's'}</div><div class="t">৳${total.toFixed(2)}</div></div>
+                    <div class="cant-deliv">
+                        <button class="${cantState.delivery === 'hand' ? 'on' : ''}" onclick="cantSetDelivery('hand')">✋ Pick up</button>
+                        <button class="${cantState.delivery === 'class' ? 'on' : ''}" onclick="cantSetDelivery('class')">🏫 To class</button>
+                    </div>
+                    <button class="cant-place" ${over ? 'disabled' : ''} onclick="cantPlaceOrder()">${over ? 'Not enough balance' : 'Place order'}</button>
+                </div>`;
+        }
+
+        async function cantPlaceOrder() {
+            const sid = cantSid();
+            const items = Object.entries(cantState.cart).filter(([, q]) => q > 0).map(([id, qty]) => ({ id: Number(id), qty }));
+            if (!sid || !items.length) return;
+            const btn = document.querySelector('.cant-place');
+            if (btn) { btn.disabled = true; btn.textContent = 'Placing…'; }
+            try {
+                const r = await portalFetch('canteen_place_order', { student_id: sid, items, delivery_option: cantState.delivery });
+                if (r.result === 'success') {
+                    showToast(`Order placed! Invoice ${r.invoice_number}`, 'success');
+                    cantState.cart = {};
+                    if (loggedInStudent) loggedInStudent.balance = r.new_balance;
+                    loadCanteen(); // refresh wallet/menu/active
+                } else {
+                    showToast(r.message || 'Order failed.', 'error');
+                    renderCantCart();
+                }
+            } catch (e) { showToast('Network error placing the order.', 'error'); renderCantCart(); }
+        }
+
+        async function loadCanteenActive() {
+            const sid = cantSid();
+            const el = document.getElementById('cant-active');
+            if (!sid || !el) return;
+            try {
+                const r = await portalFetch('canteen_active_orders', { student_id: sid });
+                const orders = (r && r.orders) || [];
+                if (!orders.length) { el.innerHTML = ''; return; }
+                el.innerHTML = `<div class="cant-section-label">Live — your orders in the kitchen</div>` + orders.map(o => {
+                    const items = (Array.isArray(o.orders) ? o.orders : []).map(i => `${i.qty}× ${cantEsc(i.name)}`).join(', ');
+                    // Placed → Preparing → Ready. Undelivered orders are at "Preparing".
+                    const steps = [['Placed', true], ['Preparing', true], ['Ready', false]];
+                    const tl = steps.map((s, i) => `${i ? `<div class="cant-line ${steps[i-1][1] && s[1] ? 'done' : ''}"></div>` : ''}<div class="cant-step ${s[1] ? 'done' : ''}"><div class="dot">${s[1] ? '<i class="bi bi-check"></i>' : i + 1}</div><div class="cap">${s[0]}</div></div>`).join('');
+                    return `<div class="cant-order-card">
+                        <div class="cant-order-top"><div><b>৳${Number(o.price).toFixed(2)}</b> <span class="cant-src-badge">${o.source === 'portal' ? 'app' : 'counter'}</span></div><span class="cant-order-inv">#${cantEsc(o.invoice_number)}</span></div>
+                        <div class="cant-order-items">${items} · ${o.delivery_option === 'class' ? 'to class' : 'pick up'}</div>
+                        <div class="cant-timeline">${tl}</div>
+                    </div>`;
+                }).join('');
+            } catch (e) { /* keep last render */ }
+        }
+
+        async function loadCanteenHistory() {
+            const sid = cantSid();
+            const el = document.getElementById('cant-history');
+            if (!sid || !el) return;
+            try {
+                const r = await portalFetch('canteen_history', { student_id: sid });
+                const orders = (r && r.orders) || [], topups = (r && r.topups) || [];
+                const rows = [];
+                orders.slice(0, 20).forEach(o => rows.push({ t: new Date(o.created_at).getTime(), html: `
+                    <div class="cant-hist-row"><div>
+                        <div style="font-weight:700;font-size:0.85rem">🍽️ ৳${Number(o.price).toFixed(2)} <span class="cant-src-badge">${o.source === 'portal' ? 'app' : 'counter'}</span></div>
+                        <div class="meta">#${cantEsc(o.invoice_number)} · ${new Date(o.created_at).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
+                    </div><span class="cant-pill ${o.is_delivered ? 'ok' : 'pend'}">${o.is_delivered ? 'Delivered' : 'Preparing'}</span></div>` }));
+                topups.slice(0, 20).forEach(t => { const st = String(t.confirmation || ''); const isPend = /^pending/i.test(st); const isRej = /^reject/i.test(st); rows.push({ t: new Date(t.created_at).getTime(), html: `
+                    <div class="cant-hist-row"><div>
+                        <div style="font-weight:700;font-size:0.85rem">💳 Top-up ৳${Number(t.amount).toFixed(2)}</div>
+                        <div class="meta">${cantEsc(t.gateway || 'manual')} · ${new Date(t.created_at).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
+                    </div><span class="cant-pill ${isPend ? 'pend' : isRej ? 'rej' : 'ok'}">${isPend ? 'Pending' : isRej ? 'Rejected' : 'Added'}</span></div>` }); });
+                rows.sort((a, b) => b.t - a.t);
+                el.innerHTML = rows.length ? rows.slice(0, 25).map(r => r.html).join('') : `<div class="cant-empty">No orders or top-ups yet.</div>`;
+            } catch (e) { /* leave */ }
+        }
+
+        /* ── Wallet top-up request ───────────────────────────────────────── */
+        function openTopup() {
+            const back = document.createElement('div');
+            back.className = 'cant-modal-back';
+            back.id = 'topup-modal';
+            back.onclick = (e) => { if (e.target === back) back.remove(); };
+            back.innerHTML = `
+                <div class="cant-modal">
+                    <h3>Add balance</h3>
+                    <p class="sub">Send the money via your chosen method, then tell us the details. The office confirms and credits your wallet — usually the same day.</p>
+                    <div class="cant-field"><label>Amount (৳)</label>
+                        <input id="tu-amt" type="number" min="1" step="1" placeholder="e.g. 200" />
+                        <div class="cant-amt-quick">${[100,200,500,1000].map(a => `<button type="button" onclick="document.getElementById('tu-amt').value=${a}">৳${a}</button>`).join('')}</div>
+                    </div>
+                    <div class="cant-field"><label>Payment method</label>
+                        <select id="tu-method"><option value="bkash">bKash</option><option value="nagad">Nagad</option><option value="bank">Bank transfer</option><option value="manual">Cash (at office)</option></select>
+                    </div>
+                    <div class="cant-field"><label>Transaction ID / sender number</label>
+                        <input id="tu-ref" type="text" placeholder="e.g. TXN123ABC or 01XXXXXXXXX" />
+                    </div>
+                    <button class="btn w-100 py-3 fw-800" style="border-radius:14px;background:var(--p-primary);color:var(--p-surface);border:none" onclick="submitTopup()">Submit request</button>
+                    <button class="btn w-100 py-2 mt-2" style="border-radius:12px;background:transparent;color:var(--p-ink-dim);border:none;font-size:0.82rem" onclick="document.getElementById('topup-modal').remove()">Cancel</button>
+                </div>`;
+            document.body.appendChild(back);
+        }
+
+        async function submitTopup() {
+            const sid = cantSid();
+            const amount = Number(document.getElementById('tu-amt').value);
+            const method = document.getElementById('tu-method').value;
+            const reference = document.getElementById('tu-ref').value.trim();
+            if (!amount || amount <= 0) { showToast('Enter a valid amount.', 'error'); return; }
+            try {
+                const r = await portalFetch('canteen_topup_request', { student_id: sid, amount, method, reference });
+                if (r.result === 'success') {
+                    showToast(r.message || 'Top-up request submitted.', 'success');
+                    const m = document.getElementById('topup-modal'); if (m) m.remove();
+                    loadWalletTopups();
+                } else showToast(r.message || 'Could not submit.', 'error');
+            } catch (e) { showToast('Network error.', 'error'); }
+        }
+
+        async function loadWalletTopups() {
+            const sid = cantSid();
+            const el = document.getElementById('wallet-topups');
+            if (!sid || !el) return;
+            try {
+                const r = await portalFetch('canteen_history', { student_id: sid });
+                const topups = ((r && r.topups) || []).slice(0, 6);
+                if (!topups.length) { el.innerHTML = ''; return; }
+                el.innerHTML = `<div class="cant-section-label" style="margin-top:6px">Recent top-ups</div>` + topups.map(t => {
+                    const st = String(t.confirmation || ''); const isPend = /^pending/i.test(st); const isRej = /^reject/i.test(st);
+                    return `<div class="cant-hist-row"><div>
+                        <div style="font-weight:700;font-size:0.85rem">৳${Number(t.amount).toFixed(2)}</div>
+                        <div class="meta">${cantEsc(t.gateway || 'manual')} · ${new Date(t.created_at).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
+                    </div><span class="cant-pill ${isPend ? 'pend' : isRej ? 'rej' : 'ok'}">${isPend ? 'Pending' : isRej ? 'Rejected' : 'Added'}</span></div>`;
+                }).join('');
+            } catch (e) { /* leave */ }
         }
 
         function renderField(f, val, readOnly) {
@@ -2395,23 +2703,28 @@
                             <div class="col-6"><div class="wallet-stat-card"><div class="wallet-stat-label">Daily Limit</div><div class="wallet-stat-value">৳${dailyLim}</div></div></div>
                             <div class="col-6"><div class="wallet-stat-card"><div class="wallet-stat-label">Monthly Limit</div><div class="wallet-stat-value">৳${monthlyLim}</div></div></div>
                         </div>
-                        <button class="btn w-100 py-3 fw-800" disabled style="border-radius:16px;background:var(--p-surface-alt);color:var(--p-ink-dim);border:1px dashed var(--p-line)">
-                            <i class="bi bi-clock-history me-2"></i>Online Top-up — Coming Soon (top up at the canteen counter)
-                        </button>`;
+                        <button class="btn w-100 py-3 fw-800" onclick="openTopup()" style="border-radius:16px;background:var(--p-primary);color:var(--p-surface);border:none">
+                            <i class="bi bi-plus-circle-fill me-2"></i>Add balance
+                        </button>
+                        <p style="font-size:0.72rem;color:var(--p-ink-dim);text-align:center;margin-top:10px">Pay via bKash/Nagad/bank, then submit the details here — the office adds it to your wallet once confirmed. Or top up at the counter.</p>
+                        <div id="wallet-topups" class="mt-3"></div>`;
                 }
                 if(content) content.appendChild(walletPane);
 
-                // ── Canteen (coming soon) ──
+                // ── Canteen (live ordering — shares wallet + orders with the kiosk) ──
                 const canteenPane = document.createElement('div');
                 canteenPane.className = 'tab-pane ccpc-page'; canteenPane.id = 'canteen-content';
                 canteenPane.innerHTML = `
                     <h2 class="ccpc-page-title">Campus <em>Canteen</em></h2>
-                    <p class="ccpc-page-sub">Order food straight to your class or pick it up yourself.</p>
-                    <div class="ccpc-coming-soon">
-                        <div class="ccpc-coming-soon-icon"><i class="bi bi-cup-hot-fill"></i></div>
-                        <div class="ccpc-coming-soon-title">Ordering opens soon</div>
-                        <div class="ccpc-coming-soon-sub">We're building the food menu and ordering flow. You'll be able to browse today's menu, add items to a cart, and pay from your wallet right here.</div>
-                    </div>`;
+                    <p class="ccpc-page-sub">Order to your class or pick it up — paid from your wallet, same balance as the counter.</p>
+                    <div id="cant-wallet"></div>
+                    <div id="cant-active"></div>
+                    <div id="cant-fav-wrap"></div>
+                    <div class="cant-section-label">Today's menu</div>
+                    <div id="cant-menu" class="cant-menu-grid"><div class="cant-empty">Loading menu…</div></div>
+                    <div id="cant-cart"></div>
+                    <div class="cant-section-label" style="margin-top:28px">Recent orders &amp; top-ups</div>
+                    <div id="cant-history"><div class="cant-empty">—</div></div>`;
                 if(content) content.appendChild(canteenPane);
 
                 // ── Stationary store (coming soon) ──

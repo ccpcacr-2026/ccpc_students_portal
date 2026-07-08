@@ -119,6 +119,60 @@ async function getGPToken(settings) {
   throw new Error('GP token fetch failed: ' + JSON.stringify(data));
 }
 
+// ── Canteen helpers (shared with the ccpc-canteen app on the same tables) ────
+const CANTEEN_DEFAULTS = {
+  enable_daily_limit: true, enable_monthly_limit: true, enable_lending_limit: true,
+  general_daily_limit: 120, general_monthly_limit: 1200, general_lending_limit: 200,
+  low_stock_threshold: 10, notify_app_enabled: true,
+};
+async function canteenSettings() {
+  const rows = await sb('canteen_settings?id=eq.1&select=data');
+  if (Array.isArray(rows) && rows[0] && rows[0].data) return { ...CANTEEN_DEFAULTS, ...rows[0].data };
+  return { ...CANTEEN_DEFAULTS };
+}
+// Ports the kiosk's get_active_menu_ids(): which food ids are on an active menu now.
+function resolveActiveFoodIds(menus, now = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const dayOfMonth = String(now.getDate());
+  const ids = new Set();
+  for (const mn of (Array.isArray(menus) ? menus : [])) {
+    let active = false;
+    const ov = String(mn.override_date || '');
+    if (ov.slice(0, 10) === today) active = !!Number(mn.activated);
+    else {
+      const s = mn.scheduled, d = String(mn.description || '');
+      if (s === 'Daily') active = true;
+      else if (s === 'Weekly' && d === weekday) active = true;
+      else if (s === 'Monthly' && d === dayOfMonth) active = true;
+      else if (s === 'Date' && (d === today || d.slice(0, 10) === today)) active = true;
+      else if (s === 'Custom') active = !!Number(mn.activated);
+    }
+    if (active && mn.items) String(mn.items).split(',').forEach((x) => { const t = x.trim(); if (/^\d+$/.test(t)) ids.add(Number(t)); });
+  }
+  return ids;
+}
+async function canteenNotify(studentId, message, kind = 'info') {
+  try { await sb('canteen_notifications', 'POST', { student_id: studentId, message, kind }); } catch (_) {}
+}
+async function canteenBestCounter() {
+  try {
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const counters = await sb(`canteen_counters?status=eq.true&last_seen_at=gt.${fiveMinAgo}&select=counter_id`);
+    const active = (Array.isArray(counters) ? counters : []).map((c) => c.counter_id);
+    if (!active.length) return 1;
+    const counts = await Promise.all(active.map(async (cid) => {
+      const r = await sb(`canteen_orders?is_delivered=eq.false&counter_no=eq.${cid}&select=id`);
+      return { cid, n: Array.isArray(r) ? r.length : 0 };
+    }));
+    counts.sort((a, b) => a.n - b.n);
+    return counts[0].cid;
+  } catch (_) { return 1; }
+}
+function monthStartISO() { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d.toISOString(); }
+function dayStartISO() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); }
+
 export async function POST(req) {
   let body;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Bad request' }, { status: 400 }); }
@@ -917,6 +971,177 @@ export async function POST(req) {
       message: `Imported ${results.created.length} new, updated ${results.updated.length}`,
       details: results,
     });
+  }
+
+  // ── Canteen: menu + wallet snapshot for the ordering screen ─────────────────
+  if (action === 'canteen_menu') {
+    const sid = payload.student_id;
+    if (!sid) return NextResponse.json({ result: 'error', message: 'Student ID required.' });
+    const [foods, menus, settings, srows, morders] = await Promise.all([
+      sb('foods?select=*&order=name.asc'),
+      sb('menus?select=*'),
+      canteenSettings(),
+      sb(`students_data?student_id=eq.${encodeURIComponent(sid)}&select=balance,card_status,daily_limit,monthly_limit`),
+      sb(`canteen_orders?student_id=eq.${encodeURIComponent(sid)}&created_at=gte.${monthStartISO()}&select=created_at,price,orders`),
+    ]);
+    const allFoods = Array.isArray(foods) ? foods : [];
+    const menuRows = Array.isArray(menus) ? menus : [];
+    const passes = (f) => f.is_available && (f.qty ?? 0) > 0;
+    let visible;
+    if (!menuRows.length) visible = allFoods.filter(passes);
+    else {
+      const ids = resolveActiveFoodIds(menuRows);
+      const byId = new Map(allFoods.map((f) => [Number(f.id), f]));
+      visible = [...ids].map((id) => byId.get(Number(id))).filter((f) => f && passes(f));
+    }
+    const st = (Array.isArray(srows) && srows[0]) ? srows[0] : {};
+    // Day-wise spend + favourites from this month's orders (same signals as the kiosk).
+    const orders = Array.isArray(morders) ? morders : [];
+    const todayKey = new Date().toISOString().slice(0, 10);
+    let spentToday = 0, spentMonth = 0;
+    const favCount = {}, favMeta = {};
+    for (const o of orders) {
+      const day = String(o.created_at || '').slice(0, 10);
+      if (day === todayKey) spentToday += Number(o.price || 0);
+      spentMonth += Number(o.price || 0);
+      for (const it of (Array.isArray(o.orders) ? o.orders : [])) {
+        if (it.id == null) continue;
+        favCount[it.id] = (favCount[it.id] || 0) + (Number(it.qty) || 0);
+        if (!favMeta[it.id]) favMeta[it.id] = { id: it.id, name: it.name };
+      }
+    }
+    const favourites = Object.keys(favCount).sort((a, b) => favCount[b] - favCount[a]).slice(0, 4).map((id) => favMeta[id]);
+    const dailyLimit = settings.enable_daily_limit ? Number(st.daily_limit || settings.general_daily_limit || 0) : 0;
+    const monthlyLimit = settings.enable_monthly_limit ? Number(st.monthly_limit || settings.general_monthly_limit || 0) : 0;
+    return NextResponse.json({
+      result: 'success',
+      foods: visible,
+      wallet: {
+        balance: Number(st.balance || 0),
+        card_status: st.card_status || 'Active',
+        daily_limit: dailyLimit, monthly_limit: monthlyLimit,
+        spent_today: spentToday, spent_month: spentMonth,
+        lending_limit: settings.enable_lending_limit ? Number(settings.general_lending_limit || 0) : 0,
+        low_balance: Number(st.balance || 0) < Math.max(30, dailyLimit * 0.25),
+        favourites,
+      },
+    });
+  }
+
+  // ── Canteen: place an order (prices & limits revalidated server-side) ───────
+  if (action === 'canteen_place_order') {
+    const { student_id, items, delivery_option } = payload;
+    if (!student_id || !Array.isArray(items) || !items.length) {
+      return NextResponse.json({ result: 'error', message: 'Your cart is empty.' });
+    }
+    const ids = [...new Set(items.map((i) => Number(i.id)).filter(Boolean))];
+    if (!ids.length) return NextResponse.json({ result: 'error', message: 'Your cart is empty.' });
+    const [srows, settings, foodRows] = await Promise.all([
+      sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=*`),
+      canteenSettings(),
+      sb(`foods?id=in.(${ids.join(',')})&select=id,name,unit_price,is_available,qty`),
+    ]);
+    const student = (Array.isArray(srows) && srows[0]) ? srows[0] : null;
+    if (!student) return NextResponse.json({ result: 'error', message: 'Student not found.' });
+    if (student.card_status === 'Blocked' || student.card_status === 'Lost') {
+      return NextResponse.json({ result: 'error', message: `Your card is ${student.card_status}. Contact the canteen office.` });
+    }
+    const foodById = new Map((Array.isArray(foodRows) ? foodRows : []).map((f) => [Number(f.id), f]));
+    const orderItems = [];
+    let total = 0;
+    for (const it of items) {
+      const f = foodById.get(Number(it.id));
+      const qty = Math.max(0, Math.floor(Number(it.qty) || 0));
+      if (!f || !f.is_available || qty <= 0) continue;
+      const unit = Number(f.unit_price) || 0;
+      orderItems.push({ id: f.id, name: f.name, price: unit, qty });
+      total += unit * qty;
+    }
+    if (!orderItems.length) return NextResponse.json({ result: 'error', message: 'Those items are no longer available.' });
+
+    const balance = Number(student.balance || 0);
+    const lending = settings.enable_lending_limit ? Number(settings.general_lending_limit || 0) : 0;
+    if (balance + lending < total) {
+      return NextResponse.json({ result: 'error', message: `Not enough balance (limit ৳${(balance + lending).toFixed(2)}). Top up your wallet.` });
+    }
+    const dailyLimit = settings.enable_daily_limit ? Number(student.daily_limit || settings.general_daily_limit || 0) : 0;
+    const monthlyLimit = settings.enable_monthly_limit ? Number(student.monthly_limit || settings.general_monthly_limit || 0) : 0;
+    if (dailyLimit > 0 || monthlyLimit > 0) {
+      const [today, month] = await Promise.all([
+        dailyLimit > 0 ? sb(`canteen_orders?student_id=eq.${encodeURIComponent(student_id)}&created_at=gte.${dayStartISO()}&select=price`) : Promise.resolve([]),
+        monthlyLimit > 0 ? sb(`canteen_orders?student_id=eq.${encodeURIComponent(student_id)}&created_at=gte.${monthStartISO()}&select=price`) : Promise.resolve([]),
+      ]);
+      const td = (Array.isArray(today) ? today : []).reduce((s, o) => s + Number(o.price || 0), 0);
+      const mo = (Array.isArray(month) ? month : []).reduce((s, o) => s + Number(o.price || 0), 0);
+      if (dailyLimit > 0 && td + total > dailyLimit) return NextResponse.json({ result: 'error', message: `This exceeds today's spend limit (৳${dailyLimit}).` });
+      if (monthlyLimit > 0 && mo + total > monthlyLimit) return NextResponse.json({ result: 'error', message: `This exceeds the monthly spend limit (৳${monthlyLimit}).` });
+    }
+
+    const now = new Date();
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${now.getFullYear()}`;
+    const countRows = await sb(`canteen_orders?created_at=gte.${dayStartISO()}&select=id`);
+    const seq = (Array.isArray(countRows) ? countRows.length : 0) + 1;
+    const invoice = `${dateStr}-${String(seq).padStart(5, '0')}`;
+    const counterNo = await canteenBestCounter();
+
+    const newBalance = balance - total;
+    const balUpd = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { balance: newBalance });
+    if (balUpd?.error) return NextResponse.json({ result: 'error', message: 'Could not charge your wallet. Try again.' });
+
+    const parts = [student.class, student.section, student.roll].filter(Boolean);
+    const ins = await sb('canteen_orders', 'POST', {
+      student_id, student_name: student.student_name,
+      class_section_roll: parts.length ? parts.join('-') : 'N/A',
+      orders: orderItems, price: total, is_delivered: false,
+      delivery_option: delivery_option === 'class' ? 'class' : 'hand',
+      invoice_number: invoice, counter_no: counterNo, source: 'portal',
+    });
+    if (ins?.error) {
+      await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { balance }); // rollback
+      return NextResponse.json({ result: 'error', message: 'Could not place the order. Your wallet was not charged.' });
+    }
+    await canteenNotify(student_id, `Order of ৳${total.toFixed(2)} placed from the app. Invoice ${invoice}.`, 'order');
+    return NextResponse.json({ result: 'success', invoice_number: invoice, new_balance: newBalance, total });
+  }
+
+  // ── Canteen: this student's active (undelivered) orders for live tracking ───
+  if (action === 'canteen_active_orders') {
+    const sid = payload.student_id;
+    if (!sid) return NextResponse.json({ result: 'error', message: 'Student ID required.' });
+    const rows = await sb(`canteen_orders?student_id=eq.${encodeURIComponent(sid)}&is_delivered=eq.false&select=id,invoice_number,orders,price,delivery_option,counter_no,created_at,source&order=created_at.desc&limit=10`);
+    return NextResponse.json({ result: 'success', orders: (Array.isArray(rows) ? rows : []) });
+  }
+
+  // ── Canteen: order + top-up history (both kiosk and portal orders) ──────────
+  if (action === 'canteen_history') {
+    const sid = payload.student_id;
+    if (!sid) return NextResponse.json({ result: 'error', message: 'Student ID required.' });
+    const [orders, topups] = await Promise.all([
+      sb(`canteen_orders?student_id=eq.${encodeURIComponent(sid)}&select=id,invoice_number,orders,price,is_delivered,delivery_option,created_at,source&order=created_at.desc&limit=60`),
+      sb(`recharge_history?student_id=eq.${encodeURIComponent(sid)}&select=id,amount,gateway,confirmation,created_at&order=created_at.desc&limit=60`),
+    ]);
+    return NextResponse.json({
+      result: 'success',
+      orders: (Array.isArray(orders) ? orders : []),
+      topups: (Array.isArray(topups) ? topups : []),
+    });
+  }
+
+  // ── Canteen: student-initiated top-up request (staff confirm in /control) ───
+  if (action === 'canteen_topup_request') {
+    const { student_id, amount, method, reference } = payload;
+    const amt = Number(amount);
+    if (!student_id || !amt || amt <= 0) return NextResponse.json({ result: 'error', message: 'Enter a valid amount.' });
+    const srows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=student_name,nfc_uid`);
+    const student = (Array.isArray(srows) && srows[0]) ? srows[0] : null;
+    if (!student) return NextResponse.json({ result: 'error', message: 'Student not found.' });
+    const confirmationNote = reference ? `Ref: ${String(reference).slice(0, 80)}` : 'No reference given';
+    const ins = await sb('recharge_history', 'POST', {
+      nfc_uid: student.nfc_uid || null, student_id, student_name: student.student_name,
+      amount: amt, gateway: method || 'manual', confirmation: `Pending — ${confirmationNote}`,
+    });
+    if (ins?.error) return NextResponse.json({ result: 'error', message: 'Could not submit your request. Try again.' });
+    return NextResponse.json({ result: 'success', message: 'Top-up request submitted. It will be added once the office confirms your payment.' });
   }
 
   return NextResponse.json({ result: 'error', message: 'Unknown action' }, { status: 400 });
