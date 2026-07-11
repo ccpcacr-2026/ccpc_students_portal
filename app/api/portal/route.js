@@ -117,6 +117,77 @@ function _parseCsv(text) {
   return rows;
 }
 
+// ── Routine sheet helpers (shared by get_class_routine + get_teacher_schedule) ──
+// Both actions read one of two tabs on the same sheet: "Selected" (today's
+// live/adjusted copy, single day) or "Classes" (the static weekly master,
+// every weekday). `weekday` picks which; omitting it means "Selected".
+async function _fetchRoutineRows(weekday) {
+  if (weekday) {
+    const res = await fetch(
+      `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Classes')}`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return { error: 'Could not read the Classes sheet.' };
+    return { rows: _parseCsv(await res.text()), meta: { source: 'classes', weekday } };
+  }
+  const res = await fetch(
+    `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/export?format=csv&gid=${ROUTINE_GID}`,
+    { signal: AbortSignal.timeout(6000) }
+  );
+  if (!res.ok) return { error: 'Could not read the routine sheet.' };
+  const rows = _parseCsv(await res.text());
+  return { rows, meta: { source: 'selected', date: String((rows[0] || [])[3] || '').trim(), weekday: String((rows[0] || [])[5] || '').trim() } };
+}
+
+// Header row = the one containing a "1st"-style period label. "Name" is
+// always the column immediately before it in both sheets (true even on
+// "Classes", whose gviz export has a leading blank column and a stray "."
+// column before that — never assumed positionally, only located by this
+// text-based scan, which lands on the same relative offset either way).
+function _detectRoutineHeader(rows) {
+  const hIdx = rows.findIndex(r => r.some(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c)));
+  if (hIdx === -1) return null;
+  const headers = rows[hIdx];
+  const firstPeriodIdx = headers.findIndex(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c));
+  const nameCol = firstPeriodIdx > 0 ? firstPeriodIdx - 1 : 0;
+  return { headers, firstPeriodIdx, nameCol, dataRows: rows.slice(hIdx + 1) };
+}
+
+// "Classes" holds every weekday in one sheet — narrow to the requested one.
+// No-op for "Selected", which is already just a single day.
+function _filterByWeekday(dataRows, headers, weekday) {
+  if (!weekday) return dataRows;
+  const weekdayIdx = headers.findIndex(h => String(h).trim() === 'Weekday');
+  if (weekdayIdx < 0) return dataRows;
+  const wantWd = String(weekday).trim().toLowerCase();
+  return dataRows.filter(r => String(r[weekdayIdx] || '').trim().toLowerCase() === wantWd);
+}
+
+// Almost always "Class;Subject" — one known cell in "Classes" uses a comma
+// instead ("IX-D, Biology"), so fall back to it when there's no semicolon
+// rather than silently dropping that class+period.
+function _splitRoutineCell(cell) {
+  const delim = cell.includes(';') ? ';' : (cell.includes(',') ? ',' : null);
+  return delim ? cell.split(delim) : null;
+}
+
+function _periodKeyFor(headerText) {
+  const h = String(headerText || '').toLowerCase();
+  if (h.includes('junior')) return '4th/Jr';
+  if (h.includes('senior')) return '4th/Sr';
+  return headerText;
+}
+
+// A trailing "(XX)" on the subject means this cell's row-owner is covering
+// for XX today — the row owner is who's ACTUALLY there; XX is who they're
+// substituting for. (Verified convention — see ccpc-teachers'
+// getTodayRoutineBoard, same sheet, same annotation.)
+function _extractAdjustment(rawSubject) {
+  const m = rawSubject.match(/\(([^)]+)\)\s*$/);
+  if (!m) return { subject: rawSubject, originalShort: null };
+  return { subject: rawSubject.replace(/\(([^)]+)\)\s*$/, '').trim(), originalShort: m[1].trim() };
+}
+
 async function sb(path, method = 'GET', body = null, extra = {}) {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
     method,
@@ -815,54 +886,22 @@ export async function POST(req) {
   }
 
   // ── Get Class Routine ─────────────────────────────────────────────────────
-  // Default: scan the "Selected" tab — the school's current live/adjusted day
-  // (its own D1/F1 cells say which weekday+date that actually is; surfaced as
+  // Default: scan "Selected" — the school's current live/adjusted day (its
+  // own D1/F1 cells say which weekday+date that actually is; surfaced as
   // `meta` since "Selected" only advances when staff run Setup New Day, so it
   // can legitimately be stale — better to show the real date than pretend).
-  // If `weekday` is passed instead: scan the "Classes" master (every weekday,
-  // no adjustments) for that weekday's row — lets a student look at any day's
+  // If `weekday` is passed instead: scan "Classes" (every weekday, no
+  // adjustments) for that weekday's row — lets a student look at any day's
   // general schedule regardless of whether "Selected" has been refreshed.
   if (action === 'get_class_routine') {
     const { class_name, section, weekday } = payload;
     if (!class_name) return NextResponse.json({ result: 'error', message: 'class_name required.' });
     try {
-      let rows, meta;
-      if (weekday) {
-        const sheetRes = await fetch(
-          `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Classes')}`,
-          { signal: AbortSignal.timeout(6000) }
-        );
-        if (!sheetRes.ok) return NextResponse.json({ result: 'error', message: 'Could not read the Classes sheet.' });
-        rows = _parseCsv(await sheetRes.text());
-        meta = { source: 'classes', weekday };
-      } else {
-        const sheetRes = await fetch(
-          `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/export?format=csv&gid=${ROUTINE_GID}`,
-          { signal: AbortSignal.timeout(6000) }
-        );
-        if (!sheetRes.ok) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet.' });
-        rows = _parseCsv(await sheetRes.text());
-        meta = { source: 'selected', date: String((rows[0] || [])[3] || '').trim(), weekday: String((rows[0] || [])[5] || '').trim() };
-      }
-
-      // Header row = the one containing a "1st"-style period label. "Name" is
-      // always the column immediately before it in both sheets (true even on
-      // "Classes", whose gviz export has a leading blank column and a stray
-      // "." column before that — never assumed positionally, only located by
-      // this text-based scan, which lands on the same relative offset either way).
-      const hIdx = rows.findIndex(r => r.some(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c)));
-      if (hIdx === -1) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet header.' });
-      const headers = rows[hIdx];
-      const firstPeriodIdx = headers.findIndex(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c));
-      const nameCol = firstPeriodIdx > 0 ? firstPeriodIdx - 1 : 0;
-      let dataRows = rows.slice(hIdx + 1);
-
-      // "Classes" holds every weekday in one sheet — narrow to the requested one.
-      if (weekday) {
-        const weekdayIdx = headers.findIndex(h => String(h).trim() === 'Weekday');
-        const wantWd = String(weekday).trim().toLowerCase();
-        dataRows = weekdayIdx >= 0 ? dataRows.filter(r => String(r[weekdayIdx] || '').trim().toLowerCase() === wantWd) : dataRows;
-      }
+      const fetched = await _fetchRoutineRows(weekday);
+      if (fetched.error) return NextResponse.json({ result: 'error', message: fetched.error });
+      const det = _detectRoutineHeader(fetched.rows);
+      if (!det) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet header.' });
+      const dataRows = _filterByWeekday(det.dataRows, det.headers, weekday);
 
       // Build every accepted spelling of the student's class+section — the
       // sheet mixes Roman numerals (VI, X), Arabic (6, 10) and English words
@@ -888,34 +927,18 @@ export async function POST(req) {
       const routine = { '1st': null, '2nd': null, '3rd': null, '4th/Jr': null, '4th/Sr': null, '5th': null, '6th': null, '7th': null };
 
       for (const row of dataRows) {
-        const rowTeacher = String(row[nameCol] || '').trim();
+        const rowTeacher = String(row[det.nameCol] || '').trim();
         if (!rowTeacher) continue;
-        for (let i = firstPeriodIdx; i < headers.length; i++) {
+        for (let i = det.firstPeriodIdx; i < det.headers.length; i++) {
           const cell = String(row[i] || '').trim();
           if (!cell) continue;
-          // Almost always "Class;Subject" — one known cell in "Classes" uses
-          // a comma instead ("IX-D, Biology"), so fall back to it when there's
-          // no semicolon rather than silently dropping that class+period.
-          const delim = cell.includes(';') ? ';' : (cell.includes(',') ? ',' : null);
-          if (!delim) continue;
-          const parts = cell.split(delim);
-          if (!possibleKeys.has(clean(parts[0]))) continue;
+          const parts = _splitRoutineCell(cell);
+          if (!parts || !possibleKeys.has(clean(parts[0]))) continue;
 
-          const header = String(headers[i] || '').toLowerCase();
-          let periodKey = headers[i];
-          if (header.includes('junior')) periodKey = '4th/Jr';
-          else if (header.includes('senior')) periodKey = '4th/Sr';
+          const periodKey = _periodKeyFor(det.headers[i]);
           if (!(periodKey in routine) || routine[periodKey]) continue; // first match wins
 
-          // A trailing "(XX)" on the subject means this row's own teacher is
-          // covering for XX today — the row owner is who's ACTUALLY there;
-          // XX is who they're substituting for. (Verified convention — see
-          // ccpc-teachers' getTodayRoutineBoard, same sheet, same annotation.)
-          let subject = (parts[1] || parts[0]).trim();
-          let originalShort = null;
-          const adjMatch = subject.match(/\(([^)]+)\)\s*$/);
-          if (adjMatch) { originalShort = adjMatch[1].trim(); subject = subject.replace(/\(([^)]+)\)\s*$/, '').trim(); }
-
+          const { subject, originalShort } = _extractAdjustment((parts[1] || parts[0]).trim());
           routine[periodKey] = {
             subject,
             teacher: shortNameMap.byShort[rowTeacher] || rowTeacher,
@@ -925,9 +948,47 @@ export async function POST(req) {
         }
       }
 
-      return NextResponse.json({ result: 'success', routine, meta });
+      return NextResponse.json({ result: 'success', routine, meta: fetched.meta });
     } catch (e) {
       return NextResponse.json({ result: 'error', message: 'Routine lookup failed: ' + e.message });
+    }
+  }
+
+  // ── Get Teacher Schedule (personal routine, shown from their profile) ──────
+  // Same dual-source model as get_class_routine: default = "Selected" (today,
+  // with adjustments; meta says which day it actually is), or `weekday` =
+  // "Classes" (that weekday's general schedule, every class this teacher has).
+  if (action === 'get_teacher_schedule') {
+    const { name, weekday } = payload;
+    if (!name) return NextResponse.json({ result: 'error', message: 'name required.' });
+    try {
+      const shortNameMap = await getShortNameMap();
+      const shortcode = shortNameMap.byFull[name];
+
+      const fetched = await _fetchRoutineRows(weekday);
+      if (fetched.error) return NextResponse.json({ result: 'error', message: fetched.error });
+      const det = _detectRoutineHeader(fetched.rows);
+      if (!det) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet header.' });
+      const dataRows = _filterByWeekday(det.dataRows, det.headers, weekday);
+
+      const schedule = [];
+      if (shortcode) {
+        const row = dataRows.find(r => String(r[det.nameCol] || '').trim() === shortcode);
+        if (row) {
+          for (let i = det.firstPeriodIdx; i < det.headers.length; i++) {
+            const cell = String(row[i] || '').trim();
+            if (!cell) continue;
+            const parts = _splitRoutineCell(cell);
+            if (!parts) continue;
+            const { subject } = _extractAdjustment((parts[1] || parts[0]).trim());
+            schedule.push({ period: _periodKeyFor(det.headers[i]), class: parts[0].trim(), subject });
+          }
+        }
+      }
+
+      return NextResponse.json({ result: 'success', schedule, meta: fetched.meta, resolved: !!shortcode });
+    } catch (e) {
+      return NextResponse.json({ result: 'error', message: 'Schedule lookup failed: ' + e.message });
     }
   }
 
