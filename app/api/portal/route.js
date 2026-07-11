@@ -815,29 +815,54 @@ export async function POST(req) {
   }
 
   // ── Get Class Routine ─────────────────────────────────────────────────────
-  // Scans the live routine sheet directly (same "Selected" tab get_teacher_directory
-  // reads) — there is no portal_routines table write path, so that table is
-  // never populated; querying it always returned "No routine found."
+  // Default: scan the "Selected" tab — the school's current live/adjusted day
+  // (its own D1/F1 cells say which weekday+date that actually is; surfaced as
+  // `meta` since "Selected" only advances when staff run Setup New Day, so it
+  // can legitimately be stale — better to show the real date than pretend).
+  // If `weekday` is passed instead: scan the "Classes" master (every weekday,
+  // no adjustments) for that weekday's row — lets a student look at any day's
+  // general schedule regardless of whether "Selected" has been refreshed.
   if (action === 'get_class_routine') {
-    const { class_name, section } = payload;
+    const { class_name, section, weekday } = payload;
     if (!class_name) return NextResponse.json({ result: 'error', message: 'class_name required.' });
     try {
-      const sheetRes = await fetch(
-        `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/export?format=csv&gid=${ROUTINE_GID}`,
-        { signal: AbortSignal.timeout(6000) }
-      );
-      if (!sheetRes.ok) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet.' });
-      const rows = _parseCsv(await sheetRes.text());
+      let rows, meta;
+      if (weekday) {
+        const sheetRes = await fetch(
+          `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Classes')}`,
+          { signal: AbortSignal.timeout(6000) }
+        );
+        if (!sheetRes.ok) return NextResponse.json({ result: 'error', message: 'Could not read the Classes sheet.' });
+        rows = _parseCsv(await sheetRes.text());
+        meta = { source: 'classes', weekday };
+      } else {
+        const sheetRes = await fetch(
+          `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/export?format=csv&gid=${ROUTINE_GID}`,
+          { signal: AbortSignal.timeout(6000) }
+        );
+        if (!sheetRes.ok) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet.' });
+        rows = _parseCsv(await sheetRes.text());
+        meta = { source: 'selected', date: String((rows[0] || [])[3] || '').trim(), weekday: String((rows[0] || [])[5] || '').trim() };
+      }
 
-      // Header row = the one containing a "1st"-style period label; the name
-      // column is immediately before the first such label (same detection
-      // parseSheetSchedule uses, applied here so both stay in sync).
+      // Header row = the one containing a "1st"-style period label. "Name" is
+      // always the column immediately before it in both sheets (true even on
+      // "Classes", whose gviz export has a leading blank column and a stray
+      // "." column before that — never assumed positionally, only located by
+      // this text-based scan, which lands on the same relative offset either way).
       const hIdx = rows.findIndex(r => r.some(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c)));
       if (hIdx === -1) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet header.' });
       const headers = rows[hIdx];
       const firstPeriodIdx = headers.findIndex(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c));
       const nameCol = firstPeriodIdx > 0 ? firstPeriodIdx - 1 : 0;
-      const dataRows = rows.slice(hIdx + 1);
+      let dataRows = rows.slice(hIdx + 1);
+
+      // "Classes" holds every weekday in one sheet — narrow to the requested one.
+      if (weekday) {
+        const weekdayIdx = headers.findIndex(h => String(h).trim() === 'Weekday');
+        const wantWd = String(weekday).trim().toLowerCase();
+        dataRows = weekdayIdx >= 0 ? dataRows.filter(r => String(r[weekdayIdx] || '').trim().toLowerCase() === wantWd) : dataRows;
+      }
 
       // Build every accepted spelling of the student's class+section — the
       // sheet mixes Roman numerals (VI, X), Arabic (6, 10) and English words
@@ -867,8 +892,13 @@ export async function POST(req) {
         if (!rowTeacher) continue;
         for (let i = firstPeriodIdx; i < headers.length; i++) {
           const cell = String(row[i] || '').trim();
-          if (!cell || !cell.includes(';')) continue;
-          const parts = cell.split(';');
+          if (!cell) continue;
+          // Almost always "Class;Subject" — one known cell in "Classes" uses
+          // a comma instead ("IX-D, Biology"), so fall back to it when there's
+          // no semicolon rather than silently dropping that class+period.
+          const delim = cell.includes(';') ? ';' : (cell.includes(',') ? ',' : null);
+          if (!delim) continue;
+          const parts = cell.split(delim);
           if (!possibleKeys.has(clean(parts[0]))) continue;
 
           const header = String(headers[i] || '').toLowerCase();
@@ -895,7 +925,7 @@ export async function POST(req) {
         }
       }
 
-      return NextResponse.json({ result: 'success', routine });
+      return NextResponse.json({ result: 'success', routine, meta });
     } catch (e) {
       return NextResponse.json({ result: 'error', message: 'Routine lookup failed: ' + e.message });
     }

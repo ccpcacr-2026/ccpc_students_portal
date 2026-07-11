@@ -1156,16 +1156,69 @@
         }
         return link(name);
     }
-    function loadPresentStatus() {
+    // School week is Sun-Thu — matches the "Classes" sheet's own Weekday column values.
+    const SCHEDULE_WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday'];
+
+    function renderWeekdayPicker(activeWeekday) {
+        const host = document.getElementById('schedule-weekday-picker');
+        if (!host) return;
+        const pill = (label, isActive, onclick) =>
+            `<button type="button" class="btn btn-sm rounded-pill fw-800 px-3" style="font-size:0.72rem;${isActive ? 'background:#10b981;color:#fff;border:none' : 'background:#f0fdf4;color:#047857;border:1px solid #d1fae5'}" onclick="${onclick}">${label}</button>`;
+        host.innerHTML = pill('Live', !activeWeekday, 'loadPresentStatus()') +
+            SCHEDULE_WEEKDAYS.map(w => pill(w.slice(0,3), activeWeekday === w, `loadPresentStatus('${w}')`)).join('');
+    }
+
+    // Non-live rendering shared by: (a) "Selected" hasn't been refreshed for
+    // today yet (shown honestly as the last real setup, not disguised as
+    // live), and (b) a picked weekday's general schedule from "Classes"
+    // (the master routine, no adjustments applied).
+    function renderScheduleBanner(routine, opts) {
+        let html = `<div class="row g-4"><div class="col-12"><div class="live-now-card break-card"><div class="d-flex justify-content-between align-items-start" style="position:relative;z-index:1">
+            <div style="flex:1;min-width:0;margin-right:12px">
+                <div class="d-flex align-items-center gap-2 mb-3"><span class="live-tag"><i class="bi bi-${opts.icon} me-1"></i>${opts.tag}</span></div>
+                <h3 class="live-subject" style="font-size:1.3rem">${opts.label}</h3>
+                <p class="live-teacher" style="margin-top:8px;opacity:0.85">${opts.note}</p>
+            </div>
+        </div></div></div>
+        <div class="col-12"><div class="routine-wrap"><table class="table table-hover align-middle mb-0"><thead><tr><th>Period</th><th>Subject</th><th>Teacher</th></tr></thead><tbody>`;
+        Object.keys(routine).forEach(p => {
+            const data = routine[p];
+            html += `<tr><td><span class="period-badge">${p}</span></td><td><span class="routine-subject-text">${data ? data.subject : '—'}</span></td><td><span class="routine-teacher-text">${getTeacherLabel(data, true)}</span></td></tr>`;
+        });
+        html += `</tbody></table></div></div></div>`;
+        return html;
+    }
+
+    function loadPresentStatus(weekday) {
         const container = document.getElementById('present-status-section');
         if (!container) return;
         if (!loggedInStudent || !loggedInStudent.class) {
             container.innerHTML = `<div class="alert alert-warning rounded-4 fw-800">Class information missing.</div>`; return;
         }
+        renderWeekdayPicker(weekday);
         container.innerHTML = `<div class="text-center p-5"><div class="spinner-border spinner-border-sm" style="color:#10b981"></div></div>`;
-        portalFetch('get_class_routine', { class_name: loggedInStudent.class, section: loggedInStudent.section }).then(res => {
+        portalFetch('get_class_routine', { class_name: loggedInStudent.class, section: loggedInStudent.section, weekday: weekday || undefined }).then(res => {
             if (res.result !== 'success') { container.innerHTML = `<div class="alert alert-danger rounded-4 fw-800">${res.message}</div>`; return; }
             const routine = res.routine;
+            const meta = res.meta || {};
+            const todayWeekday = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+            const isGenuinelyLive = !weekday && meta.source === 'selected' && meta.weekday === todayWeekday;
+
+            if (!isGenuinelyLive) {
+                container.innerHTML = meta.source === 'selected'
+                    ? renderScheduleBanner(routine, {
+                        tag: 'Latest Setup', icon: 'calendar-week',
+                        label: `${meta.weekday || '—'}${meta.date ? ', ' + meta.date : ''}`,
+                        note: `Today's schedule hasn't been set up yet — showing the last day staff ran "Setup New Day". Ask your class teacher, or pick a weekday above for the general schedule.`,
+                      })
+                    : renderScheduleBanner(routine, {
+                        tag: 'General Schedule', icon: 'calendar3',
+                        label: meta.weekday || weekday,
+                        note: `Master routine for ${meta.weekday || weekday} — doesn't include today's swaps or substitutions.`,
+                      });
+                return;
+            }
+
             const now = new Date(); const month = now.getMonth() + 1; const isWinter = (month >= 11 || month <= 3);
             const schedule = isWinter ? {"1st":["07:45","08:30"],"2nd":["08:30","09:15"],"3rd":["09:15","09:45"],"4th/Jr":["09:45","10:30"],"4th/Sr":["10:30","11:15"],"5th":["11:15","12:00"],"6th":["12:00","12:45"],"7th":["12:45","13:30"]} : {"1st":["08:15","09:00"],"2nd":["09:00","09:45"],"3rd":["09:45","10:15"],"4th/Jr":["10:15","11:00"],"4th/Sr":["11:00","11:45"],"5th":["11:45","12:30"],"6th":["12:30","13:15"],"7th":["13:15","14:00"]};
             const hh = now.getHours().toString().padStart(2,'0'); const mm = now.getMinutes().toString().padStart(2,'0'); const curTime = hh + ':' + mm;
@@ -2807,6 +2860,7 @@
                     <!-- 2. Schedule Pane -->
                     <div id="hub-schedule-pane" class="hub-tab-pane">
                         <h2 class="h4 section-title">Today's Schedule</h2>
+                        <div id="schedule-weekday-picker" class="d-flex gap-2 flex-wrap mb-3"></div>
                         <div id="present-status-section"></div>
                     </div>
 
