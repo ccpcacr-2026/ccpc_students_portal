@@ -59,6 +59,64 @@ function parseSheetSchedule(csv) {
   return scheduleMap;
 }
 
+// The routine sheet identifies teachers by 2-4 letter shortcode (column E of
+// the "Selected" tab, e.g. "SKD"), never by full name. The ONLY place that
+// code maps back to a real name is the "Logged in info" sheet's "NAME IN
+// SHORT" / "Full Name" columns — same cross-reference ccpc-teachers' own
+// Routine feature already relies on for the identical reason. Without this,
+// scheduleMap ends up keyed by shortcode while callers look it up by
+// full_name and every lookup silently misses.
+let _shortNameMapCache = null;
+async function getShortNameMap() {
+  if (_shortNameMapCache) return _shortNameMapCache;
+  const map = { byShort: {}, byFull: {} };
+  try {
+    const res = await fetch(
+      `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('Logged in info')}`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (res.ok) {
+      const rows = _parseCsv(await res.text());
+      const header = rows[0] || [];
+      const fnIdx = header.findIndex(h => String(h).trim() === 'Full Name');
+      const snIdx = header.findIndex(h => String(h).trim() === 'NAME IN SHORT');
+      if (fnIdx >= 0 && snIdx >= 0) {
+        for (let i = 1; i < rows.length; i++) {
+          const shortname = String(rows[i][snIdx] || '').trim();
+          const fullName = String(rows[i][fnIdx] || '').trim();
+          if (!shortname || !fullName) continue;
+          map.byShort[shortname] = fullName;
+          map.byFull[fullName] = shortname;
+        }
+      }
+    }
+  } catch (_) { /* resolution is best-effort — falls back to the bare shortcode */ }
+  _shortNameMapCache = map;
+  return map;
+}
+
+// Minimal RFC4180 CSV parser — gviz always quotes every field (same parser
+// shape as ccpc-teachers' _fetchSheetRows, so both apps read sheets identically).
+function _parseCsv(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      rows.push(row); row = [];
+    } else field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
 async function sb(path, method = 'GET', body = null, extra = {}) {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
     method,
@@ -721,41 +779,126 @@ export async function POST(req) {
     );
     if (rows?.error) return NextResponse.json([]);
 
-    // Try to enrich with schedule from legacy Google Sheet
+    // Try to enrich with schedule from the live routine sheet ("Selected" tab,
+    // ROUTINE_GID) — keyed by shortcode there, so resolve each teacher's own
+    // shortcode via the "Logged in info" cross-reference before looking up.
     let scheduleMap = {};
+    let shortNameMap = { byShort: {}, byFull: {} };
     try {
       const sheetRes = await fetch(
         `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/export?format=csv&gid=${ROUTINE_GID}`,
         { signal: AbortSignal.timeout(6000) }
       );
       if (sheetRes.ok) scheduleMap = parseSheetSchedule(await sheetRes.text());
+      shortNameMap = await getShortNameMap();
     } catch(_) { /* schedule is optional */ }
 
-    return NextResponse.json((rows || []).filter(t => t.full_name).map(t => ({
-      name: t.full_name,
-      name_bengali: t.name_bengali || '',
-      designation: t.designation || '',
-      department: t.department || '',
-      category: t.category || '',
-      phone: t.phone || t.mobile || '',
-      whatsapp: t.whatsapp || '',
-      email: t.email || t.personal_email || '',
-      blood_group: t.blood_group || '',
-      photo: t.photo_url || '',
-      gender: t.gender || '',
-      schedule: scheduleMap[t.full_name] || [],
-    })));
+    return NextResponse.json((rows || [])
+      .filter(t => t.full_name && t.category !== 'Non-Teaching')
+      .map(t => {
+        const shortcode = shortNameMap.byFull[t.full_name];
+        return {
+          name: t.full_name,
+          name_bengali: t.name_bengali || '',
+          designation: t.designation || '',
+          department: t.department || '',
+          category: t.category || '',
+          phone: t.phone || t.mobile || '',
+          whatsapp: t.whatsapp || '',
+          email: t.email || t.personal_email || '',
+          blood_group: t.blood_group || '',
+          photo: t.photo_url || '',
+          gender: t.gender || '',
+          schedule: (shortcode && scheduleMap[shortcode]) || [],
+        };
+      }));
   }
 
   // ── Get Class Routine ─────────────────────────────────────────────────────
+  // Scans the live routine sheet directly (same "Selected" tab get_teacher_directory
+  // reads) — there is no portal_routines table write path, so that table is
+  // never populated; querying it always returned "No routine found."
   if (action === 'get_class_routine') {
     const { class_name, section } = payload;
-    const filter = section
-      ? `portal_routines?class_name=eq.${encodeURIComponent(class_name)}&section=eq.${encodeURIComponent(section)}`
-      : `portal_routines?class_name=eq.${encodeURIComponent(class_name)}`;
-    const rows = await sb(filter);
-    if (rows?.error || !rows.length) return NextResponse.json({ result: 'error', message: 'No routine found.' });
-    return NextResponse.json({ result: 'success', routine: rows[0].routine || {} });
+    if (!class_name) return NextResponse.json({ result: 'error', message: 'class_name required.' });
+    try {
+      const sheetRes = await fetch(
+        `https://docs.google.com/spreadsheets/d/${ROUTINE_SHEET_ID}/export?format=csv&gid=${ROUTINE_GID}`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (!sheetRes.ok) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet.' });
+      const rows = _parseCsv(await sheetRes.text());
+
+      // Header row = the one containing a "1st"-style period label; the name
+      // column is immediately before the first such label (same detection
+      // parseSheetSchedule uses, applied here so both stay in sync).
+      const hIdx = rows.findIndex(r => r.some(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c)));
+      if (hIdx === -1) return NextResponse.json({ result: 'error', message: 'Could not read the routine sheet header.' });
+      const headers = rows[hIdx];
+      const firstPeriodIdx = headers.findIndex(c => /^\d+(st|nd|rd|th)/i.test(c) || /^4th\//i.test(c));
+      const nameCol = firstPeriodIdx > 0 ? firstPeriodIdx - 1 : 0;
+      const dataRows = rows.slice(hIdx + 1);
+
+      // Build every accepted spelling of the student's class+section — the
+      // sheet mixes Roman numerals (VI, X), Arabic (6, 10) and English words
+      // (Six, Ten) across different grades, with or without a hyphen.
+      const romanMap = { '1':'I','2':'II','3':'III','4':'IV','5':'V','6':'VI','7':'VII','8':'VIII','9':'IX','10':'X' };
+      const englishMap = { '1':'one','2':'two','3':'three','4':'four','5':'five','6':'six','7':'seven','8':'eight','9':'nine','10':'ten' };
+      const arabicMap = Object.fromEntries(Object.entries(romanMap).map(([k,v]) => [v,k]));
+      const englishToArabic = Object.fromEntries(Object.entries(englishMap).map(([k,v]) => [v,k]));
+      const clean = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      const possibleKeys = new Set([clean(`${class_name}-${section}`), clean(`${class_name}${section}`)]);
+      let arabicBase = null;
+      if (romanMap[class_name]) arabicBase = class_name;
+      else if (arabicMap[class_name.toUpperCase()]) arabicBase = arabicMap[class_name.toUpperCase()];
+      else if (englishToArabic[class_name.toLowerCase()]) arabicBase = englishToArabic[class_name.toLowerCase()];
+      if (arabicBase) {
+        [arabicBase, romanMap[arabicBase], englishMap[arabicBase]].forEach(fmt => {
+          if (fmt) { possibleKeys.add(clean(`${fmt}-${section}`)); possibleKeys.add(clean(`${fmt}${section}`)); }
+        });
+      }
+
+      const shortNameMap = await getShortNameMap();
+      const routine = { '1st': null, '2nd': null, '3rd': null, '4th/Jr': null, '4th/Sr': null, '5th': null, '6th': null, '7th': null };
+
+      for (const row of dataRows) {
+        const rowTeacher = String(row[nameCol] || '').trim();
+        if (!rowTeacher) continue;
+        for (let i = firstPeriodIdx; i < headers.length; i++) {
+          const cell = String(row[i] || '').trim();
+          if (!cell || !cell.includes(';')) continue;
+          const parts = cell.split(';');
+          if (!possibleKeys.has(clean(parts[0]))) continue;
+
+          const header = String(headers[i] || '').toLowerCase();
+          let periodKey = headers[i];
+          if (header.includes('junior')) periodKey = '4th/Jr';
+          else if (header.includes('senior')) periodKey = '4th/Sr';
+          if (!(periodKey in routine) || routine[periodKey]) continue; // first match wins
+
+          // A trailing "(XX)" on the subject means this row's own teacher is
+          // covering for XX today — the row owner is who's ACTUALLY there;
+          // XX is who they're substituting for. (Verified convention — see
+          // ccpc-teachers' getTodayRoutineBoard, same sheet, same annotation.)
+          let subject = (parts[1] || parts[0]).trim();
+          let originalShort = null;
+          const adjMatch = subject.match(/\(([^)]+)\)\s*$/);
+          if (adjMatch) { originalShort = adjMatch[1].trim(); subject = subject.replace(/\(([^)]+)\)\s*$/, '').trim(); }
+
+          routine[periodKey] = {
+            subject,
+            teacher: shortNameMap.byShort[rowTeacher] || rowTeacher,
+            originalTeacher: originalShort ? (shortNameMap.byShort[originalShort] || originalShort) : (shortNameMap.byShort[rowTeacher] || rowTeacher),
+            isAdjusted: !!originalShort,
+          };
+        }
+      }
+
+      return NextResponse.json({ result: 'success', routine });
+    } catch (e) {
+      return NextResponse.json({ result: 'error', message: 'Routine lookup failed: ' + e.message });
+    }
   }
 
   // ── Get Attendance History ────────────────────────────────────────────────
