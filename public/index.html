@@ -1252,7 +1252,15 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action, payload })
             });
-            if (!r.ok) throw new Error('Network error ' + r.status);
+            if (!r.ok) {
+                // Surface the server's own message when it sent one (e.g. an
+                // auth/validation error) instead of masking it behind a generic
+                // "Network error" — callers that show err.message in a toast
+                // get the real reason; ones that don't are unaffected.
+                let serverMsg = '';
+                try { const body = await r.json(); serverMsg = body?.message || body?.error || ''; } catch (_) {}
+                throw new Error(serverMsg || ('Network error ' + r.status));
+            }
             return r.json();
         }
 
@@ -3495,9 +3503,9 @@
                         : `<i class="bi bi-cloud-arrow-up-fill me-1"></i>Import ${res.newCount} New Student${res.newCount===1?'':'s'}`;
                 document.getElementById('import-preview-section').classList.remove('hidden');
                 document.getElementById('import-result-section').classList.add('hidden');
-            }).catch(() => {
+            }).catch((err) => {
                 if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-search me-1"></i>Preview Import'; }
-                if (typeof showToast === 'function') showToast('Network error during preview', 'error');
+                if (typeof showToast === 'function') showToast((err && err.message) || 'Network error during preview', 'error');
             });
         }
 
@@ -3530,9 +3538,9 @@
                 if (btn) { btn.disabled = true; btn.innerHTML = 'Done'; }
                 const msg = updateExisting ? `Imported ${res.inserted} new, updated ${res.updated} existing` : `Imported ${res.inserted} new student(s)`;
                 if (typeof showToast === 'function') showToast(msg, 'success');
-            }).catch(() => {
+            }).catch((err) => {
                 if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill me-1"></i>Retry Import'; }
-                if (typeof showToast === 'function') showToast('Network error during import', 'error');
+                if (typeof showToast === 'function') showToast((err && err.message) || 'Network error during import', 'error');
             });
         }
 
