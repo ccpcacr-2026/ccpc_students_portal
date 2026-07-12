@@ -3574,6 +3574,15 @@
                 </div>`;
         }
 
+        // Duplicate/Cut/Copy/Paste toolbar shared by both row types (label + field).
+        // Kept as one string so the button set/order can't drift between them.
+        const _fieldRowActions = `
+            <button type="button" onclick="duplicateField(this)" class="btn btn-outline-secondary border-0" title="Duplicate"><i class="bi bi-files"></i></button>
+            <button type="button" onclick="cutField(this)" class="btn btn-outline-secondary border-0" title="Cut (Ctrl+X)"><i class="bi bi-scissors"></i></button>
+            <button type="button" onclick="copyField(this)" class="btn btn-outline-secondary border-0" title="Copy (Ctrl+C)"><i class="bi bi-clipboard"></i></button>
+            <button type="button" onclick="pasteField(this)" class="btn btn-outline-secondary border-0" title="Paste after this field (Ctrl+V)"><i class="bi bi-clipboard-check"></i></button>
+            <button type="button" onclick="this.closest('.draggable-row').remove()" class="btn btn-outline-danger border-0" title="Delete"><i class="bi bi-trash3-fill"></i></button>`;
+
         function addTabRow(type, data = null) {
             const container = document.getElementById('fields-list');
             const row = document.createElement('div');
@@ -3590,11 +3599,17 @@
                     if (c.indexOf(dr) < c.indexOf(row)) row.after(dr); else row.before(dr);
                 }
             };
+            // Click the row's own background/grip (not an input/select/button) to
+            // select it — only needed so Ctrl+X/C/V know which field to act on.
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('input,select,textarea,button,a')) return;
+                setActiveField(row);
+            });
             const grip = `<div class="col-auto"><i class="bi bi-grip-vertical fs-3 text-muted" style="cursor:grab"></i></div>`;
             // Preserve the field's stable data_key so conditional references don't break on edit
             const keyInput = `<input type="hidden" class="f-key" value="${data?.data_key || ''}">`;
             if (type === 'label') {
-                row.innerHTML = `${grip}<div class="col"><input type="text" placeholder="Identity Header" class="form-control fw-800 text-primary" value="${data?.label||''}"></div><input type="hidden" class="f-type" value="group_label">${keyInput}<div class="col-auto"><button onclick="this.closest('.draggable-row').remove()" class="btn btn-outline-danger border-0"><i class="bi bi-trash3-fill"></i></button></div>${showIfBlockHtml(data)}`;
+                row.innerHTML = `${grip}<div class="col"><input type="text" placeholder="Identity Header" class="form-control fw-800 text-primary" value="${data?.label||''}"></div><input type="hidden" class="f-type" value="group_label">${keyInput}<div class="col-auto d-flex gap-1">${_fieldRowActions}</div>${showIfBlockHtml(data)}`;
             } else {
                 row.innerHTML = `${grip}
                     <div class="col-md-4"><input type="text" placeholder="Label" class="form-control" value="${data?.name||''}"></div>
@@ -3609,7 +3624,7 @@
                     </div>
                     <div class="col-md-4"><input type="text" placeholder="Options (comma separated)" class="form-control f-options ${['checkbox','choose'].includes(data?.type)?'':'hidden'}" value="${(data?.options||[]).join(',')}"></div>
                     ${keyInput}
-                    <div class="col-auto"><button onclick="this.closest('.draggable-row').remove()" class="btn btn-outline-danger border-0"><i class="bi bi-trash3-fill"></i></button></div>
+                    <div class="col-auto d-flex gap-1">${_fieldRowActions}</div>
                     ${showIfBlockHtml(data)}`;
             }
             container.appendChild(row);
@@ -3620,7 +3635,99 @@
             const cond = parseShowIfForEditor(data?.show_if);
             populateShowIfSelect(row.querySelector('.showif-field'), cond[0].field);
             populateShowIfSelect(row.querySelector('.showif-field2'), cond[1].field);
+            return row;
         }
+
+        // ── Select / Duplicate / Cut / Copy / Paste for the field builder ───────────
+        let _activeFieldRow = null;
+        let _fieldClipboard = null;
+        function setActiveField(row) {
+            document.querySelectorAll('#fields-list .draggable-row').forEach(r => { r.style.outline = ''; r.style.background = ''; });
+            row.style.outline = '2px solid var(--primary)';
+            row.style.background = '#f0fdf9';
+            _activeFieldRow = row;
+        }
+        // Read a row's "Show only if" controls → a show_if object (or null). Shared
+        // by saveNewTab() (which used to have its own private copy of this) and the
+        // duplicate/cut/copy serializer below, so both read it identically.
+        function _readRowShowIf(row) {
+            const f1 = row.querySelector('.showif-field')?.value.trim();
+            const v1 = row.querySelector('.showif-value')?.value.trim();
+            const f2 = row.querySelector('.showif-field2')?.value.trim();
+            const v2 = row.querySelector('.showif-value2')?.value.trim();
+            const conds = [];
+            if (f1) conds.push({ field: f1, value: v1 });
+            if (f2) conds.push({ field: f2, value: v2 });
+            if (conds.length === 0) return null;
+            if (conds.length === 1) return conds[0];
+            return { all: conds };
+        }
+        // A duplicated/cut/copied field is a NEW field — deliberately omits
+        // data_key so addTabRow leaves it blank; saveNewTab() then derives a
+        // fresh one from the label (and de-dupes against a same-label original
+        // automatically, e.g. "label_1").
+        function serializeFieldRow(row) {
+            const type = row.querySelector('.f-type')?.value;
+            const show_if = _readRowShowIf(row) || undefined;
+            if (type === 'group_label') {
+                return { kind: 'label', data: { label: row.querySelector('input[type="text"]')?.value || '', show_if } };
+            }
+            const name = row.querySelector('input[placeholder*="Label"]')?.value || '';
+            const options = (row.querySelector('.f-options')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+            return { kind: 'field', data: { name, type, options, show_if } };
+        }
+        function duplicateField(btn) {
+            const row = btn.closest('.draggable-row');
+            const { kind, data } = serializeFieldRow(row);
+            const newRow = addTabRow(kind, data);
+            row.after(newRow);
+            setActiveField(newRow);
+            newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        function copyField(btn) {
+            const row = btn.closest('.draggable-row');
+            _fieldClipboard = serializeFieldRow(row);
+            setActiveField(row);
+            if (typeof showToast === 'function') showToast('Field copied', 'info');
+        }
+        function cutField(btn) {
+            const row = btn.closest('.draggable-row');
+            _fieldClipboard = serializeFieldRow(row);
+            row.remove();
+            if (_activeFieldRow === row) _activeFieldRow = null;
+            if (typeof showToast === 'function') showToast('Field cut — Ctrl+V or Paste to place it', 'info');
+        }
+        function _pasteAfter(afterRow) {
+            if (!_fieldClipboard) { if (typeof showToast === 'function') showToast('Nothing to paste — copy or cut a field first', 'warn'); return; }
+            const newRow = addTabRow(_fieldClipboard.kind, _fieldClipboard.data);
+            if (afterRow) afterRow.after(newRow); // else it stays where addTabRow appended it (end of list)
+            setActiveField(newRow);
+            newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        function pasteField(btn) { _pasteAfter(btn.closest('.draggable-row')); }
+
+        // Ctrl+X/C/V act on whichever field was last clicked (setActiveField) —
+        // but only when focus isn't inside a text input/select, so typing in a
+        // field's own Label/Options box keeps using the browser's native
+        // cut/copy/paste for text, never the field-level one.
+        document.addEventListener('keydown', (e) => {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            const key = e.key.toLowerCase();
+            if (key !== 'x' && key !== 'c' && key !== 'v') return;
+            const activeTag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+            if (['input', 'textarea', 'select'].includes(activeTag)) return;
+            if (!document.getElementById('fields-list')) return; // only on the tab builder screen
+            if (key === 'v') { e.preventDefault(); _pasteAfter(_activeFieldRow); return; }
+            if (!_activeFieldRow) return;
+            e.preventDefault();
+            _fieldClipboard = serializeFieldRow(_activeFieldRow);
+            if (key === 'x') {
+                const row = _activeFieldRow;
+                row.remove();
+                _activeFieldRow = null;
+                if (typeof showToast === 'function') showToast('Field cut', 'info');
+            } else if (typeof showToast === 'function') showToast('Field copied', 'info');
+        });
 
         // All selectable controller fields currently in the builder (data_key → label)
         function getBuilderFieldKeys() {
@@ -3686,19 +3793,7 @@
             if (!name) return alert("Title required");
             const fields = []; let cl = '';
             const sz = (s) => s.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
-            // Read the "Show only if" controls of a row → a show_if object (or null)
-            const readShowIf = (row) => {
-                const f1 = row.querySelector('.showif-field')?.value.trim();
-                const v1 = row.querySelector('.showif-value')?.value.trim();
-                const f2 = row.querySelector('.showif-field2')?.value.trim();
-                const v2 = row.querySelector('.showif-value2')?.value.trim();
-                const conds = [];
-                if (f1) conds.push({ field: f1, value: v1 });
-                if (f2) conds.push({ field: f2, value: v2 });
-                if (conds.length === 0) return null;
-                if (conds.length === 1) return conds[0];
-                return { all: conds };
-            };
+            const readShowIf = _readRowShowIf;
             const optionless = [];
             document.querySelectorAll('#fields-list .draggable-row').forEach(row => {
                 const type = row.querySelector('.f-type').value;
