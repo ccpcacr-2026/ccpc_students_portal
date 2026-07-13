@@ -402,6 +402,8 @@
         .bottom-nav::-webkit-scrollbar { display: none; }
 
         @media (max-width: 991px) { .bottom-nav { display: flex; } }
+        /* No buttons (logged out) -> no bar at all, even on mobile */
+        .bottom-nav:empty { display: none !important; }
 
         .bottom-nav .nav-item-btn {
             flex-direction: column; font-size: 0.58rem; padding: 7px 5px;
@@ -1354,6 +1356,11 @@
 
         let loggedInStudent = null;
         let allTabs = [];
+        // Bumped on every UI reset/rebuild. Async callbacks (get_tabs) capture it
+        // before fetching and bail if it changed — otherwise a logout while the
+        // request is in flight lets the callback append custom-tab buttons onto
+        // the login screen's always-visible mobile bottom nav.
+        let uiEpoch = 0;
 
         window.onerror = function(msg, url, lineNo, columnNo, error) {
             console.error('Global Error: ' + msg + ' at ' + url + ':' + lineNo);
@@ -1362,6 +1369,7 @@
 
         function resetUI() {
             try {
+                uiEpoch++;
                 const els = ['login-section', 'form-section', 'admin-section', 'btn-logout-fixed', 'sidebar-container', 'mobile-header'];
                 els.forEach(id => {
                     const el = document.getElementById(id);
@@ -1768,7 +1776,8 @@
                 const bottom = document.getElementById('bottom-nav-container');
                 const sidebar = document.getElementById('sidebar-items');
                 const content = document.getElementById('portal-content-wrapper');
-                
+
+                uiEpoch++; // invalidate any pending get_tabs from a previous login
                 if(bottom) bottom.innerHTML = '';
                 if(sidebar) sidebar.innerHTML = '';
 
@@ -2704,6 +2713,7 @@
                 const bottom = document.getElementById('bottom-nav-container');
                 const content = document.getElementById('portal-content-wrapper');
 
+                uiEpoch++; // invalidate any pending get_tabs from a previous login
                 if(sidebar) sidebar.innerHTML = '';
                 if(bottom) bottom.innerHTML = '';
                 if(content) content.innerHTML = '';
@@ -2926,8 +2936,10 @@
                     if (typeof loadAttendanceHistoryInHub === 'function') loadAttendanceHistoryInHub();
                 } catch(e) { console.error("Error in loadAttendanceHistoryInHub", e); }
 
+                const tabsEpoch = uiEpoch;
                 portalFetch('get_tabs', { student_id: loggedInStudent.student_id }).then(tabs => {
                     console.log("Tabs received", tabs);
+                    if (tabsEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
                     if (!Array.isArray(tabs)) return;
                     tabs.forEach((t, i) => {
                         try {
