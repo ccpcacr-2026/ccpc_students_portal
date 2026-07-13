@@ -253,6 +253,30 @@ async function getGPToken(settings) {
   throw new Error('GP token fetch failed: ' + JSON.stringify(data));
 }
 
+// GP's real (documented) location endpoint — POST with a JSON {imei:[...]}
+// body, NOT the GET /tracking/latest?imei= this used to call (that path
+// doesn't exist at all — 404s). Also needs the api-key header on THIS call
+// too, not just on /auth/token. Response fields per GP's docs: latitude/
+// longitude (strings), speed, heading, engineStatus (bool), locationTime,
+// address — none of which match the ignition/lat/lng/timestamp names this
+// used to read, so every result silently came back empty.
+async function queryGPLocations(settings, imeiList) {
+  const { token, baseUrl } = await getGPToken(settings);
+  const r = await fetch(`${baseUrl}/api/v1/vts/location/current-attributes`, {
+    method: 'POST',
+    headers: {
+      'api-key': settings.api_key,
+      channel: settings.channel || 'ALOEXT',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ imei: imeiList }),
+  });
+  const json = await r.json();
+  if (!r.ok) throw new Error(`GP location query failed (HTTP ${r.status}): ${JSON.stringify(json)}`);
+  return Array.isArray(json?.data) ? json.data : [];
+}
+
 // ── Canteen helpers (shared with the ccpc-canteen app on the same tables) ────
 const CANTEEN_DEFAULTS = {
   enable_daily_limit: true, enable_monthly_limit: true, enable_lending_limit: true,
@@ -788,16 +812,12 @@ export async function POST(req) {
     try {
       const rows = await sb('portal_settings?key=eq.gp_credentials');
       const settings = (!rows?.error && rows[0]) ? rows[0].value : {};
-      const { token, baseUrl } = await getGPToken(settings);
-      const r = await fetch(`${baseUrl}/tracking/latest?imei=${encodeURIComponent(payload.imei)}`, {
-        headers: { Authorization: `Bearer ${token}`, channel: settings.channel || 'ALOEXT' },
-      });
-      const data = await r.json();
-      if (r.ok && data?.data) {
-        const d = data.data;
-        return NextResponse.json({ result: 'success', data: { address: d.address || 'Unknown', speed: d.speed || 0, engine: d.ignition ? 'ON' : 'OFF', time: d.timestamp || '' } });
+      const items = await queryGPLocations(settings, [String(payload.imei)]);
+      const d = items[0];
+      if (d && (d.latitude || d.longitude)) {
+        return NextResponse.json({ result: 'success', data: { address: d.address || 'Unknown', speed: d.speed || 0, engine: d.engineStatus ? 'ON' : 'OFF', time: d.locationTime || '' } });
       }
-      return NextResponse.json({ result: 'error', message: `HTTP ${r.status}: ${JSON.stringify(data)}` });
+      return NextResponse.json({ result: 'error', message: d ? 'Device found but has no location fix yet.' : 'No data returned for this IMEI.' });
     } catch (e) {
       return NextResponse.json({ result: 'error', message: e.message });
     }
@@ -814,13 +834,7 @@ export async function POST(req) {
       const busRegistry = sm.bus_registry || [];
       if (!busRegistry.length) return NextResponse.json({ result: 'success', data: [], trackers: 0, dataAge: 0 });
 
-      const { token, baseUrl } = await getGPToken(creds);
-      const imeis = busRegistry.map(b => b.imei).join(',');
-      const r = await fetch(`${baseUrl}/tracking/latest?imei=${encodeURIComponent(imeis)}`, {
-        headers: { Authorization: `Bearer ${token}`, channel: creds.channel || 'ALOEXT' },
-      });
-      const json = await r.json();
-      const items = Array.isArray(json?.data) ? json.data : (json?.data ? [json.data] : []);
+      const items = await queryGPLocations(creds, busRegistry.map(b => String(b.imei)));
       const dataMap = {};
       items.forEach(d => { dataMap[d.imei] = d; });
 
@@ -829,13 +843,13 @@ export async function POST(req) {
         const spd = parseFloat(d.speed || 0);
         return {
           name: b.name, imei: b.imei,
-          lat: parseFloat(d.latitude || d.lat || 0),
-          lng: parseFloat(d.longitude || d.lng || 0),
+          lat: parseFloat(d.latitude || 0),
+          lng: parseFloat(d.longitude || 0),
           speed: String(spd), isMoving: spd > 2,
-          engine: !!(d.ignition || d.engine),
+          engine: !!d.engineStatus,
           address: d.address || 'Unknown location',
-          time: d.timestamp || d.time || '',
-          heading: d.direction || 0,
+          time: d.locationTime || '',
+          heading: d.heading || 0,
         };
       });
 
