@@ -958,6 +958,13 @@
                                         </div>
                                     </div>
 
+                                    <!-- Permanent tabs (Wallet, Canteen, Stationary, etc.) — built-in, not user-created -->
+                                    <div class="mt-5 p-4 rounded-4 border shadow-sm" style="background:#fff">
+                                        <span class="fw-800"><i class="bi bi-pin-angle-fill text-primary me-2"></i>Permanent Tabs</span>
+                                        <p class="small text-muted mb-3" style="font-size:0.72rem">These built-in tabs aren't made in the builder above — turn any of them off to hide it from every student without deleting anything. Personal Hub is always on.</p>
+                                        <div id="permanent-tabs-list" class="row g-3"></div>
+                                    </div>
+
                                     <hr class="my-5 opacity-25">
                                     <div id="admin-tabs-list" class="row g-4"></div>
                                 </div>
@@ -1362,6 +1369,15 @@
 
         let loggedInStudent = null;
         let allTabs = [];
+        // Built-in tabs (as opposed to tab-builder custom ones in portal_tabs).
+        // Personal Hub is intentionally excluded — always on, no toggle for it.
+        const PERMANENT_TABS = [
+            { id: 'wallet', name: 'Wallet', icon: 'bi-wallet2' },
+            { id: 'canteen', name: 'Canteen', icon: 'bi-cup-hot-fill' },
+            { id: 'stationary', name: 'Stationary', icon: 'bi-bag-fill' },
+            { id: 'teachers', name: 'Teacher Directory', icon: 'bi-people-fill' },
+            { id: 'bus-tracking', name: 'Live Bus Tracking', icon: 'bi-bus-front-fill' },
+        ];
         // Bumped on every UI reset/rebuild. Async callbacks (get_tabs) capture it
         // before fetching and bail if it changed — otherwise a logout while the
         // request is in flight lets the callback append custom-tab buttons onto
@@ -1842,6 +1858,7 @@
                 if(bottom) bottom.appendChild(bLog);
 
                 loadAdminTabs();
+                loadPermanentTabsAdmin();
                 loadIncludeFields();
                 loadEditableProfileFields();
                 loadTrackingConfig();
@@ -2805,11 +2822,12 @@
                 if(_sbCard) _sbCard.style.display = 'flex';
 
                 addNav('profile', 'Personal Hub', 'bi-person-badge-fill', true);
-                addNav('wallet', 'Wallet', 'bi-wallet2');
-                addNav('canteen', 'Canteen', 'bi-cup-hot-fill');
-                addNav('stationary', 'Stationary', 'bi-bag-fill');
-                addNav('teachers', 'Teacher Directory', 'bi-people-fill');
-                addNav('bus-tracking', 'Live Bus Tracking', 'bi-bus-front-fill');
+                portalFetch('get_permanent_tabs_config', {}).then(cfg => {
+                    PERMANENT_TABS.forEach(t => { if ((cfg || {})[t.id] !== false) addNav(t.id, t.name, t.icon); });
+                }).catch(() => {
+                    // Settings fetch failed: fail open so a network hiccup never hides a real feature.
+                    PERMANENT_TABS.forEach(t => addNav(t.id, t.name, t.icon));
+                });
 
                 const profPane = document.createElement('div');
                 profPane.className = 'tab-pane active'; profPane.id = 'profile-content';
@@ -3227,6 +3245,43 @@
                 if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Editable fields saved', 'success'); else alert('Saved'); }
                 else { if (typeof showToast === 'function') showToast('Save failed', 'error'); }
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function loadPermanentTabsAdmin() {
+            portalFetch('get_permanent_tabs_config', {}).then(cfg => {
+                const list = document.getElementById('permanent-tabs-list');
+                if (!list) return;
+                cfg = cfg || {};
+                list.innerHTML = PERMANENT_TABS.map(t => {
+                    const enabled = cfg[t.id] !== false;
+                    return `
+                    <div class="col-md-6">
+                        <div class="card p-3 mb-0 shadow-sm border-0 d-flex flex-row justify-content-between align-items-center" style="${enabled ? '' : 'opacity:0.6'}">
+                            <div class="text-truncate"><strong><i class="bi ${t.icon} me-2 text-primary"></i>${t.name}</strong>${enabled ? '' : ' <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:0.6rem">Hidden from students</span>'}</div>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="perm-tab-${t.id}" ${enabled?'checked':''} onchange="togglePermanentTab('${t.id}', this.checked)">
+                                <label class="form-check-label small fw-700" for="perm-tab-${t.id}">${enabled?'Active':'Inactive'}</label>
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }).catch(() => {});
+        }
+
+        function togglePermanentTab(id, isOn) {
+            portalFetch('get_permanent_tabs_config', {}).then(cfg => {
+                cfg = cfg || {};
+                cfg[id] = isOn;
+                return portalFetch('set_permanent_tabs_config', cfg);
+            }).then(res => {
+                const tabName = (PERMANENT_TABS.find(t => t.id === id) || {}).name || id;
+                if (res && res.result === 'success') {
+                    if (typeof showToast === 'function') showToast(isOn ? `"${tabName}" is now visible to students` : `"${tabName}" is now hidden from students`, 'success');
+                } else if (typeof showToast === 'function') {
+                    showToast((res && res.message) || 'Could not update status', 'error');
+                }
+                loadPermanentTabsAdmin();
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); loadPermanentTabsAdmin(); });
         }
 
         let PROMOTED_TABS = [];
