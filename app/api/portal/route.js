@@ -527,9 +527,27 @@ export async function POST(req) {
     const { tab_name } = payload;
     const rows = await sb(`portal_submissions?tab_name=eq.${encodeURIComponent(tab_name)}&order=submitted_at.asc`);
     if (rows?.error || !rows.length) return NextResponse.json({ headers: ['student_id'], rows: [] });
-    const allKeys = new Set(['student_id']);
-    rows.forEach(r => Object.keys(r.data || {}).forEach(k => allKeys.add(k)));
-    const headers = [...allKeys];
+
+    // Column order follows the tab's configuration (profile include-fields first,
+    // then the form fields as arranged in the builder). Extra keys found only in
+    // older submissions are appended at the end so no data is ever hidden.
+    const tabRow = await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(tab_name)}`);
+    const cfg = (!tabRow?.error && tabRow[0]) ? tabRow[0] : null;
+    const ordered = ['student_id'];
+    if (cfg) {
+      try {
+        JSON.parse(cfg.include_fields_json || '[]').forEach(k => { if (k && !ordered.includes(k)) ordered.push(k); });
+      } catch {}
+      try {
+        JSON.parse(cfg.fields_json || '[]').forEach(f => {
+          const k = f?.data_key || f?.id;
+          if (k && f.type !== 'group_label' && !ordered.includes(k)) ordered.push(k);
+        });
+      } catch {}
+    }
+    const extras = new Set();
+    rows.forEach(r => Object.keys(r.data || {}).forEach(k => { if (!ordered.includes(k)) extras.add(k); }));
+    const headers = [...ordered, ...extras];
     const dataRows = rows.map(r => headers.map(h => h === 'student_id' ? r.student_id : (r.data?.[h] ?? '')));
     return NextResponse.json({ headers, rows: dataRows });
   }
