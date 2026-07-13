@@ -665,7 +665,9 @@
         }
 
         @media (max-width: 991px) {
-            .designer-credit { position: relative; bottom: 0; right: auto; text-align: center; background: transparent; backdrop-filter: none; border: none; box-shadow: none; width: 100%; margin-top: -50px; padding-bottom: 80px; pointer-events: none; }
+            /* z-index below the bottom nav (1050) so the credit slides under it while
+               scrolling instead of painting on top of the translucent bar */
+            .designer-credit { position: relative; bottom: 0; right: auto; text-align: center; background: transparent; backdrop-filter: none; border: none; box-shadow: none; width: 100%; margin-top: -50px; padding-bottom: 88px; pointer-events: none; z-index: 1; }
         }
 
         /* ── Animations & Utilities ──────────────────── */
