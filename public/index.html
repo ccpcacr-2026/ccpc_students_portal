@@ -2499,10 +2499,25 @@
 
         function evaluateConditionalFields(form) {
             if (!form) return;
+            // Locked (read-only) tabs render with no submit button and every control
+            // already disabled — nothing to submit, so skip the enable/disable dance below.
+            const locked = !form.querySelector('button[type="submit"]');
             form.querySelectorAll('[data-show-if]').forEach(el => {
                 try {
                     const showIf = JSON.parse(el.dataset.showIf);
-                    el.style.display = matchShowIfForm(showIf, form) ? '' : 'none';
+                    const show = matchShowIfForm(showIf, form);
+                    el.style.display = show ? '' : 'none';
+                    // A hidden field that's still `required` (every "choose"/dropdown field
+                    // is rendered required — see renderField) makes the browser's native
+                    // validation silently abort the ENTIRE form submit: it can't focus a
+                    // display:none control to show "please fill this out", so it just
+                    // cancels — our own submit handler never runs, no network call, no
+                    // status message, nothing. Disabling hidden controls excludes them from
+                    // validation (and from the submitted data, which is also correct — an
+                    // answer to a question the student was never shown shouldn't be saved).
+                    if (!locked) {
+                        el.querySelectorAll('input, select, textarea').forEach(ctrl => { ctrl.disabled = !show; });
+                    }
                 } catch(e) {}
             });
         }
