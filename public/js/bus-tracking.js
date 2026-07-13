@@ -525,9 +525,19 @@ function updateBusMarker(bus) {
 }
 
 // Export for global use
+/**
+ * Recalculate the map's size after its container becomes visible.
+ * The map is initialized inside a hidden tab-pane (display:none), so Leaflet
+ * sizes it 0x0; without this call the map stays gray when the tab opens.
+ */
+function refreshMapSize() {
+  if (map) setTimeout(() => map.invalidateSize(), 50);
+}
+
 window.BusTracking = {
   initBusMap,
   stopBusTracking,
   exportBusData,
   selectBus,
+  refreshMapSize,
 };

@@ -2144,11 +2144,15 @@
             const target = document.getElementById(`${id}-content`);
             if (target) {
                 target.classList.add('active');
-                if (id === 'bus-tracking') {
-                    const iframe = target.querySelector('iframe');
-                    if (iframe && !iframe.src) {
-                        iframe.src = '/bus_tracking.html';
+                if (id === 'bus-tracking' && window.BusTracking) {
+                    // Init lazily on first open; afterwards just recalc the map size —
+                    // Leaflet was initialized while this pane was display:none and
+                    // stays gray until invalidateSize() runs with the pane visible.
+                    if (!window.busTrackingInitialized) {
+                        BusTracking.initBusMap();
+                        window.busTrackingInitialized = true;
                     }
+                    BusTracking.refreshMapSize();
                 }
                 if (id === 'attendance') {
                     loadAttendanceHistory();
