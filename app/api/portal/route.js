@@ -498,27 +498,32 @@ export async function POST(req) {
     if (!student_id) return NextResponse.json({ result: 'error', message: 'Student ID required.' });
     const tab_name = tabName || 'info';
 
-    // Check if locked
     const existing = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(student_id)}&tab_name=eq.${encodeURIComponent(tab_name)}`);
-    if (!existing?.error && existing[0]?.editable === 'NO') {
+    if (existing?.error) return NextResponse.json({ result: 'error', message: 'Could not check existing submission: ' + existing.error });
+    if (existing[0]?.editable === 'NO') {
       return NextResponse.json({ result: 'error', message: 'Permission Denied (Locked)' });
     }
 
     // Determine default_editable from tab config
     const tabRow = await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(tab_name)}`);
     const defEdit = (tabRow && !tabRow.error && tabRow[0]) ? tabRow[0].default_editable || 'YES' : 'YES';
-    const editable = (!existing?.error && existing[0]) ? existing[0].editable : defEdit;
+    const editable = existing[0] ? existing[0].editable : defEdit;
+    const submittedAt = existing[0] ? existing[0].submitted_at : new Date().toISOString();
 
     const cleanData = Object.fromEntries(Object.entries(data).filter(([k]) => k !== 'tabName' && k !== 'editable'));
-    cleanData.updated_at = new Date().toISOString();
 
-    if (!existing?.error && existing.length) {
-      await sb(`portal_submissions?student_id=eq.${encodeURIComponent(student_id)}&tab_name=eq.${encodeURIComponent(tab_name)}`, 'PATCH',
-        { data: cleanData, editable, updated_at: new Date().toISOString() });
-    } else {
-      await sb('portal_submissions', 'POST',
-        { student_id, tab_name, data: cleanData, editable, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-    }
+    // Upsert on the (student_id, tab_name) unique key instead of a separate
+    // check-then-insert-or-update — the client retries submit up to 3x on a
+    // slow connection, and a plain insert-if-missing races itself into a
+    // duplicate-key error on the retry, which the caller never saw because the
+    // old code didn't check the write's result and always reported "success"
+    // even when nothing was actually saved.
+    const result = await sb(
+      'portal_submissions?on_conflict=student_id,tab_name', 'POST',
+      { student_id, tab_name, data: cleanData, editable, submitted_at: submittedAt, updated_at: new Date().toISOString() },
+      { Prefer: 'resolution=merge-duplicates,return=representation' }
+    );
+    if (result?.error) return NextResponse.json({ result: 'error', message: 'Save failed: ' + result.error });
     return NextResponse.json({ result: 'success' });
   }
 
