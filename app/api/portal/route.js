@@ -5,11 +5,19 @@ const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const ADMIN_ID   = process.env.ADMIN_ID   || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'adminccpcmrm';
 
-// The only columns in students_data whose name contains "phone"/"mobile" —
-// which of these count as a valid login password is admin-configurable
+// Text columns in students_data sensible as a shared-secret login password —
+// which of these are actually accepted is admin-configurable
 // (portal_settings.login_password_columns); see the login handler and the
-// get/set_login_password_columns actions below.
-const LOGIN_PASSWORD_CANDIDATES = ['phone_number', 'father_phone', 'mother_phone'];
+// get/set_login_password_columns actions below. Deliberately excludes
+// categorical/shared columns (gender, house, blood, card_status, version,
+// shift, session) — many students share the exact same value, so allowing
+// those would mean one guessed value unlocks a huge number of accounts, not
+// just id/nfc_uid/photo/timestamps/balance-family columns that plainly
+// aren't passwords at all.
+const LOGIN_PASSWORD_CANDIDATES = ['phone_number', 'father_phone', 'mother_phone', 'fathers_name', 'mothers_name', 'nick_name', 'student_name'];
+// Subset of the above compared as digits-only (normPhone); the rest compare
+// as a plain case-insensitive trimmed string.
+const LOGIN_PHONE_COLUMNS = ['phone_number', 'father_phone', 'mother_phone'];
 
 const GP_PROD_URL  = 'https://bluebird.grameenphone.com/alo-paas';
 const GP_STAGE_URL = 'https://bluebird.grameenphone.com/alo-paas-stage';
@@ -216,6 +224,36 @@ async function sb(path, method = 'GET', body = null, extra = {}) {
 function normPhone(p) { return String(p || '').replace(/\D/g, '').slice(-10); }
 function normKey(s)   { return String(s || '').toLowerCase().replace(/[\s_]/g, ''); }
 
+// Shared by the login handler and reset_pin (the "Forgot PIN?" flow uses the
+// exact same admin-selected-column verification to prove identity before
+// clearing a PIN). Phone-like columns match on digits only; the rest match
+// on a plain case-insensitive trim.
+async function verifyAdminSelectedPassword(studentData, inputValue) {
+  const cfgRows = await sb('portal_settings?key=eq.login_password_columns');
+  const cfgSaved = (!cfgRows?.error && cfgRows[0]) ? cfgRows[0].value : null;
+  const passwordColumns = Array.isArray(cfgSaved) ? cfgSaved.filter(c => LOGIN_PASSWORD_CANDIDATES.includes(c)) : LOGIN_PASSWORD_CANDIDATES;
+
+  const allowedPhone = [];
+  const allowedText = [];
+  passwordColumns.forEach((k) => {
+    const v = studentData[k];
+    if (!v) return;
+    if (LOGIN_PHONE_COLUMNS.includes(k)) {
+      const n = normPhone(v);
+      if (n && !allowedPhone.includes(n)) allowedPhone.push(n);
+    } else {
+      const n = String(v).trim().toLowerCase();
+      if (n && !allowedText.includes(n)) allowedText.push(n);
+    }
+  });
+  const inputPhone = normPhone(inputValue);
+  const inputText = String(inputValue || '').trim().toLowerCase();
+  return {
+    anyAllowed: allowedPhone.length > 0 || allowedText.length > 0,
+    matches: allowedPhone.includes(inputPhone) || allowedText.includes(inputText),
+  };
+}
+
 // ── Evaluate tab condition rule ──────────────────────────────────────────────
 async function evalRule(rule, profile, submissions) {
   const profileKeys = Object.keys(profile);
@@ -394,23 +432,24 @@ export async function POST(req) {
     if (!rows.length)  return NextResponse.json({ result: 'error', message: 'Student ID not found.' });
     const studentData = rows[0];
 
-    // Only admin-selected columns count as a valid password (default: all of
+    // A student-set PIN takes over login entirely — no fallback to the phone
+    // columns while a PIN exists, so a stolen/known phone number alone can't
+    // get in once the student has opted into stronger login security.
+    const pin = String(studentData.pin || '').trim();
+    if (pin) {
+      if (String(phone_number).trim() !== pin) {
+        return NextResponse.json({ result: 'error', message: 'This account is secured with a PIN. Please try logging in with your PIN.' });
+      }
+      const subRows = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(student_id)}&tab_name=eq.info`);
+      const existingInfo = (subRows && !subRows.error && subRows[0]) ? subRows[0].data : null;
+      return NextResponse.json({ result: 'success', data: studentData, existingInfo, submittedBefore: !!existingInfo });
+    }
+
+    // No PIN set -> fall back to admin-selected columns (default: all of
     // them, if the admin has never configured this) — see
     // get/set_login_password_columns below.
-    const cfgRows = await sb('portal_settings?key=eq.login_password_columns');
-    const cfgSaved = (!cfgRows?.error && cfgRows[0]) ? cfgRows[0].value : null;
-    const passwordColumns = Array.isArray(cfgSaved) ? cfgSaved.filter(c => LOGIN_PASSWORD_CANDIDATES.includes(c)) : LOGIN_PASSWORD_CANDIDATES;
-
-    const allowed = [];
-    passwordColumns.forEach((k) => {
-      const v = studentData[k];
-      if (v) {
-        const n = normPhone(v);
-        if (n && !allowed.includes(n)) allowed.push(n);
-      }
-    });
-    const inputP = normPhone(phone_number);
-    if (allowed.length > 0 && !allowed.includes(inputP)) {
+    const { anyAllowed, matches } = await verifyAdminSelectedPassword(studentData, phone_number);
+    if (anyAllowed && !matches) {
       return NextResponse.json({ result: 'error', message: 'Mobile verification failed.' });
     }
 
@@ -805,6 +844,68 @@ export async function POST(req) {
     const r = await psSave('login_password_columns', columns);
     if (!r.ok) return NextResponse.json({ result: 'error', message: r.message });
     return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Student PIN (self-service, set from the student's own Personal Hub) ────
+  // Empty pin clears it, dropping the account back to admin-selected-column
+  // login — matches "if pin field is empty then login falls back automatically."
+  if (action === 'set_student_pin') {
+    const { student_id, pin } = payload;
+    if (!student_id || student_id === 'admin') return NextResponse.json({ result: 'error', message: 'Invalid request.' });
+    const cleanPin = String(pin || '').trim();
+    if (cleanPin && !/^\d{4,6}$/.test(cleanPin)) {
+      return NextResponse.json({ result: 'error', message: 'PIN must be 4 to 6 digits.' });
+    }
+    const r = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { pin: cleanPin || null });
+    if (r?.error) return NextResponse.json({ result: 'error', message: 'Could not update PIN.' });
+    return NextResponse.json({ result: 'success', pinSet: !!cleanPin });
+  }
+
+  // ── Forgot PIN — self-service reset via the same admin-selected-column
+  // verification the old phone-based login used, so it works as an identity
+  // check independent of whatever PIN is currently set. ──────────────────────
+  if (action === 'reset_pin') {
+    const { student_id, phone_number } = payload;
+    if (!student_id || !phone_number) return NextResponse.json({ result: 'error', message: 'Student ID and phone number required.' });
+    const rows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=*`);
+    if (rows?.error) return NextResponse.json({ result: 'error', message: 'Database error.' });
+    if (!rows.length) return NextResponse.json({ result: 'error', message: 'Student ID not found.' });
+
+    const { matches } = await verifyAdminSelectedPassword(rows[0], phone_number);
+    if (!matches) return NextResponse.json({ result: 'error', message: 'Could not verify your identity with that phone number.' });
+
+    const r = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { pin: null });
+    if (r?.error) return NextResponse.json({ result: 'error', message: 'Could not reset PIN.' });
+    return NextResponse.json({ result: 'success', message: 'PIN cleared. You can now log in with your phone number.' });
+  }
+
+  // ── Admin-triggered PIN reset (no phone verification — admin is already
+  // authenticated) — for when a student is locked out and can't reach their
+  // own registered phone number to use the self-service reset above. ────────
+  if (action === 'admin_reset_pin') {
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'Student ID required.' });
+    const rows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=student_id`);
+    if (rows?.error) return NextResponse.json({ result: 'error', message: 'Database error.' });
+    if (!rows.length) return NextResponse.json({ result: 'error', message: 'Student ID not found.' });
+    const r = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { pin: null });
+    if (r?.error) return NextResponse.json({ result: 'error', message: 'Could not reset PIN.' });
+    return NextResponse.json({ result: 'success', message: `PIN cleared for ${student_id} — they can log in with their phone number again.` });
+  }
+
+  // ── Edit History (admin-searchable audit trail, populated by a DB trigger
+  // on every students_data UPDATE — see the edit_history table) ──────────────
+  if (action === 'search_edit_history') {
+    const q = String(payload?.query || '').trim();
+    const limit = Math.min(Number(payload?.limit) || 50, 200);
+    let path = `edit_history?select=*&order=created_at.desc&limit=${limit}`;
+    if (q) {
+      const esc = encodeURIComponent(q);
+      path += `&or=(student_id.ilike.*${esc}*,name.ilike.*${esc}*,class.ilike.*${esc}*,section.ilike.*${esc}*,roll.ilike.*${esc}*)`;
+    }
+    const rows = await sb(path);
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    return NextResponse.json({ result: 'success', rows: Array.isArray(rows) ? rows : [] });
   }
 
   // ── Permanent Tabs Visibility (Wallet/Canteen/Stationary/Teachers/Bus — the
