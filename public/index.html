@@ -965,6 +965,13 @@
                                         <div id="permanent-tabs-list" class="row g-3"></div>
                                     </div>
 
+                                    <!-- Login password columns — which students_data phone-like columns are accepted as the login password -->
+                                    <div class="mt-5 p-4 rounded-4 border shadow-sm" style="background:#fff">
+                                        <span class="fw-800"><i class="bi bi-shield-lock-fill text-primary me-2"></i>Login Settings</span>
+                                        <p class="small text-muted mb-3" style="font-size:0.72rem">Choose which phone number(s) a student can log in with, alongside their Student ID. Untick a column to stop accepting it — at least one must stay checked.</p>
+                                        <div id="login-password-columns-list" class="d-flex flex-wrap gap-3"></div>
+                                    </div>
+
                                     <hr class="my-5 opacity-25">
                                     <div id="admin-tabs-list" class="row g-4"></div>
                                 </div>
@@ -1859,6 +1866,7 @@
 
                 loadAdminTabs();
                 loadPermanentTabsAdmin();
+                loadLoginPasswordColumnsAdmin();
                 loadIncludeFields();
                 loadEditableProfileFields();
                 loadTrackingConfig();
@@ -3282,6 +3290,36 @@
                 }
                 loadPermanentTabsAdmin();
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); loadPermanentTabsAdmin(); });
+        }
+
+        const LOGIN_COLUMN_LABELS = { phone_number: 'Student Phone Number', father_phone: "Father's Phone", mother_phone: "Mother's Phone" };
+        function loadLoginPasswordColumnsAdmin() {
+            portalFetch('get_login_password_columns', {}).then(cfg => {
+                const list = document.getElementById('login-password-columns-list');
+                if (!list || !cfg) return;
+                const selected = cfg.selected || [];
+                list.innerHTML = (cfg.candidates || []).map(col => `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="login-col-${col}" ${selected.includes(col)?'checked':''} onchange="toggleLoginPasswordColumn('${col}', this.checked)">
+                        <label class="form-check-label small fw-700" for="login-col-${col}">${LOGIN_COLUMN_LABELS[col] || col}</label>
+                    </div>`).join('');
+            }).catch(() => {});
+        }
+
+        function toggleLoginPasswordColumn(col, isOn) {
+            portalFetch('get_login_password_columns', {}).then(cfg => {
+                let selected = (cfg && cfg.selected) ? [...cfg.selected] : [];
+                if (isOn && !selected.includes(col)) selected.push(col);
+                if (!isOn) selected = selected.filter(c => c !== col);
+                return portalFetch('set_login_password_columns', { columns: selected });
+            }).then(res => {
+                if (res && res.result === 'success') {
+                    if (typeof showToast === 'function') showToast('Login settings saved', 'success');
+                } else {
+                    if (typeof showToast === 'function') showToast((res && res.message) || 'Could not update login settings', 'error');
+                }
+                loadLoginPasswordColumnsAdmin(); // re-sync (also restores the checkbox if the save was rejected, e.g. last-column-unchecked)
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); loadLoginPasswordColumnsAdmin(); });
         }
 
         let PROMOTED_TABS = [];

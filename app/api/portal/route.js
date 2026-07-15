@@ -5,6 +5,12 @@ const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
 const ADMIN_ID   = process.env.ADMIN_ID   || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'adminccpcmrm';
 
+// The only columns in students_data whose name contains "phone"/"mobile" —
+// which of these count as a valid login password is admin-configurable
+// (portal_settings.login_password_columns); see the login handler and the
+// get/set_login_password_columns actions below.
+const LOGIN_PASSWORD_CANDIDATES = ['phone_number', 'father_phone', 'mother_phone'];
+
 const GP_PROD_URL  = 'https://bluebird.grameenphone.com/alo-paas';
 const GP_STAGE_URL = 'https://bluebird.grameenphone.com/alo-paas-stage';
 
@@ -388,10 +394,17 @@ export async function POST(req) {
     if (!rows.length)  return NextResponse.json({ result: 'error', message: 'Student ID not found.' });
     const studentData = rows[0];
 
-    // Collect all phone fields for verification
+    // Only admin-selected columns count as a valid password (default: all of
+    // them, if the admin has never configured this) — see
+    // get/set_login_password_columns below.
+    const cfgRows = await sb('portal_settings?key=eq.login_password_columns');
+    const cfgSaved = (!cfgRows?.error && cfgRows[0]) ? cfgRows[0].value : null;
+    const passwordColumns = Array.isArray(cfgSaved) ? cfgSaved.filter(c => LOGIN_PASSWORD_CANDIDATES.includes(c)) : LOGIN_PASSWORD_CANDIDATES;
+
     const allowed = [];
-    Object.entries(studentData).forEach(([k, v]) => {
-      if ((k.includes('phone') || k.includes('mobile')) && v) {
+    passwordColumns.forEach((k) => {
+      const v = studentData[k];
+      if (v) {
         const n = normPhone(v);
         if (n && !allowed.includes(n)) allowed.push(n);
       }
@@ -772,6 +785,25 @@ export async function POST(req) {
   if (action === 'delete_tab') {
     const r = await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(payload.tab_name)}`, 'DELETE');
     if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Login Password Columns (which students_data phone-like columns are
+  // accepted as the login password) ────────────────────────────────────────
+  if (action === 'get_login_password_columns') {
+    const rows = await sb('portal_settings?key=eq.login_password_columns');
+    const saved = (!rows?.error && rows[0]) ? rows[0].value : null;
+    // Never configured yet -> every candidate is allowed, matching the
+    // original hardcoded auto-detect-by-name behavior so nothing breaks
+    // for a school that hasn't touched this setting.
+    const selected = Array.isArray(saved) ? saved.filter(c => LOGIN_PASSWORD_CANDIDATES.includes(c)) : LOGIN_PASSWORD_CANDIDATES;
+    return NextResponse.json({ candidates: LOGIN_PASSWORD_CANDIDATES, selected });
+  }
+  if (action === 'set_login_password_columns') {
+    const columns = Array.isArray(payload?.columns) ? payload.columns.filter(c => LOGIN_PASSWORD_CANDIDATES.includes(c)) : [];
+    if (!columns.length) return NextResponse.json({ result: 'error', message: 'Select at least one column — otherwise no student could log in.' });
+    const r = await psSave('login_password_columns', columns);
+    if (!r.ok) return NextResponse.json({ result: 'error', message: r.message });
     return NextResponse.json({ result: 'success' });
   }
 
