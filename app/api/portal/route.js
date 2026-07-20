@@ -1453,6 +1453,34 @@ export async function POST(req) {
     });
   }
 
+  // ── Profile photo — self-service upload into the public `students` Storage
+  // bucket. Same trust model as every other self-service action in this
+  // file (payload.student_id taken as given, e.g. canteen_menu above) — no
+  // new session/auth model introduced just for this. Client sends an
+  // already square-cropped, already-compressed (<=130KB, matching the
+  // bucket's own limit) JPEG data URL.
+  if (action === 'upload_photo') {
+    const { student_id, photo_base64 } = payload;
+    if (!student_id || !photo_base64) return NextResponse.json({ result: 'error', message: 'Student ID and photo required.' });
+    const raw = String(photo_base64).replace(/^data:[^;]+;base64,/, '');
+    const binary = atob(raw);
+    const buf = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+    const contentType = (String(photo_base64).match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+
+    const uploadRes = await fetch(`${SB_URL}/storage/v1/object/students/photo_${encodeURIComponent(student_id)}.jpg`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': contentType, 'x-upsert': 'true' },
+      body: buf,
+    });
+    if (!uploadRes.ok) return NextResponse.json({ result: 'error', message: 'Upload failed: ' + (await uploadRes.text()).slice(0, 200) });
+
+    const publicUrl = `${SB_URL}/storage/v1/object/public/students/photo_${encodeURIComponent(student_id)}.jpg?v=${Date.now()}`;
+    const patchRes = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { photo: publicUrl });
+    if (patchRes?.error) return NextResponse.json({ result: 'error', message: 'Uploaded, but could not save to profile.' });
+    return NextResponse.json({ result: 'success', photo: publicUrl });
+  }
+
   // ── Canteen: place an order (prices & limits revalidated server-side) ───────
   if (action === 'canteen_place_order') {
     const { student_id, items, delivery_option } = payload;

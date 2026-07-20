@@ -2681,6 +2681,81 @@
             return html;
         }
 
+        function renderOwnPhotoAvatar() {
+            const el = document.getElementById('hub-photo-avatar');
+            if (!el || !loggedInStudent) return;
+            if (loggedInStudent.photo) {
+                el.style.backgroundImage = `url('${loggedInStudent.photo}')`;
+                el.textContent = '';
+            } else {
+                el.style.backgroundImage = '';
+                const name = loggedInStudent.name || loggedInStudent.student_name || loggedInStudent.student_id || '?';
+                el.textContent = String(name).trim().charAt(0).toUpperCase();
+            }
+        }
+
+        // Self-service photo upload — same square-crop + 130KB compression
+        // approach used across this project's other photo-upload flows
+        // (ccpc-teachers admin Photo tab, ccpc-teachers own faculty photos).
+        function handleOwnPhotoSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+                if (typeof showToast === 'function') showToast('Photo must be under 5 MB.', 'error');
+                event.target.value = '';
+                return;
+            }
+            const sid = loggedInStudent && loggedInStudent.student_id;
+            if (!sid) return;
+            const status = document.getElementById('hub-photo-status');
+            if (status) status.textContent = 'Processing...';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const side     = Math.min(img.width, img.height);
+                    const sx       = Math.floor((img.width  - side) / 2);
+                    const sy       = Math.floor((img.height - side) / 2);
+                    const canvasPx = Math.min(side, 500);
+                    const canvas   = document.createElement('canvas');
+                    canvas.width   = canvasPx;
+                    canvas.height  = canvasPx;
+                    const ctx      = canvas.getContext('2d');
+                    ctx.drawImage(img, sx, sy, side, side, 0, 0, canvasPx, canvasPx);
+
+                    const TARGET = 130 * 1024; // matches the "students" bucket's own file-size limit
+                    let base64 = '';
+                    for (const q of [0.85, 0.70, 0.55, 0.40, 0.28]) {
+                        base64 = canvas.toDataURL('image/jpeg', q);
+                        const approxBytes = Math.ceil((base64.length - base64.indexOf(',') - 1) * 0.75);
+                        if (approxBytes <= TARGET) break;
+                    }
+                    const finalBytes = Math.ceil((base64.length - base64.indexOf(',') - 1) * 0.75);
+                    if (finalBytes > TARGET) {
+                        if (status) status.textContent = 'Could not compress under 130KB — use a smaller image.';
+                        return;
+                    }
+
+                    if (status) status.textContent = 'Uploading...';
+                    portalFetch('upload_photo', { student_id: sid, photo_base64: base64 }).then(res => {
+                        if (res && res.result === 'success') {
+                            loggedInStudent = { ...loggedInStudent, photo: res.photo };
+                            try { localStorage.setItem('student_session', JSON.stringify(loggedInStudent)); } catch(e) {}
+                            renderOwnPhotoAvatar();
+                            if (status) status.textContent = 'Photo saved!';
+                            if (typeof showToast === 'function') showToast('Photo updated', 'success');
+                        } else {
+                            if (status) status.textContent = (res && res.message) || 'Upload failed.';
+                        }
+                    }).catch(() => { if (status) status.textContent = 'Network error.'; });
+                };
+                img.onerror = function() { if (status) status.textContent = 'Could not read image file.'; };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
         function renderProfilePane(editMode) {
             const card = document.getElementById('hub-profile-card');
             if (card) card.innerHTML = buildProfileCardInner(editMode);
@@ -3031,6 +3106,14 @@
                             <h2 class="h5 section-title mb-0" style="font-family:'Instrument Serif',serif;">My Information</h2>
                             <div id="profile-edit-bar" class="d-flex gap-2"></div>
                         </div>
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <div id="hub-photo-avatar" style="width:64px;height:64px;border-radius:50%;flex-shrink:0;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:900;color:#fff;background-size:cover;background-position:center"></div>
+                            <div>
+                                <input type="file" id="hub-photo-input" accept="image/*" class="d-none" onchange="handleOwnPhotoSelect(event)">
+                                <button onclick="document.getElementById('hub-photo-input').click()" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="bi bi-camera-fill me-1"></i>Change Photo</button>
+                                <div id="hub-photo-status" class="small fw-700 text-muted mt-1"></div>
+                            </div>
+                        </div>
                         <div id="hub-profile-card" class="card profile-grid-compressed">${buildProfileCardInner(false)}</div>
 
                         <!-- PIN login security -->
@@ -3065,6 +3148,7 @@
 
                 profPane.innerHTML = profHtml;
                 if(content) content.appendChild(profPane);
+                renderOwnPhotoAvatar();
                 // Load admin-approved editable fields, then show Edit button + pencil badges
                 loadEditableFields();
 
