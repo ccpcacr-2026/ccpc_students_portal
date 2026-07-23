@@ -482,8 +482,11 @@ export async function POST(req) {
   if (action === 'register_nfc') {
     const { student_id, nfc_uid } = payload;
     if (!student_id || !nfc_uid) return NextResponse.json({ result: 'error', message: 'Student ID and NFC UID required.' });
-    const r = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { nfc_uid });
+    // return=representation so we can tell "0 rows matched" (bad student_id)
+    // apart from a real success — PATCH with return=minimal reports success either way.
+    const r = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { nfc_uid }, { Prefer: 'return=representation' });
     if (r?.error) return NextResponse.json({ result: 'error', message: 'Update failed.' });
+    if (!Array.isArray(r) || r.length === 0) return NextResponse.json({ result: 'error', message: 'Student ID not found.' });
     return NextResponse.json({ result: 'success', message: 'NFC Tag registered successfully.' });
   }
 
@@ -713,6 +716,16 @@ export async function POST(req) {
     let fields = [];
     try { fields = JSON.parse((setRows && !setRows.error && setRows[0]?.value) || '[]'); } catch (_) {}
     return NextResponse.json({ fields: Array.isArray(fields) ? fields : [] });
+  }
+
+  // ── Distinct group values already in use, for the profile-edit dropdown —
+  // 'group' is a fixed-choice field, but the choices come from whatever the
+  // school has actually assigned (via bulk import), not a hardcoded enum.
+  if (action === 'get_group_values') {
+    const rows = await sb('students_data?select=group&limit=10000');
+    const values = new Set(['None']);
+    (Array.isArray(rows) ? rows : []).forEach(r => { const g = String(r.group || '').trim(); if (g) values.add(g); });
+    return NextResponse.json({ values: Array.from(values).sort((a, b) => a === 'None' ? -1 : b === 'None' ? 1 : a.localeCompare(b)) });
   }
 
   // ── Admin saves which profile fields students may edit ─────────────────────
@@ -1541,7 +1554,7 @@ export async function POST(req) {
     const balUpd = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}`, 'PATCH', { balance: newBalance });
     if (balUpd?.error) return NextResponse.json({ result: 'error', message: 'Could not charge your wallet. Try again.' });
 
-    const parts = [student.class, student.section, student.roll].filter(Boolean);
+    const parts = [student.class, student.section, student.group && student.group !== 'None' ? student.group : null, student.roll].filter(Boolean);
     const ins = await sb('canteen_orders', 'POST', {
       student_id, student_name: student.student_name,
       class_section_roll: parts.length ? parts.join('-') : 'N/A',

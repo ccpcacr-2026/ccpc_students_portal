@@ -2585,12 +2585,12 @@
         // ── Personal Hub profile: mapping, formatting & inline editing ─────────────
         // Mapping mirrors the legacy Student Portal (old column names → new schema).
         const PROFILE_GROUPS = {
-            "Academic Profile":   ['student_name', 'student_id', 'class', 'section', 'roll', 'session'],
+            "Academic Profile":   ['student_name', 'student_id', 'class', 'section', 'group', 'roll', 'session'],
             "Identity Details":   ['nick_name', 'blood', 'house', 'card_status', 'balance'],
             "Emergency Contacts": ['fathers_name', 'father_phone', 'mothers_name', 'mother_phone'],
         };
         const PROFILE_LABELS = {
-            student_name: 'Full Name', student_id: 'Student ID', class: 'Class', section: 'Section',
+            student_name: 'Full Name', student_id: 'Student ID', class: 'Class', section: 'Section', group: 'Group',
             roll: 'Roll', session: 'Session', nick_name: 'Nick Name', blood: 'Blood Group',
             house: 'House', card_status: 'Card Status', balance: 'Wallet Balance',
             fathers_name: "Father's Name", father_phone: "Father's Phone",
@@ -2832,9 +2832,13 @@
             Promise.all([
                 portalFetch('get_editable_fields', {}),
                 portalFetch('get_profile_sections', {}),
-            ]).then(([ef, ps]) => {
+                portalFetch('get_group_values', {}),
+            ]).then(([ef, ps, gv]) => {
                 EDITABLE_FIELDS = (ef && Array.isArray(ef.fields)) ? ef.fields : [];
                 PROFILE_SECTIONS = (ps && Array.isArray(ps.sections)) ? ps.sections : [];
+                // 'group' is fixed-choice, but the choices are whatever the school
+                // has actually assigned so far — not a hardcoded enum like blood/gender.
+                if (gv && Array.isArray(gv.values) && gv.values.length) PROFILE_FIELD_OPTIONS.group = gv.values;
                 if (document.getElementById('hub-profile-card')) renderProfilePane(false);
             }).catch(() => {});
         }
