@@ -1610,6 +1610,37 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', message: 'Top-up request submitted. It will be added once the office confirms your payment.' });
   }
 
+  // ── Fees & Dues (read-only here — a student can view but never edit their
+  // own fee/payment records; all writes happen from the admin console) ─────
+  if (action === 'get_my_fees') {
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    const rows = await sb(`student_fees?student_id=eq.${encodeURIComponent(student_id)}&select=*,fee_types(name,code)&order=academic_year.desc,fee_month.desc`);
+    if (rows?.error) return NextResponse.json({ result: 'error', message: 'Could not load fees.' });
+    return NextResponse.json({ result: 'success', fees: rows });
+  }
+
+  // ── Exam results (read-only — marks entry only happens from the admin console) ──
+  if (action === 'get_my_exams') {
+    const { student_id } = payload;
+    const srows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=class`);
+    const cls = (!srows?.error && srows[0]) ? srows[0].class : null;
+    const rows = await sb(`exams?is_locked=eq.true${cls ? `&class=eq.${encodeURIComponent(cls)}` : ''}&select=id,name,exam_type,academic_year&order=academic_year.desc`);
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    return NextResponse.json({ result: 'success', exams: rows });
+  }
+  if (action === 'get_my_report_card') {
+    const { student_id, exam_id } = payload;
+    if (!student_id || !exam_id) return NextResponse.json({ result: 'error', message: 'student_id and exam_id required.' });
+    const subjects = await sb(`exam_subjects?exam_id=eq.${encodeURIComponent(exam_id)}&select=*`);
+    if (subjects?.error) return NextResponse.json({ result: 'error', message: subjects.error });
+    const ids = subjects.map(s => s.id).join(',') || '0';
+    const marks = await sb(`exam_marks?student_id=eq.${encodeURIComponent(student_id)}&exam_subject_id=in.(${ids})&select=*`);
+    const marksMap = {};
+    (Array.isArray(marks) ? marks : []).forEach(m => { marksMap[m.exam_subject_id] = m.marks_obtained; });
+    return NextResponse.json({ result: 'success', subjects: subjects.map(s => ({ subject: s.subject, full_marks: s.full_marks, pass_marks: s.pass_marks, marks_obtained: marksMap[s.id] ?? null })) });
+  }
+
   return NextResponse.json({ result: 'error', message: 'Unknown action' }, { status: 400 });
 }
 

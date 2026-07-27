@@ -1401,6 +1401,7 @@
         // Personal Hub is intentionally excluded — always on, no toggle for it.
         const PERMANENT_TABS = [
             { id: 'wallet', name: 'Wallet', icon: 'bi-wallet2' },
+            { id: 'fees', name: 'Fees & Dues', icon: 'bi-cash-stack' },
             { id: 'canteen', name: 'Canteen', icon: 'bi-cup-hot-fill' },
             { id: 'stationary', name: 'Stationary', icon: 'bi-bag-fill' },
             { id: 'teachers', name: 'Teacher Directory', icon: 'bi-people-fill' },
@@ -2235,6 +2236,9 @@
                 if (id === 'wallet') {
                     loadWalletTopups();
                 }
+                if (id === 'fees') {
+                    loadMyFees();
+                }
             }
             
             document.querySelectorAll('.nav-item-btn').forEach(btn => {
@@ -2468,6 +2472,36 @@
                     </div><span class="cant-pill ${isPend ? 'pend' : isRej ? 'rej' : 'ok'}">${isPend ? 'Pending' : isRej ? 'Rejected' : 'Added'}</span></div>`;
                 }).join('');
             } catch (e) { /* leave */ }
+        }
+
+        async function loadMyFees() {
+            const sid = cantSid();
+            const listEl = document.getElementById('fees-list');
+            const sumEl = document.getElementById('fees-summary');
+            if (!sid || !listEl) return;
+            try {
+                const r = await portalFetch('get_my_fees', { student_id: sid });
+                if (!r || r.result !== 'success') { listEl.innerHTML = '<p class="text-muted small">Could not load fees.</p>'; return; }
+                const fees = r.fees || [];
+                const totalDue = fees.filter(f => f.status !== 'paid').reduce((s, f) => s + Number(f.active_amount), 0);
+                if (sumEl) sumEl.innerHTML = `<div class="wallet-hero"><div class="wallet-hero-label">Total Currently Due</div><div class="wallet-hero-amount">৳${totalDue.toLocaleString()}</div></div>`;
+                if (!fees.length) { listEl.innerHTML = '<p class="text-muted small">No fees on record yet.</p>'; return; }
+                listEl.innerHTML = fees.map(f => `
+                    <div class="wallet-stat-card mb-2" style="text-align:left">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div style="font-weight:800">${f.fee_types ? f.fee_types.name : 'Fee'}</div>
+                                <div class="wallet-stat-label">${f.academic_year} · ${f.fee_month}</div>
+                            </div>
+                            <span class="wallet-hero-chip" style="background:${f.status === 'paid' ? '#bbf7d0' : '#fde68a'}">${f.status === 'paid' ? 'Paid' : 'Due'}</span>
+                        </div>
+                        <div class="row g-2 mt-2">
+                            <div class="col-4"><div class="wallet-stat-label">Total</div><div class="wallet-stat-value">৳${Number(f.amount).toLocaleString()}</div></div>
+                            <div class="col-4"><div class="wallet-stat-label">Due Now</div><div class="wallet-stat-value">৳${Number(f.active_amount).toLocaleString()}</div></div>
+                            <div class="col-4"><div class="wallet-stat-label">Deferred</div><div class="wallet-stat-value">৳${Number(f.deferred_amount).toLocaleString()}</div></div>
+                        </div>
+                    </div>`).join('');
+            } catch (e) { listEl.innerHTML = '<p class="text-muted small">Network error loading fees.</p>'; }
         }
 
         function renderField(f, val, readOnly) {
@@ -3019,6 +3053,16 @@
                         <div id="wallet-topups" class="mt-3"></div>`;
                 }
                 if(content) content.appendChild(walletPane);
+
+                // ── Fees & Dues (tuition/admission billing — separate from the wallet) ──
+                const feesPane = document.createElement('div');
+                feesPane.className = 'tab-pane ccpc-page'; feesPane.id = 'fees-content';
+                feesPane.innerHTML = `
+                    <h2 class="ccpc-page-title">Fees &amp; <em>Dues</em></h2>
+                    <p class="ccpc-page-sub">Tuition and other school fees — separate from your canteen wallet balance.</p>
+                    <div id="fees-summary" class="mb-3"></div>
+                    <div id="fees-list"><p class="text-muted small">Loading...</p></div>`;
+                if(content) content.appendChild(feesPane);
 
                 // ── Canteen (live ordering — shares wallet + orders with the kiosk) ──
                 const canteenPane = document.createElement('div');
