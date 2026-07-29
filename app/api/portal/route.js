@@ -254,6 +254,27 @@ async function verifyAdminSelectedPassword(studentData, inputValue) {
   };
 }
 
+// Assigned via ccpc-teachers' own "Assign Class Teacher" admin panel
+// (student.class_teacher_assignments, one teacher per class+section) — this
+// looks up that assignment and resolves the teacher's display name from the
+// teacher schema, same cross-schema pattern get_teacher_directory uses.
+// Called on every login so a newly-made assignment shows up immediately,
+// with no caching to go stale.
+async function _getClassTeacherName(cls, section) {
+  if (!cls || !section) return null;
+  const rows = await sb(
+    `class_teacher_assignments?class=eq.${encodeURIComponent(cls)}&section=eq.${encodeURIComponent(section)}&select=user_id`
+  );
+  const userId = (!rows?.error && rows[0]) ? rows[0].user_id : null;
+  if (!userId) return null;
+  const profRows = await sb(
+    `users_profile?teacher_id=eq.${encodeURIComponent(userId)}&select=full_name`,
+    'GET', null,
+    { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+  );
+  return (!profRows?.error && profRows[0] && profRows[0].full_name) ? profRows[0].full_name : null;
+}
+
 // ── Evaluate tab condition rule ──────────────────────────────────────────────
 async function evalRule(rule, profile, submissions) {
   const profileKeys = Object.keys(profile);
@@ -431,6 +452,7 @@ export async function POST(req) {
     if (rows?.error) return NextResponse.json({ result: 'error', message: 'Database error.' });
     if (!rows.length)  return NextResponse.json({ result: 'error', message: 'Student ID not found.' });
     const studentData = rows[0];
+    studentData.class_teacher_name = await _getClassTeacherName(studentData.class, studentData.section);
 
     // A student-set PIN takes over login entirely — no fallback to the phone
     // columns while a PIN exists, so a stolen/known phone number alone can't
@@ -470,6 +492,7 @@ export async function POST(req) {
       const rows = await sb(`students_data?nfc_uid=eq.${encodeURIComponent(uid)}&select=*`);
       if (!rows?.error && rows.length) {
         const studentData = rows[0];
+        studentData.class_teacher_name = await _getClassTeacherName(studentData.class, studentData.section);
         const subRows = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(studentData.student_id)}&tab_name=eq.info`);
         const existingInfo = (subRows && !subRows.error && subRows[0]) ? subRows[0].data : null;
         return NextResponse.json({ result: 'success', data: studentData, existingInfo, submittedBefore: !!existingInfo });

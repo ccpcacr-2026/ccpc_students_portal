@@ -2630,13 +2630,13 @@
         // ── Personal Hub profile: mapping, formatting & inline editing ─────────────
         // Mapping mirrors the legacy Student Portal (old column names → new schema).
         const PROFILE_GROUPS = {
-            "Academic Profile":   ['student_name', 'student_id', 'class', 'section', 'group', 'roll', 'session'],
+            "Academic Profile":   ['student_name', 'student_id', 'class', 'section', 'group', 'roll', 'session', 'class_teacher_name'],
             "Identity Details":   ['nick_name', 'blood', 'house', 'card_status', 'balance'],
             "Emergency Contacts": ['fathers_name', 'father_phone', 'mothers_name', 'mother_phone'],
         };
         const PROFILE_LABELS = {
             student_name: 'Full Name', student_id: 'Student ID', class: 'Class', section: 'Section', group: 'Group',
-            roll: 'Roll', session: 'Session', nick_name: 'Nick Name', blood: 'Blood Group',
+            roll: 'Roll', session: 'Session', class_teacher_name: 'Class Teacher', nick_name: 'Nick Name', blood: 'Blood Group',
             house: 'House', card_status: 'Card Status', balance: 'Wallet Balance',
             fathers_name: "Father's Name", father_phone: "Father's Phone",
             mothers_name: "Mother's Name", mother_phone: "Mother's Phone",
@@ -2684,7 +2684,10 @@
         }
 
         function formatProfileVal(key, raw) {
-            if (raw === null || raw === undefined || raw === '') return '<span class="text-muted small">—</span>';
+            if (raw === null || raw === undefined || raw === '') {
+                if (key === 'class_teacher_name') return '<span class="text-muted small">Not assigned yet</span>';
+                return '<span class="text-muted small">—</span>';
+            }
             if (key === 'balance') return `<strong style="color:var(--primary)">৳${Number(raw).toLocaleString()}</strong>`;
             if (key === 'daily_limit' || key === 'monthly_limit') return `৳${Number(raw).toLocaleString()}`;
             if (key === 'card_status') {
