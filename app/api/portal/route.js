@@ -255,17 +255,27 @@ async function verifyAdminSelectedPassword(studentData, inputValue) {
 }
 
 // Assigned via ccpc-teachers' own "Assign Class Teacher" admin panel
-// (student.class_teacher_assignments, one teacher per class+section) — this
-// looks up that assignment and resolves the teacher's display name from the
-// teacher schema, same cross-schema pattern get_teacher_directory uses.
-// Called on every login so a newly-made assignment shows up immediately,
-// with no caching to go stale.
-async function _getClassTeacherName(cls, section) {
+// (student.class_teacher_assignments) — this looks up that assignment and
+// resolves the teacher's display name from the teacher schema, same
+// cross-schema pattern get_teacher_directory uses. Called on every login so
+// a newly-made assignment shows up immediately, with no caching to go stale.
+//
+// A class+section can have several assignment rows at once: one class-wide
+// row (group IS NULL) and/or one row per subject group (Science/Business
+// Studies/Humanities/etc), for sections like Eleven/A that hold several
+// groups' worth of students under the same class+section but want a
+// different class teacher per group. Prefer the row matching this
+// student's own group; fall back to the class-wide row if there isn't one.
+async function _getClassTeacherName(cls, section, group) {
   if (!cls || !section) return null;
   const rows = await sb(
-    `class_teacher_assignments?class=eq.${encodeURIComponent(cls)}&section=eq.${encodeURIComponent(section)}&select=user_id`
+    `class_teacher_assignments?class=eq.${encodeURIComponent(cls)}&section=eq.${encodeURIComponent(section)}&select=user_id,group`
   );
-  const userId = (!rows?.error && rows[0]) ? rows[0].user_id : null;
+  if (rows?.error || !Array.isArray(rows) || !rows.length) return null;
+  const groupNorm = String(group || '').trim().toLowerCase();
+  const groupRow = groupNorm ? rows.find(r => String(r.group || '').trim().toLowerCase() === groupNorm) : null;
+  const classWideRow = rows.find(r => !r.group);
+  const userId = (groupRow || classWideRow || rows[0]).user_id;
   if (!userId) return null;
   const profRows = await sb(
     `users_profile?teacher_id=eq.${encodeURIComponent(userId)}&select=full_name`,
@@ -452,7 +462,7 @@ export async function POST(req) {
     if (rows?.error) return NextResponse.json({ result: 'error', message: 'Database error.' });
     if (!rows.length)  return NextResponse.json({ result: 'error', message: 'Student ID not found.' });
     const studentData = rows[0];
-    studentData.class_teacher_name = await _getClassTeacherName(studentData.class, studentData.section);
+    studentData.class_teacher_name = await _getClassTeacherName(studentData.class, studentData.section, studentData.group);
 
     // A student-set PIN takes over login entirely — no fallback to the phone
     // columns while a PIN exists, so a stolen/known phone number alone can't
@@ -492,7 +502,7 @@ export async function POST(req) {
       const rows = await sb(`students_data?nfc_uid=eq.${encodeURIComponent(uid)}&select=*`);
       if (!rows?.error && rows.length) {
         const studentData = rows[0];
-        studentData.class_teacher_name = await _getClassTeacherName(studentData.class, studentData.section);
+        studentData.class_teacher_name = await _getClassTeacherName(studentData.class, studentData.section, studentData.group);
         const subRows = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(studentData.student_id)}&tab_name=eq.info`);
         const existingInfo = (subRows && !subRows.error && subRows[0]) ? subRows[0].data : null;
         return NextResponse.json({ result: 'success', data: studentData, existingInfo, submittedBefore: !!existingInfo });
