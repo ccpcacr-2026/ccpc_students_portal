@@ -16,7 +16,12 @@
     <link href="/css/design-themes.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" rel="stylesheet" />
+    <!-- Leaflet is only used by the Live Bus Tracking feature, reached well
+         after login — loaded as non-blocking preload so the login page's
+         render doesn't wait on it. By the time a user reaches Bus Tracking
+         the swap to rel=stylesheet below has long since finished. -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css"></noscript>
 
     <!-- Portal Features -->
     <link href="/css/forms.css" rel="stylesheet">
