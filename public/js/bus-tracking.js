@@ -12,6 +12,12 @@ let busUpdateInterval = null;
 let selectedBusImei = null;
 let hasFittedOnce = false;
 
+// One id per browser tab, reused across polls (so the server counts this
+// tab once, not once per poll) but distinct from any other tab/device —
+// backs the "N watching" live-viewer count in the toolbar.
+const trackerId = sessionStorage.getItem('_bt_tid') || 'w' + Math.random().toString(36).slice(2, 10);
+sessionStorage.setItem('_bt_tid', trackerId);
+
 /**
  * Initialize Leaflet map
  */
@@ -188,7 +194,10 @@ function startBusTracking() {
  */
 async function updateBusPositions() {
   try {
-    const response = await portalFetch('get_bus_data', {});
+    const response = await portalFetch('get_bus_data', { tracker_id: trackerId });
+
+    const watchingEl = document.getElementById('bt-watching-count');
+    if (watchingEl && typeof response.trackers === 'number') watchingEl.textContent = response.trackers;
 
     if (!response.data || !Array.isArray(response.data)) {
       console.warn('Invalid bus data response');

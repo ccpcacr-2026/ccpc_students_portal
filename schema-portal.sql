@@ -47,6 +47,20 @@ ALTER TABLE portal_settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "portal_settings_all" ON portal_settings;
 CREATE POLICY "portal_settings_all" ON portal_settings FOR ALL USING (true);
 
+-- ── Bus tracker live-viewer presence ────────────────────────────────────────
+-- One row per browser tab currently viewing the live map (student or teacher
+-- portal, shared count across both) — refreshed on every ~30s poll from a
+-- sessionStorage-persisted id, and pruned of anything not refreshed in the
+-- last 90s server-side on each read. No cron needed: get_bus_data does its
+-- own upsert-self + delete-stale + count every time it's called.
+CREATE TABLE IF NOT EXISTS bus_tracker_presence (
+  tracker_id   text PRIMARY KEY,
+  last_seen_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE bus_tracker_presence ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "bus_tracker_presence_all" ON bus_tracker_presence;
+CREATE POLICY "bus_tracker_presence_all" ON bus_tracker_presence FOR ALL USING (true);
+
 -- ── Teacher directory ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS portal_teachers (
   id         bigserial PRIMARY KEY,

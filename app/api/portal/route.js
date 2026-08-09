@@ -224,6 +224,30 @@ async function sb(path, method = 'GET', body = null, extra = {}) {
 function normPhone(p) { return String(p || '').replace(/\D/g, '').slice(-10); }
 function normKey(s)   { return String(s || '').toLowerCase().replace(/[\s_]/g, ''); }
 
+// ── Bus tracker live-viewer presence ─────────────────────────────────────
+// One row per browser tab currently viewing the live map (shared count
+// across the student and teacher portals — same bus_tracker_presence table,
+// same 'student' schema as portal_settings). No cron: every get_bus_data
+// call upserts its own heartbeat, prunes anything not refreshed in 90s
+// (3x the 30s poll interval, so one missed poll doesn't drop a viewer), and
+// counts what's left. Never lets a presence hiccup break the bus data itself.
+async function _trackPresence(trackerId) {
+  if (!trackerId || typeof trackerId !== 'string') return 0;
+  try {
+    const id = trackerId.slice(0, 64);
+    const nowIso = new Date().toISOString();
+    const cutoffIso = new Date(Date.now() - 90000).toISOString();
+    await sb('bus_tracker_presence?on_conflict=tracker_id', 'POST',
+      { tracker_id: id, last_seen_at: nowIso },
+      { Prefer: 'resolution=merge-duplicates,return=minimal' });
+    await sb(`bus_tracker_presence?last_seen_at=lt.${encodeURIComponent(cutoffIso)}`, 'DELETE');
+    const live = await sb('bus_tracker_presence?select=tracker_id');
+    return Array.isArray(live) ? live.length : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
 // Shared by the login handler and reset_pin (the "Forgot PIN?" flow uses the
 // exact same admin-selected-column verification to prove identity before
 // clearing a PIN). Phone-like columns match on digits only; the rest match
@@ -1054,13 +1078,14 @@ export async function POST(req) {
   // ── Get All Bus Data (live tracker polling) ───────────────────────────────
   if (action === 'get_bus_data') {
     try {
+      const trackers = await _trackPresence(payload.tracker_id);
       const rows = await sb('portal_settings?key=in.(gp_credentials,bus_registry)');
       if (rows?.error) return NextResponse.json({ result: 'error', message: 'Settings not found.' });
       const sm = {};
       rows.forEach(r => { sm[r.key] = r.value; });
       const creds = sm.gp_credentials || {};
       const busRegistry = sm.bus_registry || [];
-      if (!busRegistry.length) return NextResponse.json({ result: 'success', data: [], trackers: 0, dataAge: 0 });
+      if (!busRegistry.length) return NextResponse.json({ result: 'success', data: [], trackers, dataAge: 0 });
 
       const items = await queryGPLocations(creds, busRegistry.map(b => String(b.imei)));
       const dataMap = {};
@@ -1081,7 +1106,7 @@ export async function POST(req) {
         };
       });
 
-      return NextResponse.json({ result: 'success', data: buses, trackers: 0, dataAge: 0 });
+      return NextResponse.json({ result: 'success', data: buses, trackers, dataAge: 0 });
     } catch (e) {
       return NextResponse.json({ result: 'error', message: e.message });
     }
