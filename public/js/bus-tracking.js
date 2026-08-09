@@ -307,6 +307,7 @@ function updateBusList(buses) {
       <div class="bus-list-item ${isSelected ? 'active' : ''} ${isChecked ? '' : 'dimmed'}" title="${name}" onclick='selectBus(${JSON.stringify(bus.imei)}, ${JSON.stringify(bus)})'>
         <div class="bli-top">
           <input class="bli-check" type="checkbox" ${isChecked ? 'checked' : ''}
+                 style="width:14px!important;height:14px!important;min-width:14px!important;flex-shrink:0;accent-color:#059669!important;cursor:pointer"
                  onclick="event.stopPropagation()" onchange='toggleBusVisibility(${JSON.stringify(bus.imei)}, this.checked)'>
           <div class="bli-avatar ${mv ? 'moving' : 'idle'}"><i class="bi bi-bus-front-fill"></i></div>
           <div class="bli-info">
