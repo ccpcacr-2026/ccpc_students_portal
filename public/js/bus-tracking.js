@@ -28,7 +28,10 @@ function initBusMap() {
     // Leaflet's own "Leaflet 🇺🇦" self-promo link — OpenStreetMap's own
     // attribution stays (required by their tile usage policy; only the
     // library's own branding is optional).
-    map = L.map('bus-map-container', { attributionControl: false }).setView([defaultLat, defaultLng], 13);
+    // zoomControl:false — Leaflet auto-adds its own default zoom control
+    // (topleft) unless told not to; we add our own custom-positioned one
+    // below, and without this both end up on the map at once.
+    map = L.map('bus-map-container', { attributionControl: false, zoomControl: false }).setView([defaultLat, defaultLng], 13);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap',
@@ -48,7 +51,7 @@ function initBusMap() {
     mapContainer.appendChild(fitBtn);
 
     // Mobile bottom-sheet UX: tapping the map (not a marker/control) collapses
-    // the fleet sheet down to its peek bar, giving the map the full screen.
+    // the fleet sheet off-screen, giving the map the full screen.
     map.on('click', collapseFleetSheet);
   }
 
@@ -58,10 +61,11 @@ function initBusMap() {
 }
 
 /**
- * Drag-handle + one-line peek summary pinned above the fleet list — the part
- * of .bus-sidebar that stays visible when the mobile bottom sheet is
- * collapsed. No-op visually on desktop (see the mobile-only CSS), but always
- * inserted so the same markup/JS works at every screen size.
+ * Drag-handle grip pinned above the fleet list, for tapping the sheet back
+ * closed below 992px (desktop/tablet hides it via CSS — the sidebar there
+ * is always open, no sheet behavior at all). Inserted once from JS rather
+ * than the host page's static markup so this file stays a single drop-in
+ * include.
  */
 function ensureSheetHandle() {
   const sidebar = document.getElementById('bus-sidebar');
@@ -69,22 +73,33 @@ function ensureSheetHandle() {
   const handle = document.createElement('div');
   handle.id = 'bt-sheet-handle';
   handle.className = 'bt-sheet-handle';
-  handle.innerHTML = `<div class="bt-sheet-grip"></div><div class="bt-sheet-peek" id="bt-sheet-peek">Tap to view fleet</div>`;
+  handle.innerHTML = `<div class="bt-sheet-grip"></div>`;
   handle.onclick = toggleFleetSheet;
   sidebar.insertBefore(handle, sidebar.firstChild);
 }
 
+/**
+ * Below 992px the collapsed sheet is fully off-screen (see .bt-collapsed in
+ * CSS) — #bt-fleet-toggle is the one thing that stays reachable, appearing
+ * only while the sheet is closed. Desktop/tablet never shows it (CSS:
+ * display:none outside the max-width:991px block) since the sidebar there
+ * is never collapsed in the first place.
+ */
 function toggleFleetSheet() {
   const sidebar = document.getElementById('bus-sidebar');
-  if (sidebar) sidebar.classList.toggle('bt-collapsed');
+  if (sidebar) sidebar.classList.contains('bt-collapsed') ? expandFleetSheet() : collapseFleetSheet();
 }
 function collapseFleetSheet() {
   const sidebar = document.getElementById('bus-sidebar');
+  const toggle = document.getElementById('bt-fleet-toggle');
   if (sidebar) sidebar.classList.add('bt-collapsed');
+  if (toggle) toggle.classList.add('bt-visible');
 }
 function expandFleetSheet() {
   const sidebar = document.getElementById('bus-sidebar');
+  const toggle = document.getElementById('bt-fleet-toggle');
   if (sidebar) sidebar.classList.remove('bt-collapsed');
+  if (toggle) toggle.classList.remove('bt-visible');
 }
 
 /**
@@ -341,8 +356,8 @@ function updateBusList(buses) {
   if (countEl) countEl.textContent = buses.length;
   const toolbarCountEl = document.getElementById('bt-toolbar-count');
   if (toolbarCountEl) toolbarCountEl.textContent = buses.length;
-  const peekEl = document.getElementById('bt-sheet-peek');
-  if (peekEl) peekEl.textContent = buses.length ? `${buses.length} bus${buses.length === 1 ? '' : 'es'} · tap to view fleet` : 'No buses configured';
+  const toggleCountEl = document.getElementById('bt-fleet-toggle-count');
+  if (toggleCountEl) toggleCountEl.textContent = buses.length;
 
   if (!buses.length) {
     listContainer.innerHTML = `<div class="bus-empty"><i class="bi bi-exclamation-circle"></i>No buses configured yet</div>`;

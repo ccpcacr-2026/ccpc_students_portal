@@ -1871,6 +1871,9 @@
                     trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
                     trackPane.innerHTML = `
                       <div class="bus-tracking-container">
+                        <div id="bus-map-container"></div>
+                        <div id="geofence-alerts"></div>
+
                         <div class="bt-toolbar">
                           <div class="bt-toolbar-left">
                             <div class="bt-icon"><i class="bi bi-bus-front-fill"></i></div>
@@ -1881,19 +1884,16 @@
                           </div>
                           <button class="btn-export" onclick="BusTracking.exportBusData()"><i class="bi bi-download"></i> Export</button>
                         </div>
-                        <div class="bus-tracking-body">
-                          <div class="bus-map-wrapper">
-                            <div id="bus-map-container"></div>
-                            <div id="geofence-alerts"></div>
-                          </div>
-                          <div class="bus-sidebar" id="bus-sidebar">
-                            <div id="bus-info-panel">
-                              <div class="bt-info-card">
-                                <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
-                              </div>
+
+                        <button id="bt-fleet-toggle" onclick="toggleFleetSheet()"><i class="bi bi-bus-front-fill"></i> <span id="bt-fleet-toggle-count">0</span> buses</button>
+
+                        <div class="bus-sidebar" id="bus-sidebar">
+                          <div id="bus-info-panel">
+                            <div class="bt-info-card">
+                              <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
                             </div>
-                            <div id="bus-list"><div class="bus-empty"><i class="bi bi-broadcast"></i>Waiting for GPS data…</div></div>
                           </div>
+                          <div id="bus-list"><div class="bus-empty"><i class="bi bi-broadcast"></i>Waiting for GPS data…</div></div>
                         </div>
                       </div>
                     `;
@@ -3141,6 +3141,9 @@
                 trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
                 trackPane.innerHTML = `
                   <div class="bus-tracking-container">
+                    <div id="bus-map-container"></div>
+                    <div id="geofence-alerts"></div>
+
                     <div class="bt-toolbar">
                       <div class="bt-toolbar-left">
                         <div class="bt-icon"><i class="bi bi-bus-front-fill"></i></div>
@@ -3151,19 +3154,16 @@
                       </div>
                       <button class="btn-export" onclick="BusTracking.exportBusData()"><i class="bi bi-download"></i> Export</button>
                     </div>
-                    <div class="bus-tracking-body">
-                      <div class="bus-map-wrapper">
-                        <div id="bus-map-container"></div>
-                        <div id="geofence-alerts"></div>
-                      </div>
-                      <div class="bus-sidebar" id="bus-sidebar">
-                        <div id="bus-info-panel">
-                          <div class="bt-info-card">
-                            <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
-                          </div>
+
+                    <button id="bt-fleet-toggle" onclick="toggleFleetSheet()"><i class="bi bi-bus-front-fill"></i> <span id="bt-fleet-toggle-count">0</span> buses</button>
+
+                    <div class="bus-sidebar" id="bus-sidebar">
+                      <div id="bus-info-panel">
+                        <div class="bt-info-card">
+                          <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
                         </div>
-                        <div id="bus-list"><div class="bus-empty"><i class="bi bi-broadcast"></i>Waiting for GPS data…</div></div>
                       </div>
+                      <div id="bus-list"><div class="bus-empty"><i class="bi bi-broadcast"></i>Waiting for GPS data…</div></div>
                     </div>
                   </div>
                 `;

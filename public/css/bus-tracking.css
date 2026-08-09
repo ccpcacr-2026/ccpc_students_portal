@@ -1,17 +1,30 @@
-/* ── Bus Tracking — compact, whole-viewport layout ─────────────── */
+/* ── Bus Tracking — full-bleed map-app layout ────────────────────
+   The map is the base layer filling the whole panel; the toolbar, fleet
+   list and fit/zoom controls all float over it. .bus-tracking-container
+   sits inside .content-area's own padding (40px desktop / 14px-12px
+   mobile sides, plus a large top/bottom reserve on mobile for the fixed
+   header + bottom nav) — negative side margins matching that padding
+   pull it out to the true width of the viewport; top/bottom padding is
+   deliberately left alone since it's clearing real fixed chrome, not
+   empty space. ── */
 
 .bus-tracking-container {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  position: relative;
   height: 100%;
-  padding: 16px;
+  padding: 0;
+  overflow: hidden;
   background: var(--bg);
+  margin: 0 -40px;
 }
+@media (max-width: 991px) { .bus-tracking-container { margin: 0 -14px; } }
+@media (max-width: 575px) { .bus-tracking-container { margin: 0 -12px; } }
+
+#bus-map-container { position: absolute; inset: 0; }
 
 /* ── Toolbar ─────────────────────────────────────────────────── */
 
 .bt-toolbar {
+  position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -21,7 +34,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  flex-shrink: 0;
 }
 
 .bt-toolbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -54,26 +66,6 @@
   cursor: pointer; transition: all 0.18s;
 }
 .btn-export:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
-
-/* ── Body: map + sidebar ─────────────────────────────────────── */
-
-.bus-tracking-body {
-  display: flex;
-  gap: 14px;
-  flex: 1;
-  min-height: 0;
-}
-
-.bus-map-wrapper {
-  flex: 1;
-  position: relative;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
-}
-
-#bus-map-container { width: 100%; height: 100%; }
 
 .leaflet-container {
   font-family: 'Geist', 'Inter', sans-serif;
@@ -124,15 +116,15 @@
 }
 .bt-fit-btn:hover { background: var(--primary); color: #fff; }
 
-/* ── Sidebar ─────────────────────────────────────────────────── */
+/* ── Sidebar (floating overlay — positioned per-breakpoint below) ─── */
 
 .bus-sidebar {
-  width: 280px;
-  flex-shrink: 0;
+  position: absolute; z-index: 900;
+  background: var(--surface); box-shadow: 0 8px 30px rgba(15,23,42,0.18);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 7px;
-  min-height: 0;
 }
 
 #bus-info-panel { flex-shrink: 0; }
@@ -285,7 +277,7 @@
 /* ── Geofence Alerts ─────────────────────────────────────────── */
 
 #geofence-alerts {
-  position: absolute; top: 12px; left: 12px; right: 64px; z-index: 999;
+  position: absolute; top: 68px; left: 10px; right: 10px; z-index: 999;
   display: flex; flex-direction: column; gap: 8px;
   pointer-events: none;
 }
@@ -298,45 +290,53 @@
 }
 @keyframes btSlideIn { from { transform: translateX(-16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-/* ── Mobile: full-bleed map + floating toolbar + collapsible bottom sheet ──
-   Below 900px the side-by-side map/list layout gives way to a proper
-   map-app pattern: the map fills the whole panel, the toolbar floats over
-   its top edge as the "live" corner readout, and the fleet list becomes a
-   sheet anchored to the bottom — tap the map to collapse it to a one-line
-   peek, tap the peek (or select a bus) to bring it back. ── */
-@media (max-width: 900px) {
-  .bus-tracking-container { position: relative; padding: 0; gap: 0; }
-  .bt-toolbar {
-    position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1000;
-    padding: 7px 10px; border-radius: var(--radius-md);
+/* Floating "N buses" pill — only ever shown below 992px, and only while the
+   sheet is collapsed (see JS toggleFleetSheet/collapseFleetSheet). Sits
+   directly above the zoom control cluster, matching where it points. */
+#bt-fleet-toggle {
+  display: none; position: absolute; z-index: 950;
+  align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 50px; border: none;
+  background: var(--surface); color: var(--text-2);
+  font-weight: 700; font-size: 0.72rem; cursor: pointer;
+  box-shadow: var(--shadow);
+}
+#bt-fleet-toggle i { color: var(--primary); }
+
+/* Desktop/tablet (≥992px, matching the app's own sidebar breakpoint):
+   sidebar floats as a card on the right; always open, no toggle needed —
+   there's room for both map and list at once. */
+@media (min-width: 992px) {
+  .bus-sidebar {
+    top: 68px; right: 10px; bottom: 10px; width: 300px;
+    border-radius: var(--radius-lg); padding: 8px;
   }
-  .bus-tracking-body { position: absolute; inset: 0; flex-direction: column; gap: 0; }
-  .bus-map-wrapper {
-    position: absolute; inset: 0; border-radius: 0; border: none; box-shadow: none;
-    min-height: 0;
-  }
-  .bt-fit-btn { bottom: 66px; }
+  .bt-fit-btn { bottom: 16px; left: 56px; right: auto; }
+  .bt-sheet-handle { display: none; }
+}
+
+/* Below 992px: bottom sheet that slides fully off-screen when collapsed —
+   tapping the map (or selecting a bus) brings it back (handled in JS);
+   when collapsed, the only trace of it is #bt-fleet-toggle above the zoom
+   buttons. */
+@media (max-width: 991px) {
+  .bt-fit-btn { top: 68px; right: 10px; bottom: auto; left: auto; }
+  #geofence-alerts { right: 100px; }
+
+  #bt-fleet-toggle { bottom: 84px; left: 10px; }
+  #bt-fleet-toggle.bt-visible { display: flex; }
 
   .bus-sidebar {
-    position: absolute; left: 0; right: 0; bottom: 0; width: 100%;
-    max-height: 46vh;
-    background: var(--surface); border-radius: 20px 20px 0 0;
-    box-shadow: 0 -8px 30px rgba(15,23,42,0.18);
-    z-index: 900; padding: 0 10px 10px;
-    transition: max-height 0.28s cubic-bezier(0.4,0,0.2,1);
+    left: 0; right: 0; bottom: 0; width: 100%; max-height: 50vh;
+    border-radius: 20px 20px 0 0; padding: 0 10px 10px;
+    transform: translateY(0);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
   }
-  .bus-sidebar.bt-collapsed { max-height: 56px; overflow: hidden; }
-  .bus-sidebar.bt-collapsed #bus-info-panel,
-  .bus-sidebar.bt-collapsed #bus-list,
-  .bus-sidebar.bt-collapsed #bt-fleet-head { display: none; }
+  .bus-sidebar.bt-collapsed { transform: translateY(110%); }
 
   .bt-sheet-handle {
     display: flex; flex-direction: column; align-items: center; gap: 6px;
     padding: 8px 0 6px; cursor: pointer; flex-shrink: 0;
   }
   .bt-sheet-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--border); }
-  .bt-sheet-peek { display: none; font-size: 0.7rem; font-weight: 800; color: var(--text-2); }
-  .bus-sidebar.bt-collapsed .bt-sheet-peek { display: block; }
-
-  #geofence-alerts { top: 60px; right: 12px; }
 }
