@@ -254,6 +254,47 @@ async function verifyAdminSelectedPassword(studentData, inputValue) {
   };
 }
 
+// Assigned via ccpc-teachers' own "Assign Class Teacher" admin panel
+// (student.class_teacher_assignments) — this looks up that assignment and
+// resolves the teacher's display name from the teacher schema, same
+// cross-schema pattern get_teacher_directory uses. Called on every login so
+// a newly-made assignment shows up immediately, with no caching to go stale.
+//
+// A class+section can have several assignment rows at once, each narrowed
+// by its own extra_criteria — an arbitrary {column:value} object (e.g.
+// {"group":"Science"} or {"shift":"Morning","version":"English"}, or {}
+// for a class-wide assignment with no further narrowing) picked freely by
+// the admin per combination, not a fixed set of columns. A combination can
+// only ever belong to one teacher, so at most one row can fully match this
+// student's own data at each level of specificity — prefer whichever
+// matching row has the MOST criteria keys (most specific), falling back to
+// a class-wide ({}) row if nothing more specific matches.
+async function _getClassTeacherName(cls, section, studentRow) {
+  if (!cls || !section) return null;
+  const rows = await sb(
+    `class_teacher_assignments?class=eq.${encodeURIComponent(cls)}&section=eq.${encodeURIComponent(section)}&select=user_id,extra_criteria`
+  );
+  if (rows?.error || !Array.isArray(rows) || !rows.length) return null;
+  // Same "blank -> None" normalization get_class_sections applies when it
+  // originally offered these columns to the admin, so a student with an
+  // actually-empty column matches a combo saved with that column = "None".
+  const normVal = (v) => (String(v || '').trim() || 'None').toLowerCase();
+  const matches = rows.filter(r => {
+    const ec = r.extra_criteria || {};
+    return Object.entries(ec).every(([col, val]) => normVal(studentRow[col]) === normVal(val));
+  });
+  if (!matches.length) return null;
+  matches.sort((a, b) => Object.keys(b.extra_criteria || {}).length - Object.keys(a.extra_criteria || {}).length);
+  const userId = matches[0].user_id;
+  if (!userId) return null;
+  const profRows = await sb(
+    `users_profile?teacher_id=eq.${encodeURIComponent(userId)}&select=full_name`,
+    'GET', null,
+    { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+  );
+  return (!profRows?.error && profRows[0] && profRows[0].full_name) ? profRows[0].full_name : null;
+}
+
 // ── Evaluate tab condition rule ──────────────────────────────────────────────
 async function evalRule(rule, profile, submissions) {
   const profileKeys = Object.keys(profile);
@@ -431,6 +472,7 @@ export async function POST(req) {
     if (rows?.error) return NextResponse.json({ result: 'error', message: 'Database error.' });
     if (!rows.length)  return NextResponse.json({ result: 'error', message: 'Student ID not found.' });
     const studentData = rows[0];
+    studentData.class_teacher_name = await _getClassTeacherName(studentData.class, studentData.section, studentData);
 
     // A student-set PIN takes over login entirely — no fallback to the phone
     // columns while a PIN exists, so a stolen/known phone number alone can't
@@ -470,6 +512,7 @@ export async function POST(req) {
       const rows = await sb(`students_data?nfc_uid=eq.${encodeURIComponent(uid)}&select=*`);
       if (!rows?.error && rows.length) {
         const studentData = rows[0];
+        studentData.class_teacher_name = await _getClassTeacherName(studentData.class, studentData.section, studentData);
         const subRows = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(studentData.student_id)}&tab_name=eq.info`);
         const existingInfo = (subRows && !subRows.error && subRows[0]) ? subRows[0].data : null;
         return NextResponse.json({ result: 'success', data: studentData, existingInfo, submittedBefore: !!existingInfo });
