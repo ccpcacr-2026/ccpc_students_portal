@@ -84,6 +84,35 @@
 .leaflet-popup-content { margin: 12px; font-size: 0.85rem; }
 .bus-marker { filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.25)); }
 
+/* Subtle, cohesive tile tone — only the base map, never markers/circles */
+.leaflet-tile-pane { filter: saturate(0.9) brightness(1.02); }
+
+/* Zoom buttons: clean rounded pair instead of Leaflet's default squares */
+.leaflet-control-zoom {
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow) !important;
+}
+.leaflet-control-zoom a {
+  width: 30px !important; height: 30px !important; line-height: 30px !important;
+  background: var(--surface) !important; color: var(--text-2) !important;
+  font-weight: 700 !important; border: none !important;
+}
+.leaflet-control-zoom a:hover { background: var(--bg) !important; color: var(--primary) !important; }
+.leaflet-control-zoom-in { border-radius: var(--radius-md) var(--radius-md) 0 0 !important; }
+.leaflet-control-zoom-out { border-radius: 0 0 var(--radius-md) var(--radius-md) !important; }
+
+/* Attribution: just a quiet pill in the corner, not a banner */
+.leaflet-control-attribution {
+  background: rgba(255,255,255,0.82) !important;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--border) !important; box-shadow: none !important;
+  border-radius: 50px !important;
+  padding: 2px 9px !important;
+  font-size: 0.6rem !important; color: var(--text-3) !important;
+  line-height: 1.6;
+}
+.leaflet-control-attribution a { color: var(--text-3) !important; }
+
 /* Fit-all-buses button injected by JS */
 .bt-fit-btn {
   position: absolute; bottom: 16px; right: 12px; z-index: 1000;

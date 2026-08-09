@@ -24,12 +24,17 @@ function initBusMap() {
   const defaultLng = 90.4125;
 
   if (!map) {
-    map = L.map('bus-map-container').setView([defaultLat, defaultLng], 13);
+    // attributionControl:false + a hand-added one below (prefix:false) drops
+    // Leaflet's own "Leaflet 🇺🇦" self-promo link — OpenStreetMap's own
+    // attribution stays (required by their tile usage policy; only the
+    // library's own branding is optional).
+    map = L.map('bus-map-container', { attributionControl: false }).setView([defaultLat, defaultLng], 13);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
+      attribution: '© OpenStreetMap',
       maxZoom: 19,
     }).addTo(map);
+    L.control.attribution({ prefix: false, position: 'bottomright' }).addTo(map);
 
     // bottomleft, not the default topright — on mobile the toolbar floats
     // over the top of the map (see ensureSheetHandle/CSS), which would sit
