@@ -1860,25 +1860,30 @@
                     trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
                     trackPane.style.height = 'calc(100vh - 120px)';
                     trackPane.innerHTML = `
-                      <div class="bus-tracking-container" style="height: 100%;">
-                        <div class="bus-map-wrapper">
-                          <div id="bus-map-container"></div>
-                          <div id="geofence-alerts"></div>
-                          <div class="bus-tracking-controls">
-                            <button class="btn btn-sm btn-outline-primary" onclick="BusTracking.exportBusData()">
-                              <i class="bi bi-download"></i> Export CSV
-                            </button>
-                          </div>
-                        </div>
-                        <div class="bus-sidebar">
-                          <div id="bus-info-panel">
-                            <div class="card shadow-lg">
-                              <div class="card-body text-center text-muted py-4">
-                                <p>Select a bus to view details</p>
-                              </div>
+                      <div class="bus-tracking-container">
+                        <div class="bt-toolbar">
+                          <div class="bt-toolbar-left">
+                            <div class="bt-icon"><i class="bi bi-bus-front-fill"></i></div>
+                            <div>
+                              <div class="bt-title">Live Bus Tracker</div>
+                              <div class="bt-sub"><span class="dot"></span>Updated <span id="bus-data-timestamp">—</span></div>
                             </div>
                           </div>
-                          <div id="bus-list" style="flex: 1; min-height: 100px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; background: var(--surface);"></div>
+                          <button class="btn-export" onclick="BusTracking.exportBusData()"><i class="bi bi-download"></i> Export</button>
+                        </div>
+                        <div class="bus-tracking-body">
+                          <div class="bus-map-wrapper">
+                            <div id="bus-map-container"></div>
+                            <div id="geofence-alerts"></div>
+                          </div>
+                          <div class="bus-sidebar">
+                            <div id="bus-info-panel">
+                              <div class="bt-info-card">
+                                <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
+                              </div>
+                            </div>
+                            <div id="bus-list"><div class="bus-empty"><i class="bi bi-broadcast"></i>Waiting for GPS data…</div></div>
+                          </div>
                         </div>
                       </div>
                     `;
@@ -3102,25 +3107,30 @@
                 trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
                 trackPane.style.height = 'calc(100vh - 120px)';
                 trackPane.innerHTML = `
-                  <div class="bus-tracking-container" style="height: 100%;">
-                    <div class="bus-map-wrapper">
-                      <div id="bus-map-container"></div>
-                      <div id="geofence-alerts"></div>
-                      <div class="bus-tracking-controls">
-                        <button class="btn btn-sm btn-outline-primary" onclick="BusTracking.exportBusData()">
-                          <i class="bi bi-download"></i> Export CSV
-                        </button>
-                      </div>
-                    </div>
-                    <div class="bus-sidebar">
-                      <div id="bus-info-panel">
-                        <div class="card shadow-lg">
-                          <div class="card-body text-center text-muted py-4">
-                            <p>Select a bus to view details</p>
-                          </div>
+                  <div class="bus-tracking-container">
+                    <div class="bt-toolbar">
+                      <div class="bt-toolbar-left">
+                        <div class="bt-icon"><i class="bi bi-bus-front-fill"></i></div>
+                        <div>
+                          <div class="bt-title">Live Bus Tracker</div>
+                          <div class="bt-sub"><span class="dot"></span>Updated <span id="bus-data-timestamp">—</span></div>
                         </div>
                       </div>
-                      <div id="bus-list" style="flex: 1; min-height: 100px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; background: var(--surface);"></div>
+                      <button class="btn-export" onclick="BusTracking.exportBusData()"><i class="bi bi-download"></i> Export</button>
+                    </div>
+                    <div class="bus-tracking-body">
+                      <div class="bus-map-wrapper">
+                        <div id="bus-map-container"></div>
+                        <div id="geofence-alerts"></div>
+                      </div>
+                      <div class="bus-sidebar">
+                        <div id="bus-info-panel">
+                          <div class="bt-info-card">
+                            <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
+                          </div>
+                        </div>
+                        <div id="bus-list"><div class="bus-empty"><i class="bi bi-broadcast"></i>Waiting for GPS data…</div></div>
+                      </div>
                     </div>
                   </div>
                 `;

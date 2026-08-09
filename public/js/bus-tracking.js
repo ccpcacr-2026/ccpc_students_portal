@@ -8,6 +8,7 @@ let busMarkers = {};
 let geofenceCircles = {};
 let busUpdateInterval = null;
 let selectedBusImei = null;
+let hasFittedOnce = false;
 
 /**
  * Initialize Leaflet map
@@ -28,22 +29,15 @@ function initBusMap() {
       maxZoom: 19,
     }).addTo(map);
 
-    // Add zoom controls
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Fit bounds button
     const fitBtn = document.createElement('button');
-    fitBtn.className = 'btn btn-sm btn-outline-primary';
-    fitBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i> Fit All Buses';
-    fitBtn.style.position = 'absolute';
-    fitBtn.style.bottom = '20px';
-    fitBtn.style.right = '10px';
-    fitBtn.style.zIndex = '1000';
+    fitBtn.className = 'bt-fit-btn';
+    fitBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i> Fit all';
     fitBtn.onclick = fitBusesInBounds;
     mapContainer.appendChild(fitBtn);
   }
 
-  // Load bus tracking config and start polling
   loadBusTrackingConfig();
 }
 
@@ -59,7 +53,6 @@ async function loadBusTrackingConfig() {
     }
 
     if (response.placeRegistry) {
-      // Parse place registry and add geofence circles
       response.placeRegistry.forEach(place => {
         const [name, coordsStr, radius] = place;
         try {
@@ -73,7 +66,6 @@ async function loadBusTrackingConfig() {
       });
     }
 
-    // Start polling bus data
     startBusTracking();
   } catch (err) {
     console.error('Failed to load tracking config:', err);
@@ -94,7 +86,6 @@ function addGeofenceCircle(name, lat, lng, radius) {
     fillOpacity: 0.1,
     weight: 2,
     radius: radius, // meters
-    popup: `<strong>${name}</strong><br/>Radius: ${radius}m`,
   }).addTo(map);
 
   circle.bindPopup(`<strong>${name}</strong><br/>Radius: ${radius}m`);
@@ -105,10 +96,7 @@ function addGeofenceCircle(name, lat, lng, radius) {
  * Start polling for bus positions
  */
 function startBusTracking() {
-  // Initial fetch
   updateBusPositions();
-
-  // Poll every 30 seconds
   if (busUpdateInterval) clearInterval(busUpdateInterval);
   busUpdateInterval = setInterval(updateBusPositions, 30000);
 }
@@ -125,74 +113,80 @@ async function updateBusPositions() {
       return;
     }
 
-    // Update each bus
-    response.data.forEach(bus => {
-      updateBusMarker(bus);
-    });
-
-    // Update bus list
+    response.data.forEach(bus => updateBusMarker(bus));
     updateBusList(response.data);
 
-    // Update timestamp
-    const timeEl = document.getElementById('bus-data-timestamp');
-    if (timeEl) {
-      timeEl.textContent = new Date().toLocaleTimeString();
+    // Fit the map to wherever the buses actually are on the very first
+    // successful load — the map's default view is a generic city center,
+    // not the school's actual location, so real bus positions can easily
+    // fall outside it (list populates fine either way; only the map looks
+    // empty). After this first fit the user's own pan/zoom is left alone.
+    if (!hasFittedOnce && Object.keys(busMarkers).length) {
+      hasFittedOnce = true;
+      fitBusesInBounds();
     }
+
+    const timeEl = document.getElementById('bus-data-timestamp');
+    if (timeEl) timeEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   } catch (err) {
     console.error('Failed to update bus positions:', err);
   }
 }
 
 /**
+ * Build the pulsing gradient marker icon used both on the map and (larger) when selected
+ */
+function busMarkerIcon(bus, selected) {
+  const mv = !!bus.isMoving;
+  const color = mv ? '#059669' : '#F59E0B';
+  const dark = mv ? '#047857' : '#B45309';
+  const size = selected ? 42 : 34;
+  const pulse = mv ? `<div class="bt-marker-pulse" style="border-color:${color}"></div>` : '';
+
+  return L.divIcon({
+    className: '',
+    html: `<div class="bt-marker-wrap">
+      ${pulse}
+      <div class="bt-marker-circle" style="width:${size}px;height:${size}px;background:linear-gradient(135deg,${color},${dark})">
+        <i class="bi bi-bus-front-fill"></i>
+      </div>
+    </div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function busName(imei) {
+  if (window.busRegistry && Array.isArray(window.busRegistry)) {
+    const found = window.busRegistry.find(b => b[1] === imei);
+    if (found) return found[0];
+  }
+  return imei;
+}
+
+/**
  * Update or create bus marker on map
  */
 function updateBusMarker(bus) {
-  const { imei, latitude, longitude, speed, isMoving, address } = bus;
+  const { imei, lat, lng } = bus;
+  if (!imei || isNaN(lat) || isNaN(lng)) return;
 
-  if (!imei || isNaN(latitude) || isNaN(longitude)) return;
+  const selected = selectedBusImei === imei;
+  const icon = busMarkerIcon(bus, selected);
+  const label = `<b>${busName(imei)}</b> · ${bus.isMoving ? `${bus.speed} km/h` : 'Idle'}`;
 
-  // Remove old marker
   if (busMarkers[imei]) {
-    map.removeLayer(busMarkers[imei]);
+    busMarkers[imei].setLatLng([lat, lng]);
+    busMarkers[imei].setIcon(icon);
+    busMarkers[imei].setTooltipContent(label);
+  } else {
+    const marker = L.marker([lat, lng], { icon }).addTo(map);
+    marker.bindTooltip(label, { permanent: true, direction: 'top', className: 'bt-marker-label', offset: [0, selected ? -24 : -20] });
+    marker.on('click', () => selectBus(imei, bus));
+    busMarkers[imei] = marker;
   }
+  busMarkers[imei].busData = bus; // kept for CSV export
 
-  // Create marker icon based on movement
-  const iconColor = isMoving ? '#ef4444' : '#059669'; // Red = moving, Green = stationary
-  const iconSize = selectedBusImei === imei ? 40 : 30;
-
-  const busIcon = L.divIcon({
-    html: `
-      <div style="
-        width: ${iconSize}px;
-        height: ${iconSize}px;
-        background: ${iconColor};
-        border: 3px solid white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      ">
-        <i style="color: white; font-size: 14px;" class="bi bi-bus-front-fill"></i>
-      </div>
-    `,
-    iconSize: [iconSize, iconSize],
-    className: 'bus-marker',
-  });
-
-  const marker = L.marker([latitude, longitude], { icon: busIcon, rotationAngle: 0 });
-  marker.bindPopup(`
-    <strong>Bus: ${imei}</strong><br/>
-    Speed: ${speed} km/h<br/>
-    Status: ${isMoving ? '🔴 Moving' : '🟢 Stationary'}<br/>
-    Address: ${address || 'Locating...'}
-  `);
-
-  marker.on('click', () => selectBus(imei, bus));
-  marker.addTo(map);
-  busMarkers[imei] = marker;
-
-  // Check geofence events
   checkGeofenceEvents(bus);
 }
 
@@ -200,31 +194,21 @@ function updateBusMarker(bus) {
  * Check if bus entered/exited geofences
  */
 function checkGeofenceEvents(bus) {
-  const { imei, latitude, longitude } = bus;
-
+  const { imei, lat, lng } = bus;
   if (!window.busRegistry || !Array.isArray(window.busRegistry)) return;
 
-  // Get bus name from registry
-  const busName = window.busRegistry.find(b => b[1] === imei)?.[0] || imei;
+  const name = busName(imei);
 
-  // Check each geofence
   Object.entries(geofenceCircles).forEach(([geoName, geoCircle]) => {
     const geoLatLng = geoCircle.getLatLng();
-    const distance = geoLatLng.distanceTo(L.latLng(latitude, longitude));
+    const distance = geoLatLng.distanceTo(L.latLng(lat, lng));
     const radius = geoCircle.getRadius();
 
     const wasInside = geoCircle._busWasInside || false;
     const isInside = distance <= radius;
 
-    // Detect entry
-    if (isInside && !wasInside) {
-      showGeofenceAlert(`${busName} entered ${geoName}`, 'success');
-    }
-
-    // Detect exit
-    if (!isInside && wasInside) {
-      showGeofenceAlert(`${busName} exited ${geoName}`, 'warning');
-    }
+    if (isInside && !wasInside) showGeofenceAlert(`${name} entered ${geoName}`, 'success', 'bi-geo-alt-fill');
+    if (!isInside && wasInside) showGeofenceAlert(`${name} exited ${geoName}`, 'warning', 'bi-arrow-right-circle-fill');
 
     geoCircle._busWasInside = isInside;
   });
@@ -233,26 +217,19 @@ function checkGeofenceEvents(bus) {
 /**
  * Show geofence alert toast
  */
-function showGeofenceAlert(message, type = 'info') {
+function showGeofenceAlert(message, type = 'info', icon = 'bi-info-circle-fill') {
   const alertsContainer = document.getElementById('geofence-alerts');
   if (!alertsContainer) return;
 
   const alert = document.createElement('div');
   alert.className = `alert alert-${type} alert-dismissible fade show`;
   alert.role = 'alert';
-  alert.innerHTML = `
-    ${message}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-  `;
+  alert.innerHTML = `<i class="bi ${icon}"></i> ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" style="font-size:0.6rem"></button>`;
 
   alertsContainer.insertBefore(alert, alertsContainer.firstChild);
 
-  // Auto-dismiss after 5 seconds
-  setTimeout(() => {
-    if (alert.parentElement) {
-      alert.remove();
-    }
-  }, 5000);
+  setTimeout(() => { if (alert.parentElement) alert.remove(); }, 5000);
 }
 
 /**
@@ -262,29 +239,38 @@ function updateBusList(buses) {
   const listContainer = document.getElementById('bus-list');
   if (!listContainer) return;
 
-  const busMap = new Map();
-  if (window.busRegistry && Array.isArray(window.busRegistry)) {
-    window.busRegistry.forEach(b => busMap.set(b[1], b[0]));
+  if (!buses.length) {
+    listContainer.innerHTML = `<div class="bus-empty"><i class="bi bi-exclamation-circle"></i>No buses configured yet</div>`;
+    return;
   }
 
   listContainer.innerHTML = buses.map(bus => {
-    const busName = busMap.get(bus.imei) || bus.imei;
-    const statusIcon = bus.isMoving ? '🔴' : '🟢';
+    const name = busName(bus.imei);
+    const mv = !!bus.isMoving;
     const isSelected = selectedBusImei === bus.imei;
+    const spd = parseFloat(bus.speed) || 0;
+    const spdPct = Math.min(100, Math.round((spd / 80) * 100));
+    const addr = (bus.address || 'Locating…');
 
     return `
-      <div class="bus-list-item ${isSelected ? 'active' : ''}" onclick="selectBus('${bus.imei}', ${JSON.stringify(bus)})">
-        <div class="d-flex justify-content-between align-items-start">
-          <div>
-            <div class="fw-600">${busName}</div>
-            <small class="text-muted">${bus.imei}</small>
+      <div class="bus-list-item ${isSelected ? 'active' : ''}" onclick='selectBus(${JSON.stringify(bus.imei)}, ${JSON.stringify(bus)})'>
+        <div class="bli-top">
+          <div class="bli-avatar ${mv ? 'moving' : 'idle'}"><i class="bi bi-bus-front-fill"></i></div>
+          <div class="bli-info">
+            <div class="bli-name">${name}</div>
+            <div class="bli-imei">${bus.imei}</div>
           </div>
-          <span style="font-size: 18px;">${statusIcon}</span>
+          <div class="bli-status">
+            <div class="bli-dot ${mv ? 'moving' : 'idle'}"></div>
+          </div>
         </div>
-        <div class="mt-2" style="font-size: 0.85rem;">
-          <div><strong>${bus.speed}</strong> km/h</div>
-          <div class="text-muted text-truncate" style="max-width: 150px;">${bus.address || 'Locating...'}</div>
+        <div class="bli-bottom">
+          <div class="bli-speed-wrap">
+            <div class="bli-speed-top"><span>${mv ? 'Moving' : 'Idle'}</span><span>${spd} km/h</span></div>
+            <div class="bli-speed-track"><div class="bli-speed-fill ${mv ? 'moving' : 'idle'}" style="width:${spdPct}%"></div></div>
+          </div>
         </div>
+        <div class="bli-addr"><i class="bi bi-geo-alt-fill"></i>${addr}</div>
       </div>
     `;
   }).join('');
@@ -296,40 +282,13 @@ function updateBusList(buses) {
 function selectBus(imei, busData) {
   selectedBusImei = imei;
 
-  // Update marker size
   if (busMarkers[imei]) {
-    busMarkers[imei].setIcon(L.divIcon({
-      html: `
-        <div style="
-          width: 40px;
-          height: 40px;
-          background: ${busData.isMoving ? '#ef4444' : '#059669'};
-          border: 4px solid #fbbf24;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        ">
-          <i style="color: white; font-size: 16px;" class="bi bi-bus-front-fill"></i>
-        </div>
-      `,
-      iconSize: [40, 40],
-    }));
-
-    // Pan to selected bus
+    busMarkers[imei].setIcon(busMarkerIcon(busData, true));
     map.panTo(busMarkers[imei].getLatLng());
   }
 
-  // Update bus info panel
   updateBusInfoPanel(busData);
-
-  // Highlight in list
-  document.querySelectorAll('.bus-list-item').forEach(item => {
-    item.classList.remove('active');
-  });
-  const activeItem = document.querySelector(`.bus-list-item[onclick*="${imei}"]`);
-  if (activeItem) activeItem.classList.add('active');
+  updateBusList(Object.values(busMarkers).map(m => m.busData).filter(Boolean));
 }
 
 /**
@@ -339,49 +298,33 @@ function updateBusInfoPanel(bus) {
   const panel = document.getElementById('bus-info-panel');
   if (!panel) return;
 
-  const busName = (() => {
-    if (window.busRegistry && Array.isArray(window.busRegistry)) {
-      const found = window.busRegistry.find(b => b[1] === bus.imei);
-      return found ? found[0] : bus.imei;
-    }
-    return bus.imei;
-  })();
-
+  const name = busName(bus.imei);
+  const mv = !!bus.isMoving;
+  const spd = parseFloat(bus.speed) || 0;
   const etaHtml = calculateETA(bus);
 
   panel.innerHTML = `
-    <div class="card shadow-lg">
-      <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">
-          <i class="bi bi-bus-front-fill"></i> ${busName}
-        </h5>
+    <div class="bt-info-card">
+      <div class="bt-info-head">
+        <div>
+          <div class="bt-info-name">${name}</div>
+          <div class="bt-info-imei">${bus.imei}</div>
+        </div>
+        <div class="bt-badge ${mv ? 'moving' : 'idle'}">● ${mv ? 'Moving' : 'Idle'}</div>
       </div>
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-6">
-            <div class="small text-muted">IMEI</div>
-            <div class="fw-600">${bus.imei}</div>
+      <div class="bt-info-body">
+        <div class="bt-stat-row">
+          <div class="bt-stat">
+            <div class="bt-stat-label">Speed</div>
+            <div class="bt-stat-val">${spd} km/h</div>
           </div>
-          <div class="col-6">
-            <div class="small text-muted">SPEED</div>
-            <div class="fw-600">${bus.speed} km/h</div>
-          </div>
-          <div class="col-12">
-            <div class="small text-muted">STATUS</div>
-            <div class="fw-600">
-              ${bus.isMoving ? '<span class="badge bg-danger">Moving</span>' : '<span class="badge bg-success">Stationary</span>'}
-            </div>
-          </div>
-          <div class="col-12">
-            <div class="small text-muted">ADDRESS</div>
-            <div>${bus.address || 'Locating...'}</div>
-          </div>
-          ${etaHtml ? `<div class="col-12">${etaHtml}</div>` : ''}
-          <div class="col-12">
-            <div class="small text-muted">LAST UPDATE</div>
-            <div id="bus-data-timestamp">Just now</div>
+          <div class="bt-stat">
+            <div class="bt-stat-label">Engine</div>
+            <div class="bt-stat-val">${bus.engine ? 'On' : 'Off'}</div>
           </div>
         </div>
+        <div class="bt-info-addr"><i class="bi bi-geo-alt-fill"></i>${bus.address || 'Locating…'}</div>
+        ${etaHtml}
       </div>
     </div>
   `;
@@ -398,24 +341,19 @@ function calculateETA(bus) {
 
   Object.entries(geofenceCircles).forEach(([name, circle]) => {
     const latLng = circle.getLatLng();
-    const distance = latLng.distanceTo(L.latLng(bus.latitude, bus.longitude));
+    const distance = latLng.distanceTo(L.latLng(bus.lat, bus.lng));
     if (distance < minDistance) {
       minDistance = distance;
-      nearest = { name, distance, latlng: latLng };
+      nearest = { name, distance };
     }
   });
 
   if (!nearest || nearest.distance <= 100) return '';
 
-  // Simple ETA: distance / speed (in hours) * 60 (to minutes)
-  const speedMs = bus.speed / 3.6; // km/h to m/s
-  const etaSeconds = nearest.distance / speedMs;
-  const etaMinutes = Math.round(etaSeconds / 60);
+  const speedMs = bus.speed / 3.6;
+  const etaMinutes = Math.round((nearest.distance / speedMs) / 60);
 
-  return `
-    <div class="small text-muted">ETA to ${nearest.name}</div>
-    <div class="fw-600">${etaMinutes} minutes (${Math.round(nearest.distance / 1000)} km)</div>
-  `;
+  return `<div class="bt-eta"><span><i class="bi bi-signpost-fill"></i> ETA to ${nearest.name}</span><span>${etaMinutes} min · ${(nearest.distance / 1000).toFixed(1)} km</span></div>`;
 }
 
 /**
@@ -423,7 +361,6 @@ function calculateETA(bus) {
  */
 function fitBusesInBounds() {
   if (Object.keys(busMarkers).length === 0) return;
-
   const group = new L.featureGroup(Object.values(busMarkers));
   map.fitBounds(group.getBounds().pad(0.1));
 }
@@ -452,10 +389,10 @@ function exportBusData() {
   const rows = buses.map(marker => {
     const bus = marker.busData || {};
     return [
-      (window.busRegistry?.find(b => b[1] === bus.imei)?.[0] || bus.imei),
+      busName(bus.imei),
       bus.imei,
-      bus.latitude,
-      bus.longitude,
+      bus.lat,
+      bus.lng,
       bus.speed,
       bus.isMoving ? 'Moving' : 'Stationary',
       bus.address,
@@ -475,56 +412,6 @@ function exportBusData() {
   URL.revokeObjectURL(url);
 }
 
-// Store bus data on markers for export
-function updateBusMarker(bus) {
-  const { imei, latitude, longitude, speed, isMoving, address } = bus;
-
-  if (!imei || isNaN(latitude) || isNaN(longitude)) return;
-
-  if (busMarkers[imei]) {
-    map.removeLayer(busMarkers[imei]);
-  }
-
-  const iconColor = isMoving ? '#ef4444' : '#059669';
-  const iconSize = selectedBusImei === imei ? 40 : 30;
-
-  const busIcon = L.divIcon({
-    html: `
-      <div style="
-        width: ${iconSize}px;
-        height: ${iconSize}px;
-        background: ${iconColor};
-        border: 3px solid white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      ">
-        <i style="color: white; font-size: 14px;" class="bi bi-bus-front-fill"></i>
-      </div>
-    `,
-    iconSize: [iconSize, iconSize],
-    className: 'bus-marker',
-  });
-
-  const marker = L.marker([latitude, longitude], { icon: busIcon });
-  marker.busData = bus; // Store bus data on marker
-  marker.bindPopup(`
-    <strong>Bus: ${imei}</strong><br/>
-    Speed: ${speed} km/h<br/>
-    Status: ${isMoving ? '🔴 Moving' : '🟢 Stationary'}<br/>
-    Address: ${address || 'Locating...'}
-  `);
-
-  marker.on('click', () => selectBus(imei, bus));
-  marker.addTo(map);
-  busMarkers[imei] = marker;
-
-  checkGeofenceEvents(bus);
-}
-
-// Export for global use
 /**
  * Recalculate the map's size after its container becomes visible.
  * The map is initialized inside a hidden tab-pane (display:none), so Leaflet
@@ -534,9 +421,26 @@ function refreshMapSize() {
   if (map) setTimeout(() => map.invalidateSize(), 50);
 }
 
+/**
+ * Full teardown — used when the map's container div is about to be removed
+ * from the DOM (e.g. navigating to a different view in a single-page host),
+ * so a later initBusMap() call creates a fresh Leaflet instance instead of
+ * silently no-op'ing on the (now-detached) old one.
+ */
+function resetBusMap() {
+  stopBusTracking();
+  if (map) { try { map.remove(); } catch (_) {} }
+  map = null;
+  busMarkers = {};
+  geofenceCircles = {};
+  selectedBusImei = null;
+  hasFittedOnce = false;
+}
+
 window.BusTracking = {
   initBusMap,
   stopBusTracking,
+  resetBusMap,
   exportBusData,
   selectBus,
   refreshMapSize,
