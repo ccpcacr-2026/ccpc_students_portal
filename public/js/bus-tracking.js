@@ -304,7 +304,7 @@ function updateBusList(buses) {
     const addr = (bus.address || 'Locating…');
 
     return `
-      <div class="bus-list-item ${isSelected ? 'active' : ''} ${isChecked ? '' : 'dimmed'}" title="${bus.imei}" onclick='selectBus(${JSON.stringify(bus.imei)}, ${JSON.stringify(bus)})'>
+      <div class="bus-list-item ${isSelected ? 'active' : ''} ${isChecked ? '' : 'dimmed'}" title="${name}" onclick='selectBus(${JSON.stringify(bus.imei)}, ${JSON.stringify(bus)})'>
         <div class="bli-top">
           <input class="bli-check" type="checkbox" ${isChecked ? 'checked' : ''}
                  onclick="event.stopPropagation()" onchange='toggleBusVisibility(${JSON.stringify(bus.imei)}, this.checked)'>
@@ -388,10 +388,7 @@ function updateBusInfoPanel(bus) {
   panel.innerHTML = `
     <div class="bt-info-card">
       <div class="bt-info-head">
-        <div>
-          <div class="bt-info-name">${name}</div>
-          <div class="bt-info-imei">${bus.imei}</div>
-        </div>
+        <div class="bt-info-name">${name}</div>
         <div class="bt-badge ${mv ? 'moving' : 'idle'}">● ${mv ? 'Moving' : 'Idle'}</div>
       </div>
       <div class="bt-info-body">
@@ -467,12 +464,11 @@ function exportBusData() {
   }
 
   const buses = Object.values(busMarkers);
-  const headers = ['Bus Name', 'IMEI', 'Latitude', 'Longitude', 'Speed (km/h)', 'Status', 'Address'];
+  const headers = ['Bus Name', 'Latitude', 'Longitude', 'Speed (km/h)', 'Status', 'Address'];
   const rows = buses.map(marker => {
     const bus = marker.busData || {};
     return [
       busName(bus.imei),
-      bus.imei,
       bus.lat,
       bus.lng,
       bus.speed,

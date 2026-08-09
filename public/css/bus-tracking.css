@@ -125,7 +125,6 @@
   border-bottom: 1px solid var(--border);
 }
 .bt-info-name { font-weight: 800; font-size: 0.8rem; color: var(--text); line-height: 1.2; }
-.bt-info-imei { font-size: 0.6rem; color: var(--text-3); font-weight: 600; }
 
 .bt-badge {
   display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
