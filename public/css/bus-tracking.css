@@ -151,6 +151,28 @@
   font-size: 0.64rem; font-weight: 700; color: var(--indigo);
 }
 
+/* ── Fleet list header (All / None) ─────────────────────────── */
+
+.bt-fleet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 2px 4px 4px;
+}
+.bt-fleet-title {
+  font-size: 0.68rem; font-weight: 800; color: var(--text-2);
+  display: flex; align-items: center; gap: 6px;
+}
+.bt-fleet-count {
+  background: var(--bg); border: 1px solid var(--border-g); color: var(--primary);
+  font-size: 0.6rem; font-weight: 800; padding: 1px 7px; border-radius: 50px;
+}
+.bt-fleet-actions { display: flex; gap: 5px; }
+.bt-fleet-actions button {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-3);
+  font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 3px 9px; border-radius: 50px; cursor: pointer; transition: all 0.15s;
+}
+.bt-fleet-actions button:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+
 /* ── Bus List ────────────────────────────────────────────────── */
 
 #bus-list {
@@ -171,8 +193,14 @@
 }
 .bus-list-item:hover { border-color: var(--primary-l); background: var(--bg); }
 .bus-list-item.active { border-color: var(--primary); background: rgba(5,150,105,0.05); box-shadow: 0 0 0 2px rgba(16,185,129,0.12); }
+.bus-list-item.dimmed { opacity: 0.45; }
 
 .bli-top { display: flex; align-items: center; gap: 8px; }
+
+.bli-check {
+  width: 14px; height: 14px; flex-shrink: 0; cursor: pointer;
+  accent-color: var(--primary); border-radius: 3px;
+}
 
 .bli-avatar {
   width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0;
