@@ -267,7 +267,14 @@ function redrawMarkers() {
     } else {
       const marker = L.marker([bus.lat, bus.lng], { icon }).addTo(map);
       marker.bindTooltip(label, { permanent: true, direction: 'top', className: 'bt-marker-label', offset: [0, selected ? -24 : -20] });
-      marker.on('click', () => selectBus(imei, allBusData[imei]));
+      // Leaflet markers bubble clicks to the map by default — without
+      // stopping it here, this click would also fire map.on('click',
+      // collapseFleetSheet) right after selectBus() expands the sheet,
+      // instantly collapsing it again (looks like marker taps do nothing).
+      marker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        selectBus(imei, allBusData[imei]);
+      });
       busMarkers[imei] = marker;
     }
     busMarkers[imei].busData = bus; // kept for CSV export
