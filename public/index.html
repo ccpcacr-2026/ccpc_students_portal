@@ -1869,7 +1869,6 @@
                 if (content && !document.getElementById('bus-tracking-content')) {
                     const trackPane = document.createElement('div');
                     trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
-                    trackPane.style.height = 'calc(100vh - 120px)';
                     trackPane.innerHTML = `
                       <div class="bus-tracking-container">
                         <div class="bt-toolbar">
@@ -1877,7 +1876,7 @@
                             <div class="bt-icon"><i class="bi bi-bus-front-fill"></i></div>
                             <div>
                               <div class="bt-title">Live Bus Tracker</div>
-                              <div class="bt-sub"><span class="dot"></span>Updated <span id="bus-data-timestamp">—</span></div>
+                              <div class="bt-sub"><span class="dot"></span>Live · <span id="bt-toolbar-count">0</span> buses</div>
                             </div>
                           </div>
                           <button class="btn-export" onclick="BusTracking.exportBusData()"><i class="bi bi-download"></i> Export</button>
@@ -1887,7 +1886,7 @@
                             <div id="bus-map-container"></div>
                             <div id="geofence-alerts"></div>
                           </div>
-                          <div class="bus-sidebar">
+                          <div class="bus-sidebar" id="bus-sidebar">
                             <div id="bus-info-panel">
                               <div class="bt-info-card">
                                 <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
@@ -2231,6 +2230,16 @@
             if (target) {
                 target.classList.add('active');
                 if (id === 'bus-tracking' && window.BusTracking) {
+                    // A hardcoded "100vh minus Npx" here was always a guess at the
+                    // surrounding chrome's real height, and wrong in one direction
+                    // or the other (scrollbar, or dead space below the panel).
+                    // Measuring the pane's own actual top offset — only possible now
+                    // that classList.add('active') above just made it visible — gives
+                    // an exact fit with no guessing, on any screen size. Scroll to top
+                    // WITHOUT the smooth animation the shared scrollTo below uses, so
+                    // this measurement reflects the settled (not mid-animation) offset.
+                    window.scrollTo(0, 0);
+                    target.style.height = `calc(100vh - ${Math.round(target.getBoundingClientRect().top)}px)`;
                     // Init lazily on first open; afterwards just recalc the map size —
                     // Leaflet was initialized while this pane was display:none and
                     // stays gray until invalidateSize() runs with the pane visible.
@@ -2262,6 +2271,17 @@
             });
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
+
+        // Keep the bus tracker's measured height correct across orientation
+        // changes / browser-chrome resizes (e.g. mobile URL bar show/hide)
+        // while it's the active tab.
+        window.addEventListener('resize', () => {
+            const pane = document.getElementById('bus-tracking-content');
+            if (pane && pane.classList.contains('active') && window.BusTracking) {
+                pane.style.height = `calc(100vh - ${Math.round(pane.getBoundingClientRect().top)}px)`;
+                BusTracking.refreshMapSize();
+            }
+        });
 
         /* ── Canteen ordering (shares wallet + orders with the kiosk) ─────── */
         const cantState = { foods: [], cart: {}, wallet: null, delivery: 'hand', activeTimer: null };
@@ -3119,7 +3139,6 @@
 
                 const trackPane = document.createElement('div');
                 trackPane.className = 'tab-pane'; trackPane.id = 'bus-tracking-content';
-                trackPane.style.height = 'calc(100vh - 120px)';
                 trackPane.innerHTML = `
                   <div class="bus-tracking-container">
                     <div class="bt-toolbar">
@@ -3127,7 +3146,7 @@
                         <div class="bt-icon"><i class="bi bi-bus-front-fill"></i></div>
                         <div>
                           <div class="bt-title">Live Bus Tracker</div>
-                          <div class="bt-sub"><span class="dot"></span>Updated <span id="bus-data-timestamp">—</span></div>
+                          <div class="bt-sub"><span class="dot"></span>Live · <span id="bt-toolbar-count">0</span> buses</div>
                         </div>
                       </div>
                       <button class="btn-export" onclick="BusTracking.exportBusData()"><i class="bi bi-download"></i> Export</button>
@@ -3137,7 +3156,7 @@
                         <div id="bus-map-container"></div>
                         <div id="geofence-alerts"></div>
                       </div>
-                      <div class="bus-sidebar">
+                      <div class="bus-sidebar" id="bus-sidebar">
                         <div id="bus-info-panel">
                           <div class="bt-info-card">
                             <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>

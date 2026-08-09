@@ -269,18 +269,45 @@
 }
 @keyframes btSlideIn { from { transform: translateX(-16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-/* ── Timestamp ───────────────────────────────────────────────── */
-
-#bus-data-timestamp { font-weight: 700; color: var(--text-2); }
-
-/* ── Responsive ──────────────────────────────────────────────── */
-
+/* ── Mobile: full-bleed map + floating toolbar + collapsible bottom sheet ──
+   Below 900px the side-by-side map/list layout gives way to a proper
+   map-app pattern: the map fills the whole panel, the toolbar floats over
+   its top edge as the "live" corner readout, and the fleet list becomes a
+   sheet anchored to the bottom — tap the map to collapse it to a one-line
+   peek, tap the peek (or select a bus) to bring it back. ── */
 @media (max-width: 900px) {
-  .bus-tracking-container { padding: 12px; gap: 10px; }
-  .bus-tracking-body { flex-direction: column; }
-  .bus-map-wrapper { min-height: 260px; flex: 1 1 55%; }
-  .bus-sidebar { width: 100%; flex: 1 1 45%; }
-  #bus-list { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
-  .bus-list-item { min-width: 220px; flex-shrink: 0; }
-  #geofence-alerts { right: 12px; }
+  .bus-tracking-container { position: relative; padding: 0; gap: 0; }
+  .bt-toolbar {
+    position: absolute; top: 8px; left: 8px; right: 8px; z-index: 1000;
+    padding: 7px 10px; border-radius: var(--radius-md);
+  }
+  .bus-tracking-body { position: absolute; inset: 0; flex-direction: column; gap: 0; }
+  .bus-map-wrapper {
+    position: absolute; inset: 0; border-radius: 0; border: none; box-shadow: none;
+    min-height: 0;
+  }
+  .bt-fit-btn { bottom: 66px; }
+
+  .bus-sidebar {
+    position: absolute; left: 0; right: 0; bottom: 0; width: 100%;
+    max-height: 46vh;
+    background: var(--surface); border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 30px rgba(15,23,42,0.18);
+    z-index: 900; padding: 0 10px 10px;
+    transition: max-height 0.28s cubic-bezier(0.4,0,0.2,1);
+  }
+  .bus-sidebar.bt-collapsed { max-height: 56px; overflow: hidden; }
+  .bus-sidebar.bt-collapsed #bus-info-panel,
+  .bus-sidebar.bt-collapsed #bus-list,
+  .bus-sidebar.bt-collapsed #bt-fleet-head { display: none; }
+
+  .bt-sheet-handle {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 8px 0 6px; cursor: pointer; flex-shrink: 0;
+  }
+  .bt-sheet-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--border); }
+  .bt-sheet-peek { display: none; font-size: 0.7rem; font-weight: 800; color: var(--text-2); }
+  .bus-sidebar.bt-collapsed .bt-sheet-peek { display: block; }
+
+  #geofence-alerts { top: 60px; right: 12px; }
 }

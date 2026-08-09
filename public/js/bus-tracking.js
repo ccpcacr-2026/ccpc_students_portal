@@ -31,17 +31,55 @@ function initBusMap() {
       maxZoom: 19,
     }).addTo(map);
 
-    L.control.zoom({ position: 'topright' }).addTo(map);
+    // bottomleft, not the default topright — on mobile the toolbar floats
+    // over the top of the map (see ensureSheetHandle/CSS), which would sit
+    // on top of a topright zoom control.
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
     const fitBtn = document.createElement('button');
     fitBtn.className = 'bt-fit-btn';
     fitBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i> Fit all';
     fitBtn.onclick = fitBusesInBounds;
     mapContainer.appendChild(fitBtn);
+
+    // Mobile bottom-sheet UX: tapping the map (not a marker/control) collapses
+    // the fleet sheet down to its peek bar, giving the map the full screen.
+    map.on('click', collapseFleetSheet);
   }
 
   ensureFleetListHead();
+  ensureSheetHandle();
   loadBusTrackingConfig();
+}
+
+/**
+ * Drag-handle + one-line peek summary pinned above the fleet list — the part
+ * of .bus-sidebar that stays visible when the mobile bottom sheet is
+ * collapsed. No-op visually on desktop (see the mobile-only CSS), but always
+ * inserted so the same markup/JS works at every screen size.
+ */
+function ensureSheetHandle() {
+  const sidebar = document.getElementById('bus-sidebar');
+  if (!sidebar || document.getElementById('bt-sheet-handle')) return;
+  const handle = document.createElement('div');
+  handle.id = 'bt-sheet-handle';
+  handle.className = 'bt-sheet-handle';
+  handle.innerHTML = `<div class="bt-sheet-grip"></div><div class="bt-sheet-peek" id="bt-sheet-peek">Tap to view fleet</div>`;
+  handle.onclick = toggleFleetSheet;
+  sidebar.insertBefore(handle, sidebar.firstChild);
+}
+
+function toggleFleetSheet() {
+  const sidebar = document.getElementById('bus-sidebar');
+  if (sidebar) sidebar.classList.toggle('bt-collapsed');
+}
+function collapseFleetSheet() {
+  const sidebar = document.getElementById('bus-sidebar');
+  if (sidebar) sidebar.classList.add('bt-collapsed');
+}
+function expandFleetSheet() {
+  const sidebar = document.getElementById('bus-sidebar');
+  if (sidebar) sidebar.classList.remove('bt-collapsed');
 }
 
 /**
@@ -289,6 +327,10 @@ function updateBusList(buses) {
 
   const countEl = document.getElementById('bt-fleet-count');
   if (countEl) countEl.textContent = buses.length;
+  const toolbarCountEl = document.getElementById('bt-toolbar-count');
+  if (toolbarCountEl) toolbarCountEl.textContent = buses.length;
+  const peekEl = document.getElementById('bt-sheet-peek');
+  if (peekEl) peekEl.textContent = buses.length ? `${buses.length} bus${buses.length === 1 ? '' : 'es'} · tap to view fleet` : 'No buses configured';
 
   if (!buses.length) {
     listContainer.innerHTML = `<div class="bus-empty"><i class="bi bi-exclamation-circle"></i>No buses configured yet</div>`;
@@ -372,6 +414,7 @@ function selectBus(imei, busData) {
 
   updateBusInfoPanel(busData);
   updateBusList(Object.values(allBusData));
+  expandFleetSheet();
 }
 
 /**
@@ -518,6 +561,8 @@ function resetBusMap() {
   hasFittedOnce = false;
   const head = document.getElementById('bt-fleet-head');
   if (head) head.remove();
+  const handle = document.getElementById('bt-sheet-handle');
+  if (handle) handle.remove();
 }
 
 window.BusTracking = {
