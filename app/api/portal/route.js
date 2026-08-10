@@ -975,17 +975,36 @@ export async function POST(req) {
 
   // ── Edit History (admin-searchable audit trail, populated by a DB trigger
   // on every students_data UPDATE — see the edit_history table) ──────────────
+  // Paginated server-side (offset/limit) rather than a single capped fetch —
+  // the log grows unbounded, so a flat limit=200 silently hid everything
+  // past it with no way to reach it. The `or=(...ilike...)` filter always
+  // ran against the full table regardless (PostgREST, not a client-side
+  // filter), so search already covered everything — it just couldn't show
+  // more than the first page of matches. Prefer: count=exact + the
+  // Content-Range response header give the true total so the UI can render
+  // real page numbers instead of guessing whether more rows exist.
   if (action === 'search_edit_history') {
     const q = String(payload?.query || '').trim();
-    const limit = Math.min(Number(payload?.limit) || 50, 200);
-    let path = `edit_history?select=*&order=created_at.desc&limit=${limit}`;
+    const limit = Math.min(Math.max(Number(payload?.limit) || 50, 1), 100);
+    const offset = Math.max(Number(payload?.offset) || 0, 0);
+    let path = `edit_history?select=*&order=created_at.desc&limit=${limit}&offset=${offset}`;
     if (q) {
       const esc = encodeURIComponent(q);
       path += `&or=(student_id.ilike.*${esc}*,name.ilike.*${esc}*,class.ilike.*${esc}*,section.ilike.*${esc}*,roll.ilike.*${esc}*)`;
     }
-    const rows = await sb(path);
-    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
-    return NextResponse.json({ result: 'success', rows: Array.isArray(rows) ? rows : [] });
+    const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${SB_KEY}`,
+        'Accept-Profile': 'student',
+        Prefer: 'count=exact',
+      },
+    });
+    const text = await res.text();
+    if (!res.ok) return NextResponse.json({ result: 'error', message: text });
+    const rows = text ? JSON.parse(text) : [];
+    const total = Number((res.headers.get('content-range') || '').split('/')[1]) || rows.length;
+    return NextResponse.json({ result: 'success', rows, total, offset, limit });
   }
 
   // ── Permanent Tabs Visibility (Wallet/Canteen/Stationary/Teachers/Bus — the

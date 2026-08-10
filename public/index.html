@@ -1011,10 +1011,11 @@
                                     <p class="small text-muted mb-3" style="font-size:0.72rem">Every change to a student's record is logged here automatically (who/what changed and when) — search by Student ID, name, class, section, or roll.</p>
                                     <div class="row g-3 mb-3">
                                         <div class="col-md-8"><input type="text" id="history-search" class="form-control" placeholder="Search Student ID, name, class, section, roll..." autocomplete="off" oninput="debounceLoadEditHistory()"></div>
-                                        <div class="col-md-4"><button onclick="loadEditHistory()" class="btn btn-outline-primary w-100 fw-800"><i class="bi bi-search"></i> Search</button></div>
+                                        <div class="col-md-4"><button onclick="debounceLoadEditHistory(true)" class="btn btn-outline-primary w-100 fw-800"><i class="bi bi-search"></i> Search</button></div>
                                     </div>
                                     <div id="history-count" class="small fw-800 text-muted mb-2"></div>
                                     <div class="table-responsive rounded-4 border"><table class="table table-hover align-middle mb-0"><thead class="bg-light"><tr><th>Student ID</th><th>Name</th><th>Class</th><th>Section</th><th>Roll</th><th>Changes</th><th>When</th></tr></thead><tbody id="history-body"></tbody></table></div>
+                                    <div id="history-pagination" class="d-flex align-items-center justify-content-center gap-3 mt-3"></div>
                                 </div>
                                 <div class="tab-pane" id="admin-nfc"></div>
                                 <div class="tab-pane" id="admin-tracking">
@@ -4329,8 +4330,15 @@
         }
 
         let _historyDebounce = null;
-        function debounceLoadEditHistory() {
+        let _historyOffset   = 0;
+        const _historyLimit  = 50;
+        // debounceLoadEditHistory(true) — an explicit new search (Search
+        // button) skips the debounce delay; typing still debounces at
+        // 350ms. Either way a changed query always resets to page 1.
+        function debounceLoadEditHistory(immediate) {
             if (_historyDebounce) clearTimeout(_historyDebounce);
+            _historyOffset = 0;
+            if (immediate) { loadEditHistory(); return; }
             _historyDebounce = setTimeout(loadEditHistory, 350);
         }
 
@@ -4338,16 +4346,24 @@
             const q = (document.getElementById('history-search') || {}).value || '';
             const body = document.getElementById('history-body');
             const countEl = document.getElementById('history-count');
+            const pageEl = document.getElementById('history-pagination');
             if (!body) return;
             body.innerHTML = '<tr><td colspan="7" class="text-center p-5"><div class="spinner-border text-primary"></div></td></tr>';
-            portalFetch('search_edit_history', { query: q }).then(res => {
+            // Search runs server-side against the full edit_history table (a
+            // PostgREST or=(...ilike...) filter, not a client-side filter over
+            // whatever page happens to be loaded) — offset/limit below only
+            // page through however many rows THAT search matched, never a
+            // pre-truncated subset of the table.
+            portalFetch('search_edit_history', { query: q, offset: _historyOffset, limit: _historyLimit }).then(res => {
                 if (!res || res.result !== 'success') {
                     body.innerHTML = `<tr><td colspan="7" class="text-center text-danger p-4">${(res && res.message) || 'Could not load history'}</td></tr>`;
+                    if (pageEl) pageEl.innerHTML = '';
                     return;
                 }
                 const rows = res.rows || [];
-                if (countEl) countEl.innerHTML = `<i class="bi bi-clock-history me-1"></i>${rows.length} edit${rows.length === 1 ? '' : 's'}${q ? ` matching "${q}"` : ''}`;
-                if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="text-center text-muted p-4">No edits found.</td></tr>'; return; }
+                const total = res.total || 0;
+                if (countEl) countEl.innerHTML = `<i class="bi bi-clock-history me-1"></i>${total} edit${total === 1 ? '' : 's'}${q ? ` matching "${q}"` : ''}`;
+                if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="text-center text-muted p-4">No edits found.</td></tr>'; if (pageEl) pageEl.innerHTML = ''; return; }
                 body.innerHTML = rows.map(r => {
                     const changes = Object.entries(r.edited_history || {}).map(([field, d]) => {
                         if (d && d.changed) return `<span class="badge bg-secondary-subtle text-secondary me-1 mb-1">${field}: changed</span>`;
@@ -4366,8 +4382,23 @@
                         <td class="small text-muted text-nowrap">${when}</td>
                     </tr>`;
                 }).join('');
+                _renderHistoryPagination(total);
             }).catch(() => { body.innerHTML = '<tr><td colspan="7" class="text-center text-danger p-4">Network error</td></tr>'; });
         }
+        function _renderHistoryPagination(total) {
+            const el = document.getElementById('history-pagination');
+            if (!el) return;
+            if (total <= _historyLimit) { el.innerHTML = ''; return; }
+            const totalPages = Math.max(1, Math.ceil(total / _historyLimit));
+            const curPage = Math.floor(_historyOffset / _historyLimit) + 1;
+            el.innerHTML = `
+                <button onclick="_historyPrevPage()" ${curPage <= 1 ? 'disabled' : ''} class="btn btn-sm btn-outline-secondary fw-800">Prev</button>
+                <span class="small fw-800 text-muted">Page ${curPage} of ${totalPages}</span>
+                <button onclick="_historyNextPage()" ${curPage >= totalPages ? 'disabled' : ''} class="btn btn-sm btn-outline-secondary fw-800">Next</button>
+            `;
+        }
+        function _historyPrevPage() { _historyOffset = Math.max(0, _historyOffset - _historyLimit); loadEditHistory(); }
+        function _historyNextPage() { _historyOffset += _historyLimit; loadEditHistory(); }
 
         function loadSummaryData() {
             const t = document.getElementById('summary-tab-select').value;
