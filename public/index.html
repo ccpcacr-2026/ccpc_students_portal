@@ -1433,6 +1433,22 @@
         // the login screen's always-visible mobile bottom nav.
         let uiEpoch = 0;
 
+        // Set only when restoring a session on page load/refresh (see
+        // initPortal), holding the tab id ccpc_last_tab pointed to at that
+        // moment. showForm()/showAdminPanel() land on their normal default
+        // (grid/Personal Hub/Admin Panel) first, same as a fresh login —
+        // this then silently switches to the exact previous tab once it
+        // exists, which for admin-authored custom tabs may only be true
+        // after their async get_tabs load finishes (see the
+        // _tryRestorePendingTab call sites). Never set for a manual login
+        // click — only an actual refresh/reopen restores the exact tab.
+        let _pendingTabRestore = null;
+        function _tryRestorePendingTab() {
+            if (!_pendingTabRestore || _pendingTabRestore === '__home__') { _pendingTabRestore = null; return; }
+            const btn = document.querySelector(`#bottom-nav-container .nav-item-btn[data-tab-id="${_pendingTabRestore}"]`);
+            if (btn) { const id = _pendingTabRestore; _pendingTabRestore = null; switchTab(id); }
+        }
+
         window.onerror = function(msg, url, lineNo, columnNo, error) {
             console.error('Global Error: ' + msg + ' at ' + url + ':' + lineNo);
             return false;
@@ -1512,6 +1528,11 @@
                 const saved = localStorage.getItem('student_session');
                 if (saved) {
                     const data = JSON.parse(saved);
+                    // Captured once, before showAdminPanel()/showForm() run —
+                    // they land on the normal default landing first; whichever
+                    // of them actually runs then tries to switch straight to
+                    // this exact tab afterward (see _tryRestorePendingTab).
+                    try { _pendingTabRestore = localStorage.getItem('ccpc_last_tab'); } catch (e) {}
                     if (data && data.student_id === 'admin') showAdminPanel();
                     else if (data && data.student_id && data.phone_number) {
                         loggedInStudent = data;
@@ -1819,7 +1840,12 @@
                 if (btn) { btn.disabled = false; btn.innerText = "Authenticate Identity"; }
                 if (json.result === 'success') {
                     loggedInStudent = { student_id: id, phone_number: phone, role: json.role || 'student' };
-                    localStorage.setItem('student_session', JSON.stringify(loggedInStudent));
+                    // Guarded: a storage failure here (private browsing,
+                    // quota, disabled storage) must never block actually
+                    // showing the portal below — worst case is just no
+                    // auto-login next time, not getting stuck on this
+                    // screen with no error shown at all.
+                    try { localStorage.setItem('student_session', JSON.stringify(loggedInStudent)); } catch (e) { console.error('Could not save session', e); }
                     if (json.role === 'admin') showAdminPanel();
                     else showForm(json);
                 } else {
@@ -1945,6 +1971,11 @@
                 if (window.innerWidth < 992) {
                     try { showMobileHomeGrid(); } catch (gridErr) { console.error("showMobileHomeGrid error", gridErr); }
                 }
+                // Admin's nav (admin-home + bus-tracking) is built fully
+                // synchronously above, so a single attempt here is enough —
+                // unlike the student path, nothing async can reveal the
+                // pending tab later.
+                try { _tryRestorePendingTab(); } catch (e) { console.error('_tryRestorePendingTab error', e); }
             } catch(e) {
                 console.error("showAdminPanel error", e);
                 alert("Error loading Admin Panel.");
@@ -2294,6 +2325,7 @@
 
             grid.innerHTML = html;
             grid.classList.remove('hidden');
+            try { localStorage.setItem('ccpc_last_tab', '__home__'); } catch (e) {}
             // Guards against the grid appearing to render under the fixed
             // mobile header when the page was left scrolled down (e.g.
             // returning here from a tab that was scrolled) — switchTab()
@@ -2310,6 +2342,11 @@
         }
 
         function switchTab(id) {
+            // Remember the current screen so a refresh can silently land
+            // back on it instead of the default (grid/Personal Hub/Admin
+            // Panel) — see _tryRestorePendingTab, read back in initPortal.
+            try { localStorage.setItem('ccpc_last_tab', id); } catch (e) {}
+
             // Reaching any real tab (including admin-home, handled by the
             // early-return branch just below) means leaving the mobile home
             // grid — placed before that branch so Admin Panel, the single
@@ -3071,7 +3108,7 @@
                         if (!eVal || eVal === "") loggedInStudent[key] = mVal || "";
                         else loggedInStudent[key] = eVal;
                     });
-                    localStorage.setItem('student_session', JSON.stringify(loggedInStudent));
+                    try { localStorage.setItem('student_session', JSON.stringify(loggedInStudent)); } catch (e) { console.error('Could not save session', e); }
                     console.log("Session saved successfully");
                 }
 
@@ -3164,11 +3201,13 @@
                     if (_formSectionEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
                     PERMANENT_TABS.forEach(t => { if ((cfg || {})[t.id] !== false) addNav(t.id, t.name, t.icon); });
                     _refreshHomeGridIfVisible();
+                    _tryRestorePendingTab();
                 }).catch(() => {
                     if (_formSectionEpoch !== uiEpoch) return;
                     // Settings fetch failed: fail open so a network hiccup never hides a real feature.
                     PERMANENT_TABS.forEach(t => addNav(t.id, t.name, t.icon));
                     _refreshHomeGridIfVisible();
+                    _tryRestorePendingTab();
                 });
 
                 const profPane = document.createElement('div');
@@ -3373,6 +3412,11 @@
                 if (window.innerWidth < 992) {
                     try { showMobileHomeGrid(); } catch (gridErr) { console.error("showMobileHomeGrid error", gridErr); }
                 }
+                // Only 'profile' exists so far — a saved tab pointing at a
+                // permanent or custom tab won't be found yet, so this is a
+                // no-op for those (the get_permanent_tabs_config/get_tabs
+                // call sites below retry once those tabs actually exist).
+                try { _tryRestorePendingTab(); } catch (e) { console.error('_tryRestorePendingTab error', e); }
 
                 console.log("Attempting to load sub-sections...");
                 try {
@@ -3394,6 +3438,7 @@
                             const tid = `tab-${i}`;
                             addNav(tid, t.tab_name, t.icon_class || 'bi-journal-bookmark-fill');
                             _refreshHomeGridIfVisible();
+                            _tryRestorePendingTab();
                             const _sbar = document.getElementById('sidebar-items');
                             const _bnav = document.getElementById('bottom-nav-container');
                             if(_sbar?.lastElementChild) _sbar.lastElementChild.classList.add('nav-dynamic');
