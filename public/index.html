@@ -389,7 +389,7 @@
         }
 
         @media (max-width: 991px) {
-            .content-area { padding: 18px; padding-top: 88px; padding-bottom: 90px; }
+            .content-area { padding: 18px; padding-top: 88px; }
         }
 
         /* ── Mobile Header ───────────────────────────── */
@@ -415,8 +415,10 @@
         }
         .bottom-nav::-webkit-scrollbar { display: none; }
 
-        @media (max-width: 991px) { .bottom-nav { display: flex; } }
-        /* No buttons (logged out) -> no bar at all, even on mobile */
+        /* Superseded by the mobile app-launcher home grid (see
+           showMobileHomeGrid()) — the bar itself no longer shows on mobile,
+           but stays populated (invisible) since the grid reads its buttons
+           as its own tile data source, via addNav(). */
         .bottom-nav:empty { display: none !important; }
 
         .bottom-nav .nav-item-btn {
@@ -698,7 +700,7 @@
         /* ── Responsive ──────────────────────────────── */
         @media (max-width: 991px) {
             :root { --radius-xl: 22px; --radius-lg: 16px; }
-            .content-area { padding: 14px !important; padding-top: 86px !important; padding-bottom: 90px !important; }
+            .content-area { padding: 14px !important; padding-top: 86px !important; }
             .card { padding: 1.2rem !important; margin-bottom: 1rem !important; border-radius: 20px !important; }
             .section-title { font-size: 1.15rem !important; margin-bottom: 1.2rem !important; }
             .hub-tab-container { padding: 5px; gap: 4px; border-radius: 18px; }
@@ -717,7 +719,7 @@
         }
 
         @media (max-width: 575px) {
-            .content-area { padding: 12px !important; padding-top: 86px !important; padding-bottom: 88px !important; }
+            .content-area { padding: 12px !important; padding-top: 86px !important; }
             .login-card { padding: 22px 18px; }
             .login-logo-ring { width: 80px; height: 80px; border-radius: 22px; }
             .login-title { font-size: 0.92rem; }
@@ -2234,6 +2236,20 @@
         // but NO dataset.tabId (it bypasses addNav() and wires onclick =
         // logout directly) — without this filter the grid would render a
         // "Logout" tile that signs the admin out on tap with no confirmation.
+        // Vibrant per-tile palette (background tint + icon color), cycled by
+        // index so each module reads as visually distinct at a glance —
+        // like app icons, not a single flat brand-color repeated everywhere.
+        const MOBILE_HOME_TILE_COLORS = [
+            { bg: '#eef2ff', fg: '#6366f1' }, // indigo
+            { bg: '#ecfdf5', fg: '#10b981' }, // emerald
+            { bg: '#fff1f2', fg: '#f43f5e' }, // rose
+            { bg: '#fffbeb', fg: '#f59e0b' }, // amber
+            { bg: '#eff6ff', fg: '#0ea5e9' }, // sky
+            { bg: '#faf5ff', fg: '#a855f7' }, // purple
+            { bg: '#f0fdfa', fg: '#14b8a6' }, // teal
+            { bg: '#fff7ed', fg: '#f97316' }, // orange
+        ];
+
         function showMobileHomeGrid() {
             if (window.innerWidth >= 992) return; // desktop always shows the sidebar instead
             document.getElementById('form-section').classList.add('hidden');
@@ -2250,20 +2266,26 @@
             if (!items.length) {
                 grid.innerHTML = `<div class="text-center text-muted small fw-800 py-5">No modules available yet.</div>`;
             } else {
-                grid.innerHTML = `<div class="row g-3 pt-2">${items.map(btn => {
+                grid.innerHTML = `<div class="row g-3">${items.map((btn, idx) => {
                     const iconEl = btn.querySelector('i');
                     const icon = iconEl ? iconEl.className.replace('bi', '').trim() : 'bi-app';
                     const label = btn.querySelector('span')?.textContent || '';
+                    const c = MOBILE_HOME_TILE_COLORS[idx % MOBILE_HOME_TILE_COLORS.length];
                     return `
                         <div class="col-4">
-                            <button onclick="switchTab('${btn.dataset.tabId}')" class="btn w-100 d-flex flex-column align-items-center justify-content-center gap-2 border shadow-sm" style="border-radius:20px;padding:18px 8px;background:#fff">
-                                <span style="width:48px;height:48px;border-radius:16px;background:var(--primary-l,rgba(16,185,129,0.1));color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.4rem"><i class="bi ${icon}"></i></span>
+                            <button onclick="switchTab('${btn.dataset.tabId}')" class="btn w-100 d-flex flex-column align-items-center justify-content-center gap-2 border-0 shadow-sm" style="border-radius:20px;padding:18px 8px;background:#fff">
+                                <span style="width:50px;height:50px;border-radius:16px;background:${c.bg};color:${c.fg};display:flex;align-items:center;justify-content:center;font-size:1.5rem"><i class="bi ${icon}"></i></span>
                                 <span class="small fw-800 text-center" style="font-size:0.68rem;color:var(--text-2)">${label}</span>
                             </button>
                         </div>`;
                 }).join('')}</div>`;
             }
             grid.classList.remove('hidden');
+            // Guards against the grid appearing to render under the fixed
+            // mobile header when the page was left scrolled down (e.g.
+            // returning here from a tab that was scrolled) — switchTab()
+            // already does the same scroll-reset on its own transitions.
+            window.scrollTo(0, 0);
         }
         // Re-draws the grid only if it's the currently visible screen —
         // called from the async tab-population sites (get_permanent_tabs_config,
