@@ -1533,7 +1533,7 @@
                     // of them actually runs then tries to switch straight to
                     // this exact tab afterward (see _tryRestorePendingTab).
                     try { _pendingTabRestore = localStorage.getItem('ccpc_last_tab'); } catch (e) {}
-                    if (data && data.student_id === 'admin') showAdminPanel();
+                    if (data && data.student_id === 'admin') { loggedInStudent = data; showAdminPanel(); }
                     else if (data && data.student_id && data.phone_number) {
                         loggedInStudent = data;
                         portalFetch('login', { student_id: data.student_id, phone_number: data.phone_number }).then(res => {
