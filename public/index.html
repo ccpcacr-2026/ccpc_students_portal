@@ -2038,27 +2038,6 @@
             portalFetch('save_place_registry', { rows }).then(() => alert("Places Registry Updated!"));
         }
 
-        function switchHubTab(tabId) {
-            document.querySelectorAll('.hub-tab-pane').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.hub-tab-btn').forEach(b => b.classList.remove('active'));
-            
-            const target = document.getElementById(`hub-${tabId}-pane`);
-            if (target) target.classList.add('active');
-            
-            // Highlight button
-            const btns = document.querySelectorAll('.hub-tab-btn');
-            btns.forEach(btn => {
-                const btnText = btn.innerText.toLowerCase();
-                if (btnText.includes(tabId)) {
-                    btn.classList.add('active');
-                }
-            });
-
-            if (tabId === 'teachers') {
-                loadTeacherDirectory();
-            }
-        }
-
         let teacherDataCache = [];
 
         function loadTeacherDirectory() {
@@ -2395,7 +2374,15 @@
                     BusTracking.refreshMapSize();
                 }
                 if (id === 'attendance') {
-                    loadAttendanceHistory();
+                    // The richer dashboard (summary + history), not the old
+                    // loadAttendanceHistory() table — that one targets a
+                    // same-named #attendance-content container by
+                    // coincidence but is otherwise dead code, unreachable
+                    // before Schedule/Attendance became real top-level tabs.
+                    loadAttendanceHistoryInHub();
+                }
+                if (id === 'schedule') {
+                    loadPresentStatus();
                 }
                 if (id === 'teachers') {
                     loadTeacherDirectory();
@@ -3196,6 +3183,8 @@
                 if(_sbCard) _sbCard.style.display = 'flex';
 
                 addNav('profile', 'Personal Hub', 'bi-person-badge-fill', true);
+                addNav('schedule', 'Schedule', 'bi-calendar3');
+                addNav('attendance', 'Attendance', 'bi-fingerprint');
                 const _formSectionEpoch = uiEpoch;
                 portalFetch('get_permanent_tabs_config', {}).then(cfg => {
                     if (_formSectionEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
@@ -3329,21 +3318,7 @@
                 }, 500);
 
                 let profHtml = `
-                    <!-- Hub Tab Controller -->
-                    <div class="hub-tab-container">
-                        <button class="hub-tab-btn active" onclick="switchHubTab('profile')">
-                            <i class="bi bi-person-lines-fill"></i> <span>Profile</span>
-                        </button>
-                        <button class="hub-tab-btn" onclick="switchHubTab('schedule')">
-                            <i class="bi bi-calendar3"></i> <span>Schedule</span>
-                        </button>
-                        <button class="hub-tab-btn" onclick="switchHubTab('attendance')">
-                            <i class="bi bi-fingerprint"></i> <span>Attendance</span>
-                        </button>
-                    </div>
-
-                    <!-- 1. Student Information Pane (first, active) -->
-                    <div id="hub-profile-pane" class="hub-tab-pane active">
+                    <div id="hub-profile-pane">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h2 class="h5 section-title mb-0" style="font-family:'Instrument Serif',serif;">My Information</h2>
                             <div id="profile-edit-bar" class="d-flex gap-2"></div>
@@ -3373,19 +3348,6 @@
                                 <span id="pin-status" class="small fw-700"></span>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- 2. Schedule Pane -->
-                    <div id="hub-schedule-pane" class="hub-tab-pane">
-                        <h2 class="h4 section-title">Today's Schedule</h2>
-                        <div id="schedule-weekday-picker" class="d-flex gap-2 flex-wrap mb-3"></div>
-                        <div id="present-status-section"></div>
-                    </div>
-
-                    <!-- 3. Attendance Pane -->
-                    <div id="hub-attendance-pane" class="hub-tab-pane">
-                        <h2 class="h4 section-title">Recent Activity</h2>
-                        <div id="attendance-section"></div>
                     </div>`;
 
                 profPane.innerHTML = profHtml;
@@ -3393,6 +3355,30 @@
                 renderOwnPhotoAvatar();
                 // Load admin-approved editable fields, then show Edit button + pencil badges
                 loadEditableFields();
+
+                // Schedule and Attendance — split out of Personal Hub into
+                // their own top-level tabs/buttons (previously nested as
+                // hub-tab sub-panes reachable only via an inner switcher
+                // inside "Personal Hub"). The identity strip above is
+                // already sticky across every tab, so it shows on top of
+                // these too with no extra work needed. Lazy-loaded via
+                // switchTab()'s per-id hooks below, matching every other
+                // permanent tab (Wallet/Fees/Canteen/etc.) instead of the
+                // old hub's eager pre-load-everything-up-front approach.
+                const schedulePane = document.createElement('div');
+                schedulePane.className = 'tab-pane ccpc-page'; schedulePane.id = 'schedule-content';
+                schedulePane.innerHTML = `
+                    <h2 class="ccpc-page-title">Today's <em>Schedule</em></h2>
+                    <div id="schedule-weekday-picker" class="d-flex gap-2 flex-wrap mb-3"></div>
+                    <div id="present-status-section"></div>`;
+                if (content) content.appendChild(schedulePane);
+
+                const attendancePane = document.createElement('div');
+                attendancePane.className = 'tab-pane ccpc-page'; attendancePane.id = 'attendance-content';
+                attendancePane.innerHTML = `
+                    <h2 class="ccpc-page-title">Recent <em>Activity</em></h2>
+                    <div id="attendance-section"></div>`;
+                if (content) content.appendChild(attendancePane);
 
                 // Mobile lands on the app-launcher home grid instead of
                 // Personal Hub directly — desktop (sidebar always visible,
@@ -3418,14 +3404,6 @@
                 // call sites below retry once those tabs actually exist).
                 try { _tryRestorePendingTab(); } catch (e) { console.error('_tryRestorePendingTab error', e); }
 
-                console.log("Attempting to load sub-sections...");
-                try {
-                    if (typeof loadPresentStatus === 'function') loadPresentStatus();
-                } catch(e) { console.error("Error in loadPresentStatus", e); }
-                
-                try {
-                    if (typeof loadAttendanceHistoryInHub === 'function') loadAttendanceHistoryInHub();
-                } catch(e) { console.error("Error in loadAttendanceHistoryInHub", e); }
 
                 const tabsEpoch = uiEpoch;
                 portalFetch('get_tabs', { student_id: loggedInStudent.student_id }).then(tabs => {
