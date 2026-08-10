@@ -373,7 +373,12 @@ function updateBusList(buses) {
     return;
   }
 
-  listContainer.innerHTML = buses.map(bus => {
+  // Numeric-aware sort ("Bus 2" before "Bus 10") rather than API/registry order.
+  const sortedBuses = [...buses].sort((a, b) =>
+    busName(a.imei).localeCompare(busName(b.imei), undefined, { numeric: true, sensitivity: 'base' })
+  );
+
+  listContainer.innerHTML = sortedBuses.map(bus => {
     const name = busName(bus.imei);
     const mv = !!bus.isMoving;
     const isSelected = selectedBusImei === bus.imei;
