@@ -2353,48 +2353,59 @@
             const target = document.getElementById(`${id}-content`);
             if (target) {
                 target.classList.add('active');
-                if (id === 'bus-tracking' && window.BusTracking) {
-                    // A hardcoded "100vh minus Npx" here was always a guess at the
-                    // surrounding chrome's real height, and wrong in one direction
-                    // or the other (scrollbar, or dead space below the panel).
-                    // Measuring the pane's own actual top offset — only possible now
-                    // that classList.add('active') above just made it visible — gives
-                    // an exact fit with no guessing, on any screen size. Scroll to top
-                    // WITHOUT the smooth animation the shared scrollTo below uses, so
-                    // this measurement reflects the settled (not mid-animation) offset.
-                    window.scrollTo(0, 0);
-                    target.style.height = `calc(100vh - ${Math.round(target.getBoundingClientRect().top)}px)`;
-                    // Init lazily on first open; afterwards just recalc the map size —
-                    // Leaflet was initialized while this pane was display:none and
-                    // stays gray until invalidateSize() runs with the pane visible.
-                    if (!window.busTrackingInitialized) {
-                        BusTracking.initBusMap();
-                        window.busTrackingInitialized = true;
+                // Guarded as a whole: switchTab() can now run much earlier
+                // (session restore on refresh, via _tryRestorePendingTab)
+                // than before, when every one of these was only ever
+                // reached by a user's own click well after the page had
+                // settled. A failure in any one tab's lazy-load (e.g.
+                // AttendanceDashboard not ready yet) must not break the tab
+                // switch itself, let alone bubble further up.
+                try {
+                    if (id === 'bus-tracking' && window.BusTracking) {
+                        // A hardcoded "100vh minus Npx" here was always a guess at the
+                        // surrounding chrome's real height, and wrong in one direction
+                        // or the other (scrollbar, or dead space below the panel).
+                        // Measuring the pane's own actual top offset — only possible now
+                        // that classList.add('active') above just made it visible — gives
+                        // an exact fit with no guessing, on any screen size. Scroll to top
+                        // WITHOUT the smooth animation the shared scrollTo below uses, so
+                        // this measurement reflects the settled (not mid-animation) offset.
+                        window.scrollTo(0, 0);
+                        target.style.height = `calc(100vh - ${Math.round(target.getBoundingClientRect().top)}px)`;
+                        // Init lazily on first open; afterwards just recalc the map size —
+                        // Leaflet was initialized while this pane was display:none and
+                        // stays gray until invalidateSize() runs with the pane visible.
+                        if (!window.busTrackingInitialized) {
+                            BusTracking.initBusMap();
+                            window.busTrackingInitialized = true;
+                        }
+                        BusTracking.refreshMapSize();
                     }
-                    BusTracking.refreshMapSize();
-                }
-                if (id === 'attendance') {
-                    // The richer dashboard (summary + history), not the old
-                    // loadAttendanceHistory() table — that one targets a
-                    // same-named #attendance-content container by
-                    // coincidence but is otherwise dead code, unreachable
-                    // before Schedule/Attendance became real top-level tabs.
-                    loadAttendanceHistoryInHub();
-                }
-                if (id === 'schedule') {
-                    loadPresentStatus();
-                }
-                if (id === 'teachers') {
-                    loadTeacherDirectory();
-                }
-                if (id === 'canteen') {
-                    loadCanteen();
-                }
-                if (id === 'wallet') {
-                    loadWalletTopups();
-                }
-                if (id === 'fees') {
-                    loadMyFees();
+                    if (id === 'attendance') {
+                        // The richer dashboard (summary + history), not the old
+                        // loadAttendanceHistory() table — that one targets a
+                        // same-named #attendance-content container by
+                        // coincidence but is otherwise dead code, unreachable
+                        // before Schedule/Attendance became real top-level tabs.
+                        loadAttendanceHistoryInHub();
+                    }
+                    if (id === 'schedule') {
+                        loadPresentStatus();
+                    }
+                    if (id === 'teachers') {
+                        loadTeacherDirectory();
+                    }
+                    if (id === 'canteen') {
+                        loadCanteen();
+                    }
+                    if (id === 'wallet') {
+                        loadWalletTopups();
+                    }
+                    if (id === 'fees') {
+                        loadMyFees();
+                    }
+                } catch (e) {
+                    console.error(`switchTab('${id}') lazy-load error`, e);
                 }
             }
             
