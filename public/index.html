@@ -1937,7 +1937,14 @@
                 // Admin Panel directly — desktop (sidebar always visible)
                 // is unaffected since admin-section above already shows
                 // unconditionally and this only overrides it under 992px.
-                if (window.innerWidth < 992) showMobileHomeGrid();
+                // Wrapped in its own try/catch: a bug here must never bubble
+                // up into this function's own catch below, which calls
+                // resetUI() and would silently bounce a logged-in mobile
+                // user back to the login screen over what should at worst
+                // be a cosmetic grid failure.
+                if (window.innerWidth < 992) {
+                    try { showMobileHomeGrid(); } catch (gridErr) { console.error("showMobileHomeGrid error", gridErr); }
+                }
             } catch(e) {
                 console.error("showAdminPanel error", e);
                 alert("Error loading Admin Panel.");
@@ -2252,21 +2259,20 @@
 
         function showMobileHomeGrid() {
             if (window.innerWidth >= 992) return; // desktop always shows the sidebar instead
-            document.getElementById('form-section').classList.add('hidden');
-            document.getElementById('admin-section').classList.add('hidden');
-            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-item-btn').forEach(btn => btn.classList.remove('active'));
-
-            const backBtn = document.getElementById('mobile-home-back-btn');
-            if (backBtn) backBtn.classList.add('hidden');
-
             const grid = document.getElementById('mobile-home-section');
             if (!grid) return;
+
+            // Build the tile markup FIRST, before touching any other
+            // section's visibility — if this throws (a callers' try/catch
+            // will log it), nothing has been hidden yet, so the previously
+            // visible screen (Personal Hub / Admin Panel) stays intact
+            // instead of leaving a blank content area with everything hidden
+            // and no fallback, which is strictly worse than the grid simply
+            // not appearing.
             const items = Array.from(document.querySelectorAll('#bottom-nav-container .nav-item-btn[data-tab-id]'));
-            if (!items.length) {
-                grid.innerHTML = `<div class="text-center text-muted small fw-800 py-5">No modules available yet.</div>`;
-            } else {
-                grid.innerHTML = `<div class="row g-3">${items.map((btn, idx) => {
+            const html = !items.length
+                ? `<div class="text-center text-muted small fw-800 py-5">No modules available yet.</div>`
+                : `<div class="row g-3">${items.map((btn, idx) => {
                     const iconEl = btn.querySelector('i');
                     const icon = iconEl ? iconEl.className.replace('bi', '').trim() : 'bi-app';
                     const label = btn.querySelector('span')?.textContent || '';
@@ -2279,7 +2285,14 @@
                             </button>
                         </div>`;
                 }).join('')}</div>`;
-            }
+
+            document.getElementById('form-section')?.classList.add('hidden');
+            document.getElementById('admin-section')?.classList.add('hidden');
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('mobile-home-back-btn')?.classList.add('hidden');
+
+            grid.innerHTML = html;
             grid.classList.remove('hidden');
             // Guards against the grid appearing to render under the fixed
             // mobile header when the page was left scrolled down (e.g.
@@ -3350,7 +3363,16 @@
                 // tile even before the async get_permanent_tabs_config /
                 // get_tabs calls below resolve (they each refresh the grid
                 // themselves once they land — see _refreshHomeGridIfVisible).
-                if (window.innerWidth < 992) showMobileHomeGrid();
+                // Wrapped in its own try/catch: a bug here must never bubble
+                // up into this function's own catch below, which calls
+                // resetUI() and would silently bounce a logged-in mobile
+                // user back to the login screen over what should at worst
+                // be a cosmetic grid failure — this is exactly what was
+                // happening (auto-login worked, but mobile landed back on
+                // the login screen instead of the portal).
+                if (window.innerWidth < 992) {
+                    try { showMobileHomeGrid(); } catch (gridErr) { console.error("showMobileHomeGrid error", gridErr); }
+                }
 
                 console.log("Attempting to load sub-sections...");
                 try {
