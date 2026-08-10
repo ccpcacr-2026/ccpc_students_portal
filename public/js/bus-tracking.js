@@ -18,6 +18,20 @@ let hasFittedOnce = false;
 const trackerId = sessionStorage.getItem('_bt_tid') || 'w' + Math.random().toString(36).slice(2, 10);
 sessionStorage.setItem('_bt_tid', trackerId);
 
+// Best-effort display label sent alongside every heartbeat — this app has
+// no UI to show the watcher list itself (that lives in ccpc-teachers'
+// admin Bus Tracker only), but still contributes a readable label into the
+// shared bus_tracker_presence table so student viewers are identifiable
+// there instead of showing up as blank/generic entries.
+const watcherLabel = (() => {
+  try {
+    if (typeof loggedInStudent === 'undefined' || !loggedInStudent) return 'Guest viewer';
+    if (loggedInStudent.student_id === 'admin') return 'Admin (Student Portal)';
+    const name = loggedInStudent.name || loggedInStudent.student_name || loggedInStudent.student_id || 'Student';
+    return `${name} (Student)`;
+  } catch (e) { return 'Student'; }
+})();
+
 /**
  * Initialize Leaflet map
  */
@@ -194,7 +208,7 @@ function startBusTracking() {
  */
 async function updateBusPositions() {
   try {
-    const response = await portalFetch('get_bus_data', { tracker_id: trackerId });
+    const response = await portalFetch('get_bus_data', { tracker_id: trackerId, label: watcherLabel });
 
     const watchingEl = document.getElementById('bt-watching-count');
     if (watchingEl && typeof response.trackers === 'number') watchingEl.textContent = response.trackers;
