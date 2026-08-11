@@ -1538,8 +1538,22 @@
                         loggedInStudent = data;
                         portalFetch('login', { student_id: data.student_id, phone_number: data.phone_number }).then(res => {
                             if (res.result === 'success') showForm(res);
-                            else { localStorage.removeItem('student_session'); resetUI(); }
-                        }).catch(() => { localStorage.removeItem('student_session'); resetUI(); });
+                            else {
+                                // Silent before — if this branch fires, auto-login was
+                                // REJECTED by the server (not a JS bug), and nothing
+                                // ever showed why. Surfaced now so "auto-login doesn't
+                                // work" reports come with an actual reason attached.
+                                console.error('Auto-login rejected:', res);
+                                alert('Auto-login failed: ' + (res && res.message ? res.message : 'Unknown reason') + '\n\nPlease log in again.');
+                                localStorage.removeItem('student_session');
+                                resetUI();
+                            }
+                        }).catch(err => {
+                            console.error('Auto-login network error:', err);
+                            alert('Auto-login failed (network error): ' + (err && err.message ? err.message : String(err)) + '\n\nPlease log in again.');
+                            localStorage.removeItem('student_session');
+                            resetUI();
+                        });
                     } else {
                         localStorage.removeItem('student_session');
                         resetUI();
@@ -1978,7 +1992,7 @@
                 try { _tryRestorePendingTab(); } catch (e) { console.error('_tryRestorePendingTab error', e); }
             } catch(e) {
                 console.error("showAdminPanel error", e);
-                alert("Error loading Admin Panel.");
+                alert("Error loading Admin Panel.\n\nDetails: " + (e && e.message) + "\n" + (e && e.stack ? e.stack.split('\n').slice(0, 3).join('\n') : ''));
             }
         }
 
@@ -3610,7 +3624,7 @@
                 }).catch(err => console.error("Error fetching tabs", err));
             } catch(e) {
                 console.error("showForm critical error", e);
-                alert("An error occurred while loading your profile. Please try again.");
+                alert("An error occurred while loading your profile. Please try again.\n\nDetails: " + (e && e.message) + "\n" + (e && e.stack ? e.stack.split('\n').slice(0, 3).join('\n') : ''));
                 resetUI();
             }
         }
