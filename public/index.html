@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- This page is light-themed only — without this, some Android Chrome
+         builds with "Force dark on websites" enabled will algorithmically
+         dim/desaturate the whole page (background, cards, text alike) since
+         it never gets told the design is intentionally light. -->
+    <meta name="color-scheme" content="light">
     <title>CCPC - Student Information Portal</title>
     <!-- External Libraries (Bootstrap first so design system can override) -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -35,6 +40,7 @@
     <link href="/css/attendance.css" rel="stylesheet">
     <style>
         :root {
+            color-scheme: light;
             --primary:      #059669;
             --primary-l:    #10b981;
             --primary-ll:   #34d399;
