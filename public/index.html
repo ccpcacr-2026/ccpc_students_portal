@@ -1432,7 +1432,7 @@
             { id: 'stationary', name: 'Stationary', icon: 'bi-bag-fill' },
             { id: 'teachers', name: 'Teacher Directory', icon: 'bi-people-fill' },
             { id: 'bus-tracking', name: 'Live Bus Tracking', icon: 'bi-bus-front-fill' },
-            { id: 'textbooks', name: 'Textbooks', icon: 'bi-book-fill' },
+            { id: 'textbooks', name: 'NCTB Books', icon: 'bi-book-fill' },
         ];
         // Bumped on every UI reset/rebuild. Async callbacks (get_tabs) capture it
         // before fetching and bail if it changed — otherwise a logout while the
@@ -3518,7 +3518,7 @@
                 const textbooksPane = document.createElement('div');
                 textbooksPane.className = 'tab-pane ccpc-page'; textbooksPane.id = 'textbooks-content';
                 textbooksPane.innerHTML = `
-                    <h2 class="ccpc-page-title">Text<em>books</em></h2>
+                    <h2 class="ccpc-page-title">NCTB <em>Books</em></h2>
                     <p class="ccpc-page-sub">Official NCTB 2026 books — each link opens the official PDF from nctb.gov.bd.</p>
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         <a href="https://nctb.gov.bd/pages/static-pages/695b97ffc4774958d7b70329" target="_blank" rel="noopener" class="badge text-decoration-none bg-success-subtle text-success-emphasis border border-success-subtle px-3 py-2 fw-600">
