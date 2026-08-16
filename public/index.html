@@ -1318,6 +1318,69 @@
             return r.json();
         }
 
+        // ── Mobile hardware/gesture back button closes the open modal instead of
+        // leaving the app ────────────────────────────────────────────────────────
+        // On a phone, pressing Back with a modal open normally navigates away from
+        // the page entirely — jarring for something the user expects to just
+        // close, like it would in a native app. Handles both modal patterns this
+        // app actually uses: real Bootstrap modals (teacher profile — class
+        // "modal", shown/hidden via its own "show" class) and the lightweight
+        // custom overlay (Wallet top-up — class "cant-modal-back", created via
+        // document.createElement and closed via .remove()). Each time one opens,
+        // a history entry is pushed; Back later pops it, firing 'popstate' here
+        // instead of actually navigating, and we close the modal ourselves. If
+        // it's closed some other way first (X button, backdrop click, Cancel),
+        // the now-stale history entry is silently consumed with one
+        // history.back() so Back still only ever takes one real step, never two.
+        (function () {
+            const _stack = [];
+            const _isBsModal = el => el.classList && el.classList.contains('modal');
+            const _isCustomOverlay = el => el.classList && el.classList.contains('cant-modal-back');
+
+            function _closeTracked(el) {
+                if (_isBsModal(el)) {
+                    const inst = window.bootstrap && bootstrap.Modal.getInstance(el);
+                    if (inst) inst.hide(); else el.classList.remove('show');
+                } else if (_isCustomOverlay(el)) {
+                    el.remove();
+                }
+            }
+
+            window.addEventListener('popstate', () => {
+                if (!_stack.length) return;
+                _closeTracked(_stack.pop());
+            });
+
+            function _onOpen(el) {
+                if (_stack.includes(el)) return;
+                history.pushState({ _modalGuard: true }, '');
+                _stack.push(el);
+            }
+            function _onClose(el) {
+                const idx = _stack.indexOf(el);
+                if (idx === -1) return; // already popped by the popstate handler above
+                _stack.splice(idx, 1);
+                history.back(); // consume the stale entry from a non-back-button close
+            }
+
+            const observer = new MutationObserver(mutations => {
+                mutations.forEach(m => {
+                    if (m.type === 'attributes' && m.attributeName === 'class' && _isBsModal(m.target)) {
+                        if (m.target.classList.contains('show')) _onOpen(m.target); else _onClose(m.target);
+                    } else if (m.type === 'childList') {
+                        // Custom overlays are already fully visible the instant
+                        // they're inserted (no separate "show" step like
+                        // Bootstrap) — Bootstrap modals are inserted hidden and
+                        // only become tracked once their own "show" class
+                        // mutation fires, handled by the branch above.
+                        m.addedNodes.forEach(el => { if (el.nodeType === 1 && _isCustomOverlay(el)) _onOpen(el); });
+                        m.removedNodes.forEach(el => { if (el.nodeType === 1 && (_isBsModal(el) || _isCustomOverlay(el))) _onClose(el); });
+                    }
+                });
+            });
+            observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        })();
+
         // Lightweight toast notifications
         function showToast(message, type = 'info') {
             let host = document.getElementById('toast-host');
