@@ -523,6 +523,39 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success' });
   }
 
+  // Read-only feed of the Forum's Student section, scoped to what THIS
+  // student can actually see — teachers/Admin post targeted at a Class,
+  // Class+Section, or specific student(s) (same audience shape ccpc-
+  // teachers' createForumPost/Diary composer use). Narrowed server-side by
+  // audience->>class first (cheap PostgREST jsonb filter), then the mode-
+  // specific match (class-wide / this section / this student explicitly
+  // named) is resolved in JS since that logic differs per mode.
+  if (action === 'get_student_forum_posts') {
+    const { student_id, class: cls, section } = payload;
+    if (!student_id || !cls) return NextResponse.json({ result: 'error', message: 'student_id and class required.' });
+    const rows = await sb(
+      `forum_posts?section=eq.student&audience->>class=eq.${encodeURIComponent(cls)}&order=created_at.desc&limit=100&select=id,body,photo_urls,author_id,audience,created_at`,
+      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    const visible = (Array.isArray(rows) ? rows : []).filter(p => {
+      const a = p.audience || {};
+      if (a.mode === 'students') return (a.student_ids || []).map(String).includes(String(student_id));
+      if (a.mode === 'class_section') return !section || !a.section || a.section === section;
+      return true; // 'class' mode — every section
+    });
+    if (!visible.length) return NextResponse.json({ result: 'success', posts: [] });
+    const authorIds = [...new Set(visible.map(p => p.author_id))];
+    const profiles = await sb(
+      `users_profile?teacher_id=in.(${authorIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name`,
+      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
+    const nameById = {};
+    if (Array.isArray(profiles)) profiles.forEach(p => { nameById[p.teacher_id] = p.full_name; });
+    visible.forEach(p => { p.author_name = nameById[p.author_id] || p.author_id; });
+    return NextResponse.json({ result: 'success', posts: visible });
+  }
+
   // ── Login ─────────────────────────────────────────────────────────────────
   if (action === 'login') {
     const { student_id, phone_number } = payload;

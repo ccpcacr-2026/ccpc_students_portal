@@ -2428,6 +2428,9 @@
                     if (id === 'notifications') {
                         loadStudentNotifications();
                     }
+                    if (id === 'student-forum') {
+                        loadStudentForumPosts();
+                    }
                 } catch (e) {
                     console.error(`switchTab('${id}') lazy-load error`, e);
                 }
@@ -2748,6 +2751,33 @@
                     } else if (dot) { dot.remove(); }
                 });
             } catch (e) {}
+        }
+
+        // ── Forum (Student section, read-only) ──────────────────────────────────
+        async function loadStudentForumPosts() {
+            const sid = cantSid();
+            const el = document.getElementById('student-forum-list');
+            if (!sid || !el) return;
+            if (!loggedInStudent.class) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No class on record — nothing to show.</p>'; return; }
+            el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p>';
+            try {
+                const r = await portalFetch('get_student_forum_posts', { student_id: sid, class: loggedInStudent.class, section: loggedInStudent.section || '' });
+                if (!r || r.result !== 'success') { el.innerHTML = '<p class="text-muted small">Could not load the forum.</p>'; return; }
+                const posts = r.posts || [];
+                if (!posts.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No posts yet</p>'; return; }
+                el.innerHTML = posts.map(p => `
+                    <div class="wallet-stat-card mb-2" style="text-align:left">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <div style="width:28px;height:28px;border-radius:50%;background:var(--p-primary);color:var(--p-surface);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.75rem;flex-shrink:0">${cantEsc((p.author_name || '?').charAt(0))}</div>
+                            <div>
+                                <div style="font-weight:800;font-size:0.8rem">${cantEsc(p.author_name || '')}</div>
+                                <div class="wallet-stat-label">${_notifTimeAgo(p.created_at)}</div>
+                            </div>
+                        </div>
+                        ${p.body ? `<div style="font-size:0.85rem;white-space:pre-wrap">${cantEsc(p.body)}</div>` : ''}
+                        ${(p.photo_urls || []).length ? `<div class="d-flex gap-2 flex-wrap mt-2">${p.photo_urls.map(u => `<img src="${u}" style="width:90px;height:90px;object-fit:cover;border-radius:10px">`).join('')}</div>` : ''}
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = '<p class="text-muted small">Could not load the forum.</p>'; }
         }
 
         async function loadMyFees() {
@@ -3498,6 +3528,7 @@
                 addNav('schedule', 'Schedule', 'bi-calendar3');
                 addNav('attendance', 'Attendance', 'bi-fingerprint');
                 addNav('notifications', 'Notifications', 'bi-bell-fill');
+                addNav('student-forum', 'Forum', 'bi-chat-square-text-fill');
                 _refreshNotificationBadge();
                 const _formSectionEpoch = uiEpoch;
                 portalFetch('get_permanent_tabs_config', {}).then(cfg => {
@@ -3562,6 +3593,16 @@
                     </div>
                     <div id="notifications-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
                 if(content) content.appendChild(notifPane);
+
+                // ── Forum (Student section — read-only feed of what teachers/Admin
+                // posted for this student's class/section/them specifically) ──
+                const forumPane = document.createElement('div');
+                forumPane.className = 'tab-pane ccpc-page'; forumPane.id = 'student-forum-content';
+                forumPane.innerHTML = `
+                    <h2 class="ccpc-page-title">Class <em>Forum</em></h2>
+                    <p class="ccpc-page-sub">Posts from your teachers for your class.</p>
+                    <div id="student-forum-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
+                if(content) content.appendChild(forumPane);
 
                 // ── Fees & Dues (tuition/admission billing — separate from the wallet) ──
                 const feesPane = document.createElement('div');
