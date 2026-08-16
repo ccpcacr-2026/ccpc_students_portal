@@ -490,6 +490,39 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success' });
   }
 
+  // ── Notifications / Diary feed ──────────────────────────────────────────────
+  // ccpc-teachers (the staff-facing sibling app, same Supabase project) writes
+  // rows into `teacher.notifications` for user_id = 'student:<student_id>' —
+  // Student Diary entries (discipline/compliment/wish/homework), Student-
+  // section Forum posts, etc. This just reads that shared feed back for the
+  // logged-in student. Cross-schema read (teacher, not this app's own
+  // student schema) — same pattern as _getClassTeacherName above.
+  if (action === 'get_student_notifications') {
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    const rows = await sb(
+      `notifications?user_id=eq.${encodeURIComponent('student:' + student_id)}&order=created_at.desc&limit=100`,
+      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    const list = Array.isArray(rows) ? rows : [];
+    return NextResponse.json({ result: 'success', notifications: list, unread: list.filter(r => !r.is_read).length });
+  }
+
+  if (action === 'mark_notification_read') {
+    const { id } = payload;
+    if (!id) return NextResponse.json({ result: 'error', message: 'id required.' });
+    await sb(`notifications?id=eq.${encodeURIComponent(id)}`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  if (action === 'mark_all_notifications_read') {
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    await sb(`notifications?user_id=eq.${encodeURIComponent('student:' + student_id)}&is_read=eq.false`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    return NextResponse.json({ result: 'success' });
+  }
+
   // ── Login ─────────────────────────────────────────────────────────────────
   if (action === 'login') {
     const { student_id, phone_number } = payload;

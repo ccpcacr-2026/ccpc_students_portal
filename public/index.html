@@ -2425,6 +2425,9 @@
                     if (id === 'fees') {
                         loadMyFees();
                     }
+                    if (id === 'notifications') {
+                        loadStudentNotifications();
+                    }
                 } catch (e) {
                     console.error(`switchTab('${id}') lazy-load error`, e);
                 }
@@ -2672,6 +2675,79 @@
                     </div><span class="cant-pill ${isPend ? 'pend' : isRej ? 'rej' : 'ok'}">${isPend ? 'Pending' : isRej ? 'Rejected' : 'Added'}</span></div>`;
                 }).join('');
             } catch (e) { /* leave */ }
+        }
+
+        // ── Notifications (Diary entries, homework, Forum posts from teachers) ──
+        // Reads the shared teacher.notifications table via the new
+        // get_student_notifications action — see app/api/portal/route.js.
+        const NOTIF_TYPE_ICON = {
+            diary_entry: 'bi-journal-text', diary_discipline: 'bi-exclamation-triangle-fill',
+            forum_post: 'bi-chat-square-text-fill',
+        };
+        function _notifTimeAgo(iso) {
+            const diffMs = Date.now() - new Date(iso).getTime();
+            const mins = Math.floor(diffMs / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return mins + 'm ago';
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + 'h ago';
+            const days = Math.floor(hrs / 24);
+            if (days < 7) return days + 'd ago';
+            return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        }
+        async function loadStudentNotifications() {
+            const sid = cantSid();
+            const el = document.getElementById('notifications-list');
+            if (!sid || !el) return;
+            el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p>';
+            try {
+                const r = await portalFetch('get_student_notifications', { student_id: sid });
+                if (!r || r.result !== 'success') { el.innerHTML = '<p class="text-muted small">Could not load notifications.</p>'; return; }
+                const list = r.notifications || [];
+                if (!list.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Nothing here yet</p>'; return; }
+                el.innerHTML = list.map(n => `
+                    <div class="wallet-stat-card mb-2" style="text-align:left;cursor:pointer;${n.is_read ? '' : 'border-left:3px solid var(--p-primary)'}" onclick="markNotificationRead(${n.id}, this)">
+                        <div class="d-flex align-items-start gap-2">
+                            <i class="bi ${NOTIF_TYPE_ICON[n.type] || 'bi-bell-fill'}" style="font-size:1.1rem;color:var(--p-primary);margin-top:2px"></i>
+                            <div class="flex-grow-1">
+                                <div style="font-weight:800;font-size:0.85rem">${cantEsc(n.title || '')}</div>
+                                <div style="font-size:0.8rem;color:var(--p-ink-dim);margin-top:2px">${cantEsc(n.message || '')}</div>
+                                <div class="wallet-stat-label mt-1">${_notifTimeAgo(n.created_at)}</div>
+                            </div>
+                            ${n.is_read ? '' : '<span style="width:8px;height:8px;border-radius:50%;background:var(--p-primary);margin-top:6px;flex-shrink:0"></span>'}
+                        </div>
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = '<p class="text-muted small">Could not load notifications.</p>'; }
+        }
+        async function markNotificationRead(id, cardEl) {
+            if (cardEl) cardEl.style.borderLeft = 'none';
+            try { await portalFetch('mark_notification_read', { id }); } catch (e) {}
+            _refreshNotificationBadge();
+        }
+        async function markAllNotificationsRead() {
+            const sid = cantSid();
+            if (!sid) return;
+            try { await portalFetch('mark_all_notifications_read', { student_id: sid }); } catch (e) {}
+            loadStudentNotifications();
+            _refreshNotificationBadge();
+        }
+        // Small unread-count dot on the Notifications nav item — checked once
+        // at login and again whenever the tab itself is opened/marked read, not
+        // polled continuously (this app has no realtime/websocket layer).
+        async function _refreshNotificationBadge() {
+            const sid = cantSid();
+            if (!sid) return;
+            try {
+                const r = await portalFetch('get_student_notifications', { student_id: sid });
+                const unread = (r && r.unread) || 0;
+                document.querySelectorAll('.nav-item-btn[data-tab-id="notifications"]').forEach(btn => {
+                    let dot = btn.querySelector('.notif-unread-dot');
+                    if (unread > 0) {
+                        if (!dot) { dot = document.createElement('span'); dot.className = 'notif-unread-dot'; dot.style.cssText = 'display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#ef4444;color:#fff;font-size:0.6rem;font-weight:800;line-height:16px;margin-left:6px'; btn.appendChild(dot); }
+                        dot.textContent = unread > 9 ? '9+' : String(unread);
+                    } else if (dot) { dot.remove(); }
+                });
+            } catch (e) {}
         }
 
         async function loadMyFees() {
@@ -3421,6 +3497,8 @@
                 addNav('profile', 'Personal Hub', 'bi-person-badge-fill', true);
                 addNav('schedule', 'Schedule', 'bi-calendar3');
                 addNav('attendance', 'Attendance', 'bi-fingerprint');
+                addNav('notifications', 'Notifications', 'bi-bell-fill');
+                _refreshNotificationBadge();
                 const _formSectionEpoch = uiEpoch;
                 portalFetch('get_permanent_tabs_config', {}).then(cfg => {
                     if (_formSectionEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
@@ -3469,6 +3547,21 @@
                         <div id="wallet-topups" class="mt-3"></div>`;
                 }
                 if(content) content.appendChild(walletPane);
+
+                // ── Notifications (Diary entries, Homework, Forum posts — shared
+                // teacher.notifications table, written by ccpc-teachers) ──
+                const notifPane = document.createElement('div');
+                notifPane.className = 'tab-pane ccpc-page'; notifPane.id = 'notifications-content';
+                notifPane.innerHTML = `
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <h2 class="ccpc-page-title">Your <em>Notifications</em></h2>
+                            <p class="ccpc-page-sub">Diary entries, homework, and posts from your teachers.</p>
+                        </div>
+                        <button class="btn btn-sm" onclick="markAllNotificationsRead()" style="border-radius:12px;background:var(--p-primary);color:var(--p-surface);border:none;padding:8px 14px;font-weight:800;font-size:0.75rem;white-space:nowrap">Mark all read</button>
+                    </div>
+                    <div id="notifications-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
+                if(content) content.appendChild(notifPane);
 
                 // ── Fees & Dues (tuition/admission billing — separate from the wallet) ──
                 const feesPane = document.createElement('div');
