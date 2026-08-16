@@ -2431,6 +2431,12 @@
                     if (id === 'student-forum') {
                         loadStudentForumPosts();
                     }
+                    if (id === 'student-diary') {
+                        loadStudentDiaryEntries();
+                    }
+                    if (id === 'student-messages') {
+                        loadStudentMessageThreads();
+                    }
                 } catch (e) {
                     console.error(`switchTab('${id}') lazy-load error`, e);
                 }
@@ -2778,6 +2784,158 @@
                         ${(p.photo_urls || []).length ? `<div class="d-flex gap-2 flex-wrap mt-2">${p.photo_urls.map(u => `<img src="${u}" style="width:90px;height:90px;object-fit:cover;border-radius:10px">`).join('')}</div>` : ''}
                     </div>`).join('');
             } catch (e) { el.innerHTML = '<p class="text-muted small">Could not load the forum.</p>'; }
+        }
+
+        // ── Diary ────────────────────────────────────────────────────────────────
+        const DIARY_TYPE_META = {
+            discipline: { icon: 'bi-exclamation-triangle-fill', label: 'Discipline Report', color: '#ef4444' },
+            compliment: { icon: 'bi-star-fill', label: 'Compliment', color: '#f59e0b' },
+            wish: { icon: 'bi-balloon-fill', label: 'Wish', color: '#a855f7' },
+            homework: { icon: 'bi-book-fill', label: 'Homework / To-do', color: '#3b82f6' },
+        };
+        async function loadStudentDiaryEntries() {
+            const sid = cantSid();
+            const el = document.getElementById('student-diary-list');
+            if (!sid || !el) return;
+            if (!loggedInStudent.class) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No class on record — nothing to show.</p>'; return; }
+            el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p>';
+            try {
+                const r = await portalFetch('get_student_diary_entries', { student_id: sid, class: loggedInStudent.class, section: loggedInStudent.section || '' });
+                if (!r || r.result !== 'success') { el.innerHTML = '<p class="text-muted small">Could not load your diary.</p>'; return; }
+                const entries = r.entries || [];
+                if (!entries.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Nothing here yet</p>'; return; }
+                el.innerHTML = entries.map(e => {
+                    const meta = DIARY_TYPE_META[e.entry_type] || DIARY_TYPE_META.wish;
+                    return `<div class="wallet-stat-card mb-2" style="text-align:left;border-left:3px solid ${meta.color}">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi ${meta.icon}" style="color:${meta.color}"></i>
+                            <span style="font-weight:800;font-size:0.8rem">${cantEsc(meta.label)}</span>
+                        </div>
+                        ${e.subject || e.due_date ? `<div class="wallet-stat-label">${cantEsc(e.subject || '')}${e.subject && e.due_date ? ' · ' : ''}${e.due_date ? 'Due ' + cantEsc(e.due_date) : ''}</div>` : ''}
+                        <div style="font-size:0.85rem;white-space:pre-wrap;margin-top:4px">${cantEsc(e.message || '')}</div>
+                        <div class="wallet-stat-label mt-2">By ${cantEsc(e.teacher_name || '')} · ${_notifTimeAgo(e.created_at)}</div>
+                    </div>`;
+                }).join('');
+            } catch (e) { el.innerHTML = '<p class="text-muted small">Could not load your diary.</p>'; }
+        }
+
+        // ── Messages (student <-> teacher direct messages) ──────────────────────
+        let _msgActiveTeacherId = null;
+        async function loadStudentMessageThreads() {
+            const sid = cantSid();
+            const el = document.getElementById('student-msg-threads');
+            if (!sid || !el) return;
+            document.getElementById('student-msg-thread-view').style.display = 'none';
+            document.getElementById('student-msg-picker').style.display = 'none';
+            el.style.display = '';
+            el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p>';
+            try {
+                const r = await portalFetch('get_student_message_threads', { student_id: sid });
+                if (!r || r.result !== 'success') { el.innerHTML = '<p class="text-muted small">Could not load messages.</p>'; return; }
+                const threads = r.threads || [];
+                if (!threads.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No conversations yet — tap New to message a teacher.</p>'; return; }
+                el.innerHTML = threads.map(t => `
+                    <div class="wallet-stat-card mb-2" style="text-align:left;cursor:pointer" onclick="openStudentMessageThread('${t.teacher_id}','${cantEsc(t.teacher_name || t.teacher_id).replace(/'/g,"\\'")}')">
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width:32px;height:32px;border-radius:50%;background:var(--p-primary);color:var(--p-surface);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.85rem;flex-shrink:0">${cantEsc((t.teacher_name || '?').charAt(0))}</div>
+                            <div class="flex-grow-1">
+                                <div style="font-weight:800;font-size:0.85rem">${cantEsc(t.teacher_name || t.teacher_id)}</div>
+                                <div style="font-size:0.78rem;color:var(--p-ink-dim)">${cantEsc(t.last_message || '')}</div>
+                            </div>
+                            <div class="text-end">
+                                <div class="wallet-stat-label">${_notifTimeAgo(t.last_at)}</div>
+                                ${t.unread ? `<span style="display:inline-block;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#ef4444;color:#fff;font-size:0.65rem;font-weight:800;line-height:18px">${t.unread}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>`).join('');
+            } catch (e) { el.innerHTML = '<p class="text-muted small">Could not load messages.</p>'; }
+        }
+        async function openStudentMessageThread(teacherId, teacherName) {
+            _msgActiveTeacherId = teacherId;
+            document.getElementById('student-msg-threads').style.display = 'none';
+            document.getElementById('student-msg-picker').style.display = 'none';
+            const view = document.getElementById('student-msg-thread-view');
+            view.style.display = '';
+            view.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p>';
+            const sid = cantSid();
+            try {
+                const r = await portalFetch('get_student_message_thread', { student_id: sid, teacher_id: teacherId });
+                const msgs = (r && r.result === 'success') ? (r.messages || []) : [];
+                const myId = 'student:' + sid;
+                view.innerHTML = `
+                    <button class="btn btn-sm mb-2" onclick="loadStudentMessageThreads()" style="border:none;background:transparent;color:var(--p-primary);font-weight:800;font-size:0.8rem;padding:0"><i class="bi bi-arrow-left"></i> Back</button>
+                    <div style="font-weight:800;margin-bottom:8px">${cantEsc(teacherName)}</div>
+                    <div id="student-msg-bubbles" style="display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto">
+                        ${msgs.length ? msgs.map(m => {
+                            const mine = m.sender_id === myId;
+                            return `<div style="align-self:${mine ? 'flex-end' : 'flex-start'};max-width:75%;background:${mine ? 'var(--p-primary)' : 'rgba(0,0,0,0.05)'};color:${mine ? 'var(--p-surface)' : 'inherit'};padding:8px 12px;border-radius:14px">
+                                <div style="font-size:0.85rem;white-space:pre-wrap">${cantEsc(m.message || '')}</div>
+                                <div style="font-size:0.65rem;opacity:0.7;margin-top:2px">${new Date(m.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                            </div>`;
+                        }).join('') : '<p class="text-center py-4" style="color:var(--p-ink-dim)">No messages yet</p>'}
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <input id="student-msg-input" type="text" class="form-control" placeholder="Type a message…" style="border-radius:14px" onkeydown="if(event.key==='Enter'){sendStudentMessage();}">
+                        <button class="btn" onclick="sendStudentMessage()" style="border-radius:14px;background:var(--p-primary);color:var(--p-surface);border:none;padding:0 16px"><i class="bi bi-send-fill"></i></button>
+                    </div>`;
+                _refreshMessageBadge();
+            } catch (e) { view.innerHTML = '<p class="text-muted small">Could not load this conversation.</p>'; }
+        }
+        async function sendStudentMessage() {
+            const input = document.getElementById('student-msg-input');
+            const text = input ? input.value.trim() : '';
+            if (!text || !_msgActiveTeacherId) return;
+            const sid = cantSid();
+            input.value = ''; input.disabled = true;
+            try {
+                await portalFetch('send_student_message', { student_id: sid, teacher_id: _msgActiveTeacherId, message: text });
+                const teacherName = document.querySelector('#student-msg-thread-view > div').textContent;
+                openStudentMessageThread(_msgActiveTeacherId, teacherName);
+            } catch (e) { alert('Could not send — please try again.'); }
+            finally { input.disabled = false; }
+        }
+        async function openNewMessagePicker() {
+            document.getElementById('student-msg-threads').style.display = 'none';
+            document.getElementById('student-msg-thread-view').style.display = 'none';
+            const picker = document.getElementById('student-msg-picker');
+            picker.style.display = '';
+            picker.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Loading teachers…</p>';
+            try {
+                const teachers = await portalFetch('get_teacher_directory', {});
+                const list = Array.isArray(teachers) ? teachers : [];
+                picker.innerHTML = `
+                    <button class="btn btn-sm mb-2" onclick="loadStudentMessageThreads()" style="border:none;background:transparent;color:var(--p-primary);font-weight:800;font-size:0.8rem;padding:0"><i class="bi bi-arrow-left"></i> Back</button>
+                    <input type="text" class="form-control mb-2" placeholder="Search teacher…" style="border-radius:14px" oninput="_filterMessagePicker(this.value)">
+                    <div id="student-msg-picker-list" style="max-height:50vh;overflow-y:auto"></div>`;
+                window._msgPickerTeachers = list;
+                _filterMessagePicker('');
+            } catch (e) { picker.innerHTML = '<p class="text-muted small">Could not load teachers.</p>'; }
+        }
+        function _filterMessagePicker(q) {
+            const listEl = document.getElementById('student-msg-picker-list');
+            if (!listEl) return;
+            const query = (q || '').trim().toLowerCase();
+            const list = (window._msgPickerTeachers || []).filter(t => !query || (t.name || '').toLowerCase().includes(query));
+            listEl.innerHTML = list.slice(0, 60).map(t => `
+                <div class="wallet-stat-card mb-2" style="text-align:left;cursor:pointer" onclick="openStudentMessageThread('${t.teacher_id}','${cantEsc(t.name || '').replace(/'/g,"\\'")}')">
+                    <div style="font-weight:800;font-size:0.85rem">${cantEsc(t.name || '')}</div>
+                    <div class="wallet-stat-label">${cantEsc(t.designation || '')}</div>
+                </div>`).join('') || '<p class="text-center py-4" style="color:var(--p-ink-dim)">No match</p>';
+        }
+        async function _refreshMessageBadge() {
+            const sid = cantSid();
+            if (!sid) return;
+            try {
+                const r = await portalFetch('get_student_message_threads', { student_id: sid });
+                const unread = ((r && r.threads) || []).reduce((s, t) => s + (t.unread || 0), 0);
+                document.querySelectorAll('.nav-item-btn[data-tab-id="student-messages"]').forEach(btn => {
+                    let dot = btn.querySelector('.notif-unread-dot');
+                    if (unread > 0) {
+                        if (!dot) { dot = document.createElement('span'); dot.className = 'notif-unread-dot'; dot.style.cssText = 'display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#ef4444;color:#fff;font-size:0.6rem;font-weight:800;line-height:16px;margin-left:6px'; btn.appendChild(dot); }
+                        dot.textContent = unread > 9 ? '9+' : String(unread);
+                    } else if (dot) { dot.remove(); }
+                });
+            } catch (e) {}
         }
 
         async function loadMyFees() {
@@ -3528,8 +3686,11 @@
                 addNav('schedule', 'Schedule', 'bi-calendar3');
                 addNav('attendance', 'Attendance', 'bi-fingerprint');
                 addNav('notifications', 'Notifications', 'bi-bell-fill');
+                addNav('student-diary', 'Diary', 'bi-journal-text');
                 addNav('student-forum', 'Forum', 'bi-chat-square-text-fill');
+                addNav('student-messages', 'Messages', 'bi-envelope-fill');
                 _refreshNotificationBadge();
+                _refreshMessageBadge();
                 const _formSectionEpoch = uiEpoch;
                 portalFetch('get_permanent_tabs_config', {}).then(cfg => {
                     if (_formSectionEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
@@ -3603,6 +3764,32 @@
                     <p class="ccpc-page-sub">Posts from your teachers for your class.</p>
                     <div id="student-forum-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
                 if(content) content.appendChild(forumPane);
+
+                // ── Diary (Discipline/Compliment/Wish/Homework entries filed for
+                // this student — dedicated feed, not just the notification stub) ──
+                const diaryPane = document.createElement('div');
+                diaryPane.className = 'tab-pane ccpc-page'; diaryPane.id = 'student-diary-content';
+                diaryPane.innerHTML = `
+                    <h2 class="ccpc-page-title">Your <em>Diary</em></h2>
+                    <p class="ccpc-page-sub">Discipline reports, compliments, wishes, and homework from your teachers.</p>
+                    <div id="student-diary-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
+                if(content) content.appendChild(diaryPane);
+
+                // ── Messages (direct student <-> teacher conversations) ──
+                const msgPane = document.createElement('div');
+                msgPane.className = 'tab-pane ccpc-page'; msgPane.id = 'student-messages-content';
+                msgPane.innerHTML = `
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <h2 class="ccpc-page-title">Your <em>Messages</em></h2>
+                            <p class="ccpc-page-sub">Direct messages with your teachers.</p>
+                        </div>
+                        <button class="btn btn-sm" onclick="openNewMessagePicker()" style="border-radius:12px;background:var(--p-primary);color:var(--p-surface);border:none;padding:8px 14px;font-weight:800;font-size:0.75rem;white-space:nowrap"><i class="bi bi-plus-lg"></i> New</button>
+                    </div>
+                    <div id="student-msg-threads" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>
+                    <div id="student-msg-thread-view" class="mt-3" style="display:none"></div>
+                    <div id="student-msg-picker" class="mt-3" style="display:none"></div>`;
+                if(content) content.appendChild(msgPane);
 
                 // ── Fees & Dues (tuition/admission billing — separate from the wallet) ──
                 const feesPane = document.createElement('div');

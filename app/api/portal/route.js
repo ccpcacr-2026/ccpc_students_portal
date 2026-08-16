@@ -556,6 +556,97 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', posts: visible });
   }
 
+  // Full Diary entries (not just their notification stub) for this
+  // student — same class-first-filter-then-mode-match approach as the
+  // Forum feed above, reading teacher.student_diary_entries instead.
+  if (action === 'get_student_diary_entries') {
+    const { student_id, class: cls, section } = payload;
+    if (!student_id || !cls) return NextResponse.json({ result: 'error', message: 'student_id and class required.' });
+    const rows = await sb(
+      `student_diary_entries?audience->>class=eq.${encodeURIComponent(cls)}&order=created_at.desc&limit=100&select=id,entry_type,audience,subject,message,due_date,teacher_id,created_at`,
+      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    const visible = (Array.isArray(rows) ? rows : []).filter(e => {
+      const a = e.audience || {};
+      if (a.mode === 'students') return (a.student_ids || []).map(String).includes(String(student_id));
+      if (a.mode === 'class_section') return !section || !a.section || a.section === section;
+      return true;
+    });
+    if (!visible.length) return NextResponse.json({ result: 'success', entries: [] });
+    const teacherIds = [...new Set(visible.map(e => e.teacher_id))];
+    const profiles = await sb(
+      `users_profile?teacher_id=in.(${teacherIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name`,
+      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
+    const nameById = {};
+    if (Array.isArray(profiles)) profiles.forEach(p => { nameById[p.teacher_id] = p.full_name; });
+    visible.forEach(e => { e.teacher_name = nameById[e.teacher_id] || e.teacher_id; });
+    return NextResponse.json({ result: 'success', entries: visible });
+  }
+
+  // ── Student <-> Teacher direct messages ─────────────────────────────────────
+  // Shared teacher.direct_messages table (also used by staff-to-staff
+  // messaging in ccpc-teachers, and read by its Message History oversight
+  // view) — student's own identity is the same 'student:<id>' prefix
+  // convention used everywhere else student-facing.
+  if (action === 'get_student_message_threads') {
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    const sid = 'student:' + student_id;
+    const rows = await sb(
+      `direct_messages?or=(sender_id.eq.${encodeURIComponent(sid)},recipient_id.eq.${encodeURIComponent(sid)})&order=created_at.desc&limit=500`,
+      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    const seen = new Map();
+    (Array.isArray(rows) ? rows : []).forEach(m => {
+      const teacherId = m.sender_id === sid ? m.recipient_id : m.sender_id;
+      if (!teacherId || teacherId.startsWith('student:')) return;
+      if (!seen.has(teacherId)) seen.set(teacherId, { teacher_id: teacherId, last_message: m.message, last_at: m.created_at, unread: 0 });
+      if (!m.is_read && m.recipient_id === sid) seen.get(teacherId).unread++;
+    });
+    const teacherIds = [...seen.keys()];
+    if (teacherIds.length) {
+      const profiles = await sb(
+        `users_profile?teacher_id=in.(${teacherIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name,photo_url`,
+        'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      );
+      (Array.isArray(profiles) ? profiles : []).forEach(p => {
+        const t = seen.get(p.teacher_id);
+        if (t) Object.assign(t, { teacher_name: p.full_name, teacher_photo: p.photo_url });
+      });
+    }
+    return NextResponse.json({ result: 'success', threads: [...seen.values()].sort((a, b) => new Date(b.last_at) - new Date(a.last_at)) });
+  }
+
+  if (action === 'get_student_message_thread') {
+    const { student_id, teacher_id } = payload;
+    if (!student_id || !teacher_id) return NextResponse.json({ result: 'error', message: 'student_id and teacher_id required.' });
+    const sid = 'student:' + student_id;
+    const rows = await sb(
+      `direct_messages?or=(and(sender_id.eq.${encodeURIComponent(sid)},recipient_id.eq.${encodeURIComponent(teacher_id)}),and(sender_id.eq.${encodeURIComponent(teacher_id)},recipient_id.eq.${encodeURIComponent(sid)}))&order=created_at.asc&limit=500`,
+      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    // Mark the teacher's messages to this student read now that the student
+    // has opened the thread — fire-and-forget, doesn't block the response.
+    sb(`direct_messages?sender_id=eq.${encodeURIComponent(teacher_id)}&recipient_id=eq.${encodeURIComponent(sid)}&is_read=eq.false`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }).catch(() => {});
+    return NextResponse.json({ result: 'success', messages: Array.isArray(rows) ? rows : [] });
+  }
+
+  if (action === 'send_student_message') {
+    const { student_id, teacher_id, message } = payload;
+    const text = String(message || '').trim();
+    if (!student_id || !teacher_id || !text) return NextResponse.json({ result: 'error', message: 'student_id, teacher_id, and message are required.' });
+    const created = await sb('direct_messages', 'POST', {
+      sender_id: 'student:' + student_id, recipient_id: teacher_id, message: text,
+      is_read: false, created_at: new Date().toISOString(),
+    }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    if (created?.error) return NextResponse.json({ result: 'error', message: created.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
   // ── Login ─────────────────────────────────────────────────────────────────
   if (action === 'login') {
     const { student_id, phone_number } = payload;
@@ -1232,6 +1323,7 @@ export async function POST(req) {
       .map(t => {
         const shortcode = shortNameMap.byFull[t.full_name];
         return {
+          teacher_id: t.teacher_id,
           name: t.full_name,
           name_bengali: t.name_bengali || '',
           designation: t.designation || '',
