@@ -2759,7 +2759,9 @@
             } catch (e) {}
         }
 
-        // ── Forum (Student section, read-only) ──────────────────────────────────
+        // ── Forum (Student section — post/reply, scoped to own class+section or
+        // posts the student is explicitly tagged in; get_student_forum_posts
+        // already enforces that visibility server-side) ──────────────────────
         async function loadStudentForumPosts() {
             const sid = cantSid();
             const el = document.getElementById('student-forum-list');
@@ -2770,7 +2772,7 @@
                 const r = await portalFetch('get_student_forum_posts', { student_id: sid, class: loggedInStudent.class, section: loggedInStudent.section || '' });
                 if (!r || r.result !== 'success') { el.innerHTML = '<p class="text-muted small">Could not load the forum.</p>'; return; }
                 const posts = r.posts || [];
-                if (!posts.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No posts yet</p>'; return; }
+                if (!posts.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No posts yet — be the first to post!</p>'; return; }
                 el.innerHTML = posts.map(p => `
                     <div class="wallet-stat-card mb-2" style="text-align:left">
                         <div class="d-flex align-items-center gap-2 mb-1">
@@ -2782,8 +2784,60 @@
                         </div>
                         ${p.body ? `<div style="font-size:0.85rem;white-space:pre-wrap">${cantEsc(p.body)}</div>` : ''}
                         ${(p.photo_urls || []).length ? `<div class="d-flex gap-2 flex-wrap mt-2">${p.photo_urls.map(u => `<img src="${u}" style="width:90px;height:90px;object-fit:cover;border-radius:10px">`).join('')}</div>` : ''}
+                        <button class="btn btn-sm mt-2" onclick="toggleForumReplies(${p.id})" style="border:none;background:transparent;color:var(--p-primary);font-weight:800;font-size:0.75rem;padding:0"><i class="bi bi-chat-dots"></i> Replies</button>
+                        <div id="forum-replies-${p.id}" style="display:none;margin-top:8px;padding-left:12px;border-left:2px solid rgba(0,0,0,0.06)"></div>
                     </div>`).join('');
             } catch (e) { el.innerHTML = '<p class="text-muted small">Could not load the forum.</p>'; }
+        }
+
+        async function postStudentForumMessage() {
+            const ta = document.getElementById('student-forum-compose');
+            const text = ta ? ta.value.trim() : '';
+            if (!text) return;
+            const sid = cantSid();
+            ta.disabled = true;
+            try {
+                const r = await portalFetch('create_student_forum_post', { student_id: sid, body: text });
+                if (!r || r.result !== 'success') { alert(r && r.message ? r.message : 'Could not post.'); return; }
+                ta.value = '';
+                loadStudentForumPosts();
+            } catch (e) { alert('Could not post — please try again.'); }
+            finally { ta.disabled = false; }
+        }
+
+        async function toggleForumReplies(postId) {
+            const box = document.getElementById('forum-replies-' + postId);
+            if (!box) return;
+            const opening = box.style.display === 'none';
+            box.style.display = opening ? '' : 'none';
+            if (!opening) return;
+            box.innerHTML = '<p class="text-center py-2" style="color:var(--p-ink-dim);font-size:0.8rem">Loading…</p>';
+            try {
+                const r = await portalFetch('get_student_forum_replies', { post_id: postId });
+                const replies = (r && r.result === 'success') ? (r.replies || []) : [];
+                box.innerHTML = `
+                    <div class="d-flex flex-column gap-2">
+                        ${replies.map(rp => `<div><span style="font-weight:800;font-size:0.78rem">${cantEsc(rp.author_name || '')}</span> <span style="font-size:0.78rem;color:var(--p-ink-dim)">${cantEsc(rp.body || '')}</span></div>`).join('') || '<p style="font-size:0.78rem;color:var(--p-ink-dim);margin:0">No replies yet</p>'}
+                    </div>
+                    <div class="d-flex gap-2 mt-2">
+                        <input type="text" class="form-control form-control-sm" placeholder="Write a reply…" style="border-radius:12px" onkeydown="if(event.key==='Enter'){sendForumReply(${postId}, this);}">
+                        <button class="btn btn-sm" onclick="sendForumReply(${postId}, this.previousElementSibling)" style="border-radius:12px;background:var(--p-primary);color:var(--p-surface);border:none;padding:0 12px"><i class="bi bi-send-fill"></i></button>
+                    </div>`;
+            } catch (e) { box.innerHTML = '<p class="text-muted small">Could not load replies.</p>'; }
+        }
+
+        async function sendForumReply(postId, inputEl) {
+            const text = inputEl ? inputEl.value.trim() : '';
+            if (!text) return;
+            const sid = cantSid();
+            inputEl.disabled = true;
+            try {
+                await portalFetch('create_student_forum_reply', { student_id: sid, post_id: postId, body: text });
+                inputEl.value = '';
+                toggleForumReplies(postId); // closes
+                toggleForumReplies(postId); // reopens fresh with the new reply
+            } catch (e) { alert('Could not send reply.'); }
+            finally { inputEl.disabled = false; }
         }
 
         // ── Diary ────────────────────────────────────────────────────────────────
@@ -3755,14 +3809,20 @@
                     <div id="notifications-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
                 if(content) content.appendChild(notifPane);
 
-                // ── Forum (Student section — read-only feed of what teachers/Admin
-                // posted for this student's class/section/them specifically) ──
+                // ── Forum (Student section — students can post/reply too now,
+                // scoped to their own class+section or posts they're tagged in) ──
                 const forumPane = document.createElement('div');
                 forumPane.className = 'tab-pane ccpc-page'; forumPane.id = 'student-forum-content';
                 forumPane.innerHTML = `
                     <h2 class="ccpc-page-title">Class <em>Forum</em></h2>
-                    <p class="ccpc-page-sub">Posts from your teachers for your class.</p>
-                    <div id="student-forum-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
+                    <p class="ccpc-page-sub">Posts from your teachers and classmates for your class.</p>
+                    <div class="wallet-stat-card mb-3" style="text-align:left">
+                        <textarea id="student-forum-compose" rows="2" placeholder="Share something with your class…" class="form-control" style="border-radius:14px;resize:none"></textarea>
+                        <div class="d-flex justify-content-end mt-2">
+                            <button class="btn btn-sm" onclick="postStudentForumMessage()" style="border-radius:12px;background:var(--p-primary);color:var(--p-surface);border:none;padding:8px 16px;font-weight:800;font-size:0.75rem">Post</button>
+                        </div>
+                    </div>
+                    <div id="student-forum-list"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
                 if(content) content.appendChild(forumPane);
 
                 // ── Diary (Discipline/Compliment/Wish/Homework entries filed for

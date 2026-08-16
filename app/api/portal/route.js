@@ -202,6 +202,24 @@ function _extractAdjustment(rawSubject) {
   return { subject: rawSubject.replace(/\(([^)]+)\)\s*$/, '').trim(), originalShort: m[1].trim() };
 }
 
+// Forum posts/replies can be authored by either a teacher (author_id = a
+// plain user_id, resolved against teacher.users_profile) or, now that
+// students can post/reply too, a student (author_id = 'student:<id>',
+// resolved against this app's own student.students_data). Splits the id
+// list by that prefix and resolves each half against its own table.
+async function _resolveAuthorNames(authorIds) {
+  const nameById = {};
+  const studentIds = authorIds.filter(id => id.startsWith('student:')).map(id => id.slice('student:'.length));
+  const teacherIds = authorIds.filter(id => !id.startsWith('student:'));
+  const [profiles, students] = await Promise.all([
+    teacherIds.length ? sb(`users_profile?teacher_id=in.(${teacherIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name`, 'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }) : [],
+    studentIds.length ? sb(`students_data?student_id=in.(${studentIds.map(encodeURIComponent).join(',')})&select=student_id,student_name`) : [],
+  ]);
+  if (Array.isArray(profiles)) profiles.forEach(p => { nameById[p.teacher_id] = p.full_name; });
+  if (Array.isArray(students)) students.forEach(s => { nameById['student:' + s.student_id] = s.student_name; });
+  return nameById;
+}
+
 async function sb(path, method = 'GET', body = null, extra = {}) {
   const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
     method,
@@ -545,15 +563,68 @@ export async function POST(req) {
       return true; // 'class' mode — every section
     });
     if (!visible.length) return NextResponse.json({ result: 'success', posts: [] });
-    const authorIds = [...new Set(visible.map(p => p.author_id))];
-    const profiles = await sb(
-      `users_profile?teacher_id=in.(${authorIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name`,
-      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
-    );
-    const nameById = {};
-    if (Array.isArray(profiles)) profiles.forEach(p => { nameById[p.teacher_id] = p.full_name; });
+    const nameById = await _resolveAuthorNames([...new Set(visible.map(p => p.author_id))]);
     visible.forEach(p => { p.author_name = nameById[p.author_id] || p.author_id; });
     return NextResponse.json({ result: 'success', posts: visible });
+  }
+
+  // A student can start a new Student-section forum post — always scoped to
+  // their OWN class+section (never client-trusted: re-derived from
+  // students_data server-side, same as the visibility check above works off
+  // the real audience shape) so a student can never post into a class that
+  // isn't theirs.
+  if (action === 'create_student_forum_post') {
+    const { student_id, body: postBody } = payload;
+    const text = String(postBody || '').trim();
+    if (!student_id || !text) return NextResponse.json({ result: 'error', message: 'student_id and a message are required.' });
+    const studentRows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=class,section`);
+    const student = Array.isArray(studentRows) && studentRows[0];
+    if (!student || !student.class) return NextResponse.json({ result: 'error', message: 'Could not verify your class.' });
+    const now = new Date().toISOString();
+    const created = await sb('forum_posts', 'POST', {
+      author_id: 'student:' + student_id, post_type: 'post', body: text,
+      photo_urls: [], file_attachments: [], tagged_user_ids: [],
+      is_system: false, is_pinned: false, section: 'student',
+      audience: { mode: 'class_section', class: student.class, section: student.section || null, student_ids: [] },
+      last_activity_at: now, created_at: now,
+    }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    if (created?.error) return NextResponse.json({ result: 'error', message: created.error });
+    return NextResponse.json({ result: 'success', post: created[0] });
+  }
+
+  // Replies: any student who can already SEE a post (own class/section, or
+  // explicitly named — get_student_forum_posts already enforces that) can
+  // reply to it — no extra class check needed here since seeing the post
+  // in the first place already proved that.
+  if (action === 'get_student_forum_replies') {
+    const { post_id } = payload;
+    if (!post_id) return NextResponse.json({ result: 'error', message: 'post_id required.' });
+    const rows = await sb(
+      `forum_replies?post_id=eq.${encodeURIComponent(post_id)}&order=created_at.asc&select=id,body,author_id,created_at`,
+      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    );
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) return NextResponse.json({ result: 'success', replies: [] });
+    const nameById = await _resolveAuthorNames([...new Set(list.map(r => r.author_id))]);
+    list.forEach(r => { r.author_name = nameById[r.author_id] || r.author_id; });
+    return NextResponse.json({ result: 'success', replies: list });
+  }
+
+  if (action === 'create_student_forum_reply') {
+    const { student_id, post_id, body: replyBody } = payload;
+    const text = String(replyBody || '').trim();
+    if (!student_id || !post_id || !text) return NextResponse.json({ result: 'error', message: 'student_id, post_id, and a message are required.' });
+    const now = new Date().toISOString();
+    const created = await sb('forum_replies', 'POST', {
+      post_id, parent_reply_id: null, author_id: 'student:' + student_id,
+      body: text, photo_urls: [], tagged_user_ids: [], created_at: now,
+    }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    if (created?.error) return NextResponse.json({ result: 'error', message: created.error });
+    const postRows = await sb(`forum_posts?id=eq.${encodeURIComponent(post_id)}&select=reply_count`, 'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    const post = Array.isArray(postRows) && postRows[0];
+    await sb(`forum_posts?id=eq.${encodeURIComponent(post_id)}`, 'PATCH', { reply_count: ((post && post.reply_count) || 0) + 1, last_activity_at: now }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    return NextResponse.json({ result: 'success', reply: created[0] });
   }
 
   // Full Diary entries (not just their notification stub) for this
