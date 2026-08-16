@@ -802,7 +802,7 @@ export async function POST(req) {
   // an actual login.
   if (action === 'get_public_profile') {
     const { nfc_uid } = payload;
-    const fields = 'student_id,student_name,class,section,roll,session,photo';
+    const fields = 'student_id,student_name,class,section,roll,session,house,photo';
     const clean = String(nfc_uid || '').replace(/[\s:]/g, '').toLowerCase();
     for (const uid of [nfc_uid, clean, clean.toUpperCase()]) {
       const rows = await sb(`students_data?nfc_uid=eq.${encodeURIComponent(uid)}&select=${fields}`);
