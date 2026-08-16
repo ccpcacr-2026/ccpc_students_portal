@@ -792,11 +792,20 @@ export async function POST(req) {
   }
 
   // ── Get Public Profile ────────────────────────────────────────────────────
+  // Tap-a-card / browse-by-URL public ID lookup. Deliberately a narrow
+  // allowlist, NOT select=* — this is reachable by anyone who can read a
+  // card's NFC UID (no login, no PIN, nothing secret about the UID itself)
+  // or who just guesses/shares the URL, so it must never return anything
+  // beyond "who does this ID card belong to" — no phone numbers, parent
+  // names, balance, or spending limits, all of which students_data also
+  // holds and get_my_fees/get_wallet-style endpoints already gate behind
+  // an actual login.
   if (action === 'get_public_profile') {
     const { nfc_uid } = payload;
+    const fields = 'student_id,student_name,class,section,roll,session,photo';
     const clean = String(nfc_uid || '').replace(/[\s:]/g, '').toLowerCase();
     for (const uid of [nfc_uid, clean, clean.toUpperCase()]) {
-      const rows = await sb(`students_data?nfc_uid=eq.${encodeURIComponent(uid)}&select=*`);
+      const rows = await sb(`students_data?nfc_uid=eq.${encodeURIComponent(uid)}&select=${fields}`);
       if (!rows?.error && rows.length) return NextResponse.json({ result: 'success', data: rows[0] });
     }
     return NextResponse.json({ result: 'error', message: 'Student profile not found.' });

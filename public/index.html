@@ -1845,26 +1845,40 @@
             }
         }
 
+        // Renders whatever get_public_profile sent back — server-side that's a
+        // deliberately narrow allowlist (student_id/name/class/section/roll/
+        // session/photo only, never phone/parent/balance fields), since this
+        // screen is reachable by anyone who can read a card's NFC UID or just
+        // guesses/shares the URL, with no login at all. Laid out as an actual
+        // ID card rather than a generic field dump, matching what a public
+        // "who does this card belong to" lookup is actually for.
         function renderReadOnlyProfile(data) {
             const content = document.getElementById('public-profile-content');
-            if(!content) return;
-            
-            let html = `<div class="row g-3">`;
-            const exclude = ['id', 'nfc_uid', 'created_at'];
-            
-            Object.entries(data).forEach(([key, val]) => {
-                if (exclude.includes(key.toLowerCase())) return;
-                const label = key.replace(/_/g, ' ').toUpperCase();
-                html += `
-                    <div class="col-md-6">
-                        <div class="p-3 border rounded-4 bg-light shadow-sm h-100">
-                            <div class="small fw-800 text-muted uppercase mb-1" style="font-size:0.6rem;">${label}</div>
-                            <div class="fw-700 text-dark">${val || '---'}</div>
-                        </div>
-                    </div>`;
-            });
-            html += `</div>`;
-            content.innerHTML = html;
+            if (!content) return;
+            const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+            const initials = (data.student_name || '?').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+            const avatarHtml = data.photo
+                ? `<img src="${esc(data.photo)}" class="rounded-circle border shadow-sm" style="width:88px;height:88px;object-fit:cover;" onerror="this.outerHTML='<div class=\\'rounded-circle d-flex align-items-center justify-content-center fw-800 text-white mx-auto\\' style=\\'width:88px;height:88px;background:var(--primary);font-size:1.5rem;\\'>${initials}</div>'">`
+                : `<div class="rounded-circle d-flex align-items-center justify-content-center fw-800 text-white" style="width:88px;height:88px;background:var(--primary);font-size:1.5rem;">${initials}</div>`;
+            const infoRow = (label, val) => val ? `
+                <div class="col-6">
+                    <div class="p-3 border rounded-4 bg-light shadow-sm h-100">
+                        <div class="small fw-800 text-muted uppercase mb-1" style="font-size:0.6rem;">${label}</div>
+                        <div class="fw-700 text-dark">${esc(val)}</div>
+                    </div>
+                </div>` : '';
+            content.innerHTML = `
+                <div class="text-center mb-4">
+                    ${avatarHtml}
+                    <h4 class="fw-800 mt-3 mb-0">${esc(data.student_name || 'Unknown')}</h4>
+                    <p class="small text-muted mb-0">ID: ${esc(data.student_id || '—')}</p>
+                </div>
+                <div class="row g-3">
+                    ${infoRow('Class', data.class)}
+                    ${infoRow('Section', data.section)}
+                    ${infoRow('Roll', data.roll)}
+                    ${infoRow('Session', data.session)}
+                </div>`;
         }
 
         async function scanForRegistration() {
