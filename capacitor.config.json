@@ -3,7 +3,7 @@
   "appName": "CCPC Student Portal",
   "webDir": "public",
   "server": {
-    "url": "https://ccpc-students-portal.vercel.app",
+    "url": "https://ccpc-portal.vercel.app",
     "cleartext": false
   }
 }
