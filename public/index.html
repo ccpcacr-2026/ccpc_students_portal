@@ -513,16 +513,14 @@
 
         @media (max-width: 991px) {
             .btn-logout { top: 12px; right: 13px; padding: 9px 15px; font-size: 0.71rem; }
-            #btn-switch-account-fixed { right: 108px; }
-            #btn-switch-portal-fixed { right: 203px; }
-            .mobile-header { padding-right: 300px !important; }
+            #btn-switch-portal-fixed { right: 108px; }
+            .mobile-header { padding-right: 195px !important; }
         }
         @media (max-width: 480px) {
             .btn-logout span.btn-logout-label { display: none; }
-            #btn-switch-account-fixed { right: 60px; padding: 9px 11px; }
-            #btn-switch-portal-fixed { right: 108px; padding: 9px 11px; }
+            #btn-switch-portal-fixed { right: 60px; padding: 9px 11px; }
             .btn-logout { padding: 9px 11px; }
-            .mobile-header { padding-right: 156px !important; }
+            .mobile-header { padding-right: 108px !important; }
         }
 
         /* ── Logo Container ──────────────────────────── */
@@ -1142,14 +1140,11 @@
         <nav class="bottom-nav" id="bottom-nav-container"></nav>
     </div>
 
-    <button id="btn-switch-portal-fixed" class="btn-logout hidden" style="right:278px;border-color:rgba(16,185,129,0.25);color:#10B981" onclick="switchToTeacherPortal()">
+    <button id="btn-switch-portal-fixed" class="btn-logout hidden" style="right:150px;border-color:rgba(16,185,129,0.25);color:#10B981" onclick="switchToTeacherPortal()">
         <i class="bi bi-arrow-left-right"></i><span class="btn-logout-label">Faculty Portal</span>
     </button>
-    <button id="btn-switch-account-fixed" class="btn-logout hidden" style="right:150px" onclick="openAccountSwitcher()">
+    <button id="btn-switch-account-fixed" class="btn-logout hidden" style="right:22px" onclick="openAccountSwitcher()">
         <i class="bi bi-people-fill"></i><span class="btn-logout-label">Switch</span>
-    </button>
-    <button id="btn-logout-fixed" class="btn-logout hidden" onclick="logout()">
-        <i class="bi bi-box-arrow-right"></i><span class="btn-logout-label">Logout</span>
     </button>
 
     <!-- ── Attendance UI (inlined from attendance_ui.html) ───────────────── -->
@@ -1552,7 +1547,7 @@
         function resetUI() {
             try {
                 uiEpoch++;
-                const els = ['login-section', 'form-section', 'admin-section', 'btn-logout-fixed', 'btn-switch-account-fixed', 'btn-switch-portal-fixed', 'sidebar-container', 'mobile-header'];
+                const els = ['login-section', 'form-section', 'admin-section', 'btn-switch-account-fixed', 'btn-switch-portal-fixed', 'sidebar-container', 'mobile-header'];
                 els.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) {
@@ -2202,7 +2197,7 @@
 
         function showAdminPanel() {
             try {
-                const els = ['login-section', 'admin-section', 'btn-logout-fixed', 'sidebar-container', 'mobile-header'];
+                const els = ['login-section', 'admin-section', 'sidebar-container', 'mobile-header'];
                 els.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) {
@@ -2225,6 +2220,7 @@
                 addNav('admin-home', 'Admin Panel', 'bi-shield-lock-fill', true);
                 addNav('bus-tracking', 'Bus Tracker', 'bi-bus-front-fill');
                 addNav('accounts', 'Accounts', 'bi-people-fill');
+                addNav('logout', 'Logout', 'bi-box-arrow-right');
                 
                 // Ensure bus tracking content exists for admin
                 if (content && !document.getElementById('bus-tracking-content')) {
@@ -2655,6 +2651,7 @@
             // own — it just pops the account-switcher modal open and leaves
             // whatever screen was already showing untouched underneath.
             if (id === 'accounts') { openAccountSwitcher(); return; }
+            if (id === 'logout') { if (confirm('Log out of this account?')) logout(); return; }
 
             // Remember the current screen so a refresh can silently land
             // back on it instead of the default (grid/Personal Hub/Admin
@@ -3976,13 +3973,11 @@
 
                 const loginSec = document.getElementById('login-section');
                 const formSec = document.getElementById('form-section');
-                const logoutBtn = document.getElementById('btn-logout-fixed');
                 const sidebarCont = document.getElementById('sidebar-container');
                 const mobHeader = document.getElementById('mobile-header');
 
                 if(loginSec) loginSec.classList.add('hidden');
                 if(formSec) formSec.classList.remove('hidden');
-                if(logoutBtn) logoutBtn.classList.remove('hidden');
                 if(sidebarCont) sidebarCont.classList.remove('hidden');
                 if(mobHeader) mobHeader.classList.remove('hidden');
 
@@ -4075,12 +4070,14 @@
                 portalFetch('get_permanent_tabs_config', {}).then(cfg => {
                     if (_formSectionEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
                     PERMANENT_TABS.forEach(t => { if ((cfg || {})[t.id] !== false) addNav(t.id, t.name, t.icon); });
+                    addNav('logout', 'Logout', 'bi-box-arrow-right');
                     _refreshHomeGridIfVisible();
                     _tryRestorePendingTab();
                 }).catch(() => {
                     if (_formSectionEpoch !== uiEpoch) return;
                     // Settings fetch failed: fail open so a network hiccup never hides a real feature.
                     PERMANENT_TABS.forEach(t => addNav(t.id, t.name, t.icon));
+                    addNav('logout', 'Logout', 'bi-box-arrow-right');
                     _refreshHomeGridIfVisible();
                     _tryRestorePendingTab();
                 });
