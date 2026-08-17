@@ -15,6 +15,7 @@
     "react-dom": "^18"
   },
   "devDependencies": {
-    "@capacitor/android": "^8.5.0"
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/assets": "^3.0.5"
   }
 }
