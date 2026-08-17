@@ -1673,7 +1673,176 @@
             }
         }
 
+        // Shared by both NFC backends once a tag has actually been read —
+        // tries UID-based login first (nfc_login, matching a card
+        // pre-registered via Admin Panel > NFC), falling back to parsing an
+        // NDEF text/URL record directly off the tag (a card pre-written with
+        // a login URL/id via an app like NFC Tools, never registered at
+        // all). `records` must already be in the {recordType, data} shape
+        // both backends normalize to.
+        function _nfcOnTagFound(serialNumber, records) {
+            console.log("NFC tapped! Serial:", serialNumber, "Records:", records.length);
+            updateNFCStatus("Card Detected", "Verifying identity, please hold still...", false);
+
+            function readNDEFRecords(recs) {
+                const decoder = new TextDecoder();
+                for (const record of recs) {
+                    let dataStr = "";
+                    if (record.recordType === "text" || record.recordType === "url") {
+                        dataStr = decoder.decode(record.data);
+                    }
+
+                    if (dataStr) {
+                        console.log("NFC NDEF Record Payload:", dataStr);
+                        let id = "";
+                        let phone = "";
+
+                        // Case 1: URL record
+                        if (dataStr.includes("?") || dataStr.includes("exec")) {
+                            try {
+                                const url = new URL(dataStr);
+                                id = url.searchParams.get("id") || url.searchParams.get("student_id") || "";
+                                phone = url.searchParams.get("phone") || url.searchParams.get("phone_number") || "";
+                            } catch(urlErr) {
+                                const matchId = dataStr.match(/[?&](id|student_id)=([^&]+)/);
+                                const matchPhone = dataStr.match(/[?&](phone|phone_number)=([^&]+)/);
+                                if (matchId) id = matchId[2];
+                                if (matchPhone) phone = matchPhone[2];
+                            }
+                        }
+
+                        // Case 2: Comma or space separated plain text
+                        if (!id && !phone) {
+                            const parts = dataStr.split(/[\s,]+/);
+                            if (parts.length >= 1) id = parts[0].trim();
+                            if (parts.length >= 2) phone = parts[1].trim();
+                        }
+
+                        if (id) {
+                            document.getElementById('student_id').value = id;
+                            if (phone) {
+                                document.getElementById('phone_number').value = phone;
+                            }
+                            updateNFCStatus("Authenticated!", "Loading your student profile...", false);
+                            setTimeout(() => {
+                                stopNFCScan();
+                                login();
+                            }, 800);
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            if (serialNumber) {
+                const cleanUid = serialNumber.replace(/[\s:]/g, '').toLowerCase();
+                console.log("Database lookup for NFC UID:", cleanUid);
+
+                portalFetch('nfc_login', { nfc_uid: serialNumber }).then(json => {
+                    if (json.result === 'success') {
+                        updateNFCStatus("Access Granted!", "Authenticating profile, welcome...", false);
+                        setTimeout(() => { stopNFCScan(); showForm(json); }, 800);
+                    } else {
+                        const found = readNDEFRecords(records);
+                        if (!found) {
+                            updateNFCStatus("Card Unregistered", "This card is not registered. Scanning again...", true);
+                            if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                            nfcStatusTimeout = setTimeout(() => updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone."), 3000);
+                        }
+                    }
+                }).catch(err => {
+                    console.error("NFC UID validation failed:", err);
+                    const found = readNDEFRecords(records);
+                    if (!found) {
+                        updateNFCStatus("Verification Error", "Error validating identity. Scanning again...", true);
+                        if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                        nfcStatusTimeout = setTimeout(() => updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone."), 3000);
+                    }
+                });
+            } else {
+                const found = readNDEFRecords(records);
+                if (!found) {
+                    updateNFCStatus("Card Empty", "This tag has no registered identity and no records. Scanning again...", true);
+                    if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                    nfcStatusTimeout = setTimeout(() => {
+                        updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone.");
+                    }, 3000);
+                }
+            }
+        }
+
+        // Dispatches to whichever NFC backend is actually available:
+        //   - Packaged native app (Capacitor) -> the CapacitorNfc plugin, real
+        //     device NFC via Android's/iOS's own APIs.
+        //   - A real browser tab (not packaged) -> the Web NFC API
+        //     (NDEFReader), Chrome/Opera-on-Android only.
+        // Critical distinction: Web NFC does NOT work inside a packaged
+        // Capacitor WebView at all (Chromium only exposes it to its own
+        // top-level browser UI, never an embedded WebView) — so once this
+        // app is shipped as a real Android app, the native plugin path below
+        // is the only one that will ever actually fire on a phone running
+        // the installed app; the Web NFC path only still matters for anyone
+        // using this same site directly in the Chrome browser app.
         async function startNFCScan() {
+            if (window.Capacitor && window.Capacitor.isNativePlatform()) return _startNativeNFCScan();
+            return _startWebNFCScan();
+        }
+
+        async function _startNativeNFCScan() {
+            const Nfc = window.Capacitor.Plugins.CapacitorNfc;
+            if (!Nfc) { alert('NFC plugin not available in this build.'); return; }
+            const overlay = document.getElementById('nfc-scan-overlay');
+            if (overlay) { overlay.style.display = 'flex'; overlay.classList.remove('hidden'); }
+            updateNFCStatus('Ready to Scan', 'Please tap your student NFC card against the back of your phone.');
+            try {
+                const { supported } = await Nfc.isSupported();
+                if (!supported) { updateNFCStatus('NFC Not Available', 'This device has no NFC hardware.', true); return; }
+                const { status } = await Nfc.getStatus();
+                if (status === 'NFC_DISABLED') { updateNFCStatus('NFC Is Off', 'Turn on NFC in your phone\'s settings, then try again.', true); return; }
+
+                if (_nfcNativeListener) { try { _nfcNativeListener.remove(); } catch (e) {} }
+                _nfcNativeListener = await Nfc.addListener('nfcEvent', event => {
+                    const tag = event.tag || {};
+                    const serialNumber = (tag.id || []).map(b => b.toString(16).padStart(2, '0')).join(':');
+                    const records = _nfcDecodeNativeRecords(tag.ndefMessage || []);
+                    _nfcOnTagFound(serialNumber, records);
+                });
+                await Nfc.startScanning();
+            } catch (error) {
+                updateNFCStatus('NFC Error', error.message || 'Could not start NFC scanning.', true);
+                if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
+                nfcStatusTimeout = setTimeout(() => stopNFCScan(), 4000);
+            }
+        }
+
+        // The native plugin hands back raw NDEF records (byte arrays, TNF
+        // type codes) rather than the browser's already-decoded {recordType,
+        // data} shape Web NFC provides — this converts just the two record
+        // kinds this app's own NFC cards actually use (well-known Text 'T'
+        // and URI 'U') into that same shape, so _nfcOnTagFound/
+        // readNDEFRecords below can treat both backends identically.
+        function _nfcDecodeNativeRecords(ndefMessage) {
+            const URI_PREFIXES = ['', 'http://www.', 'https://www.', 'http://', 'https://'];
+            return (ndefMessage || []).map(rec => {
+                const type = String.fromCharCode(...(rec.type || []));
+                const payload = new Uint8Array(rec.payload || []);
+                if (type === 'U' && payload.length) {
+                    const prefix = URI_PREFIXES[payload[0]] || '';
+                    const rest = new TextDecoder().decode(payload.slice(1));
+                    return { recordType: 'url', data: new TextEncoder().encode(prefix + rest) };
+                }
+                if (type === 'T' && payload.length) {
+                    const langLen = payload[0] & 0x3f;
+                    return { recordType: 'text', data: payload.slice(1 + langLen) };
+                }
+                return { recordType: 'unknown', data: payload };
+            });
+        }
+
+        let _nfcNativeListener = null;
+
+        async function _startWebNFCScan() {
             if (!('NDEFReader' in window)) {
                 alert("NFC Tap to Login is supported on Google Chrome/Opera for Android.\n\nTo log in via NFC on iOS/Safari or desktop:\n1. Open an NFC writing app (like NFC Tools) on your mobile device.\n2. Write your login URL as a URL record:\n   https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?id=STUDENT_ID&phone=PHONE_NUMBER\n3. Simply tap your tag on your phone to open the site and log in automatically!");
                 return;
@@ -1711,98 +1880,8 @@
                 });
 
                 ndef.addEventListener("reading", event => {
-                    const serialNumber = event.serialNumber || "";
                     const records = (event.message && event.message.records) ? event.message.records : [];
-                    
-                    console.log("NFC tapped! Serial:", serialNumber, "Records:", records.length);
-                    updateNFCStatus("Card Detected", "Verifying identity, please hold still...", false);
-
-                    function readNDEFRecords(recs) {
-                        const decoder = new TextDecoder();
-                        for (const record of recs) {
-                            let dataStr = "";
-                            if (record.recordType === "text" || record.recordType === "url") {
-                                dataStr = decoder.decode(record.data);
-                            }
-                            
-                            if (dataStr) {
-                                console.log("NFC NDEF Record Payload:", dataStr);
-                                let id = "";
-                                let phone = "";
-                                
-                                // Case 1: URL record
-                                if (dataStr.includes("?") || dataStr.includes("exec")) {
-                                    try {
-                                        const url = new URL(dataStr);
-                                        id = url.searchParams.get("id") || url.searchParams.get("student_id") || "";
-                                        phone = url.searchParams.get("phone") || url.searchParams.get("phone_number") || "";
-                                    } catch(urlErr) {
-                                        const matchId = dataStr.match(/[?&](id|student_id)=([^&]+)/);
-                                        const matchPhone = dataStr.match(/[?&](phone|phone_number)=([^&]+)/);
-                                        if (matchId) id = matchId[2];
-                                        if (matchPhone) phone = matchPhone[2];
-                                    }
-                                } 
-                                
-                                // Case 2: Comma or space separated plain text
-                                if (!id && !phone) {
-                                    const parts = dataStr.split(/[\s,]+/);
-                                    if (parts.length >= 1) id = parts[0].trim();
-                                    if (parts.length >= 2) phone = parts[1].trim();
-                                }
-                                
-                                if (id) {
-                                    document.getElementById('student_id').value = id;
-                                    if (phone) {
-                                        document.getElementById('phone_number').value = phone;
-                                    }
-                                    updateNFCStatus("Authenticated!", "Loading your student profile...", false);
-                                    setTimeout(() => {
-                                        stopNFCScan();
-                                        login();
-                                    }, 800);
-                                    return true;
-                                }
-                            }
-                        }
-                        return false;
-                    }
-
-                    if (serialNumber) {
-                        const cleanUid = serialNumber.replace(/[\s:]/g, '').toLowerCase();
-                        console.log("Database lookup for NFC UID:", cleanUid);
-
-                        portalFetch('nfc_login', { nfc_uid: serialNumber }).then(json => {
-                            if (json.result === 'success') {
-                                updateNFCStatus("Access Granted!", "Authenticating profile, welcome...", false);
-                                setTimeout(() => { stopNFCScan(); showForm(json); }, 800);
-                            } else {
-                                const found = readNDEFRecords(records);
-                                if (!found) {
-                                    updateNFCStatus("Card Unregistered", "This card is not registered. Scanning again...", true);
-                                    if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
-                                    nfcStatusTimeout = setTimeout(() => updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone."), 3000);
-                                }
-                            }
-                        }).catch(err => {
-                            console.error("NFC UID validation failed:", err);
-                            const found = readNDEFRecords(records);
-                            if (!found) {
-                                updateNFCStatus("Verification Error", "Error validating identity. Scanning again...", true);
-                                if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
-                                nfcStatusTimeout = setTimeout(() => updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone."), 3000);
-                            }
-                        });
-                    } else {
-                        const found = readNDEFRecords(records);
-                        if (!found) {
-                            updateNFCStatus("Card Empty", "This tag has no registered identity and no records. Scanning again...", true);
-                            if (nfcStatusTimeout) clearTimeout(nfcStatusTimeout);
-                            nfcStatusTimeout = setTimeout(() => {
-                                updateNFCStatus("Ready to Scan", "Please tap and hold your student NFC card against the back of your phone.");
-                            }, 3000);
-                        }
-                    }
+                    _nfcOnTagFound(event.serialNumber || "", records);
                 });
 
                 await ndef.scan({ signal: nfcAbortController.signal });
@@ -1832,6 +1911,10 @@
         }
 
         function stopNFCScan() {
+            if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.CapacitorNfc) {
+                window.Capacitor.Plugins.CapacitorNfc.stopScanning().catch(() => {});
+                if (_nfcNativeListener) { try { _nfcNativeListener.remove(); } catch (e) {} _nfcNativeListener = null; }
+            }
             if (nfcAbortController) {
                 try {
                     nfcAbortController.abort();
@@ -1887,22 +1970,39 @@
         }
 
         async function scanForRegistration() {
-            if (!('NDEFReader' in window)) return alert("NFC scanning requires Chrome on Android.");
-            
             const status = document.getElementById('reg-status');
             const uidInput = document.getElementById('reg-nfc-uid');
-            if(status) status.innerText = "Ready to scan... Tap tag now.";
-            
+            const setUid = uid => {
+                if (uidInput) uidInput.value = uid;
+                if (status) { status.className = "mt-4 text-center small fw-800 text-success"; status.innerText = "Tag detected! Serial: " + uid; }
+            };
+
+            if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+                const Nfc = window.Capacitor.Plugins.CapacitorNfc;
+                if (!Nfc) return alert("NFC plugin not available in this build.");
+                if (status) status.innerText = "Ready to scan... Tap tag now.";
+                try {
+                    if (_nfcNativeListener) { try { _nfcNativeListener.remove(); } catch (e) {} }
+                    _nfcNativeListener = await Nfc.addListener('nfcEvent', event => {
+                        const uid = ((event.tag && event.tag.id) || []).map(b => b.toString(16).padStart(2, '0')).join(':');
+                        setUid(uid);
+                        Nfc.stopScanning().catch(() => {});
+                        if (_nfcNativeListener) { _nfcNativeListener.remove(); _nfcNativeListener = null; }
+                    });
+                    await Nfc.startScanning();
+                } catch (e) {
+                    alert("NFC Registration Scan Error: " + (e.message || e.toString()));
+                }
+                return;
+            }
+
+            if (!('NDEFReader' in window)) return alert("NFC scanning requires Chrome on Android.");
+            const status2 = status;
+            if (status2) status2.innerText = "Ready to scan... Tap tag now.";
             try {
                 const ndef = new NDEFReader();
                 await ndef.scan();
-                ndef.onreading = event => {
-                    if (uidInput) uidInput.value = event.serialNumber;
-                    if (status) {
-                        status.className = "mt-4 text-center small fw-800 text-success";
-                        status.innerText = "Tag detected! Serial: " + event.serialNumber;
-                    }
-                };
+                ndef.onreading = event => setUid(event.serialNumber);
             } catch (e) {
                 alert("NFC Registration Scan Error: " + e.toString());
             }
