@@ -1,0 +1,53 @@
+name: Build Android APK
+
+# "One-click" build: run this manually from the Actions tab (Run workflow
+# button) any time you want a fresh installable APK without touching
+# Android Studio at all — GitHub's own runners already have a JDK and the
+# Android SDK preinstalled, so there's nothing to set up locally. Also
+# runs automatically whenever android/ or the Capacitor config changes on
+# main, so a native-side change always has a build waiting.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - '.github/workflows/android-build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      # Keeps android/ in sync with capacitor.config.json and the installed
+      # plugins (e.g. the NFC plugin) — same as running `npm run cap:sync`
+      # locally before a build.
+      - run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      # Debug APKs are self-signed with Android's built-in debug key — install-
+      # able on any device via "Install unknown apps", not eligible for the
+      # Play Store as-is. That needs a real release signing key (a later step
+      # once you're ready to actually publish, not needed just to test).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ccpc-student-portal-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
