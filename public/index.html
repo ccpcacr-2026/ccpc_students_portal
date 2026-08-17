@@ -2224,6 +2224,7 @@
 
                 addNav('admin-home', 'Admin Panel', 'bi-shield-lock-fill', true);
                 addNav('bus-tracking', 'Bus Tracker', 'bi-bus-front-fill');
+                addNav('accounts', 'Accounts', 'bi-people-fill');
                 
                 // Ensure bus tracking content exists for admin
                 if (content && !document.getElementById('bus-tracking-content')) {
@@ -2648,6 +2649,13 @@
         }
 
         function switchTab(id) {
+            // "accounts" is a nav tile like any other (so it shows up in the
+            // sidebar, the bottom nav, and the mobile home grid via the
+            // normal addNav() plumbing) but has no real content pane of its
+            // own — it just pops the account-switcher modal open and leaves
+            // whatever screen was already showing untouched underneath.
+            if (id === 'accounts') { openAccountSwitcher(); return; }
+
             // Remember the current screen so a refresh can silently land
             // back on it instead of the default (grid/Personal Hub/Admin
             // Panel) — see _tryRestorePendingTab, read back in initPortal.
@@ -4060,6 +4068,7 @@
                 addNav('student-diary', 'Diary', 'bi-journal-text');
                 addNav('student-forum', 'Forum', 'bi-chat-square-text-fill');
                 addNav('student-messages', 'Messages', 'bi-envelope-fill');
+                addNav('accounts', 'Accounts', 'bi-people-fill');
                 _refreshNotificationBadge();
                 _refreshMessageBadge();
                 const _formSectionEpoch = uiEpoch;
