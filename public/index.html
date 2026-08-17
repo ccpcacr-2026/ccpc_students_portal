@@ -507,10 +507,19 @@
             text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer;
         }
         .btn-logout:hover { background: #EF4444; color: #fff; border-color: transparent; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(239,68,68,0.3); }
+        #btn-switch-account-fixed { border-color: rgba(59,130,246,0.25); color: #3B82F6; }
+        #btn-switch-account-fixed:hover { background: #3B82F6; color: #fff; border-color: transparent; box-shadow: 0 8px 24px rgba(59,130,246,0.3); }
 
         @media (max-width: 991px) {
             .btn-logout { top: 12px; right: 13px; padding: 9px 15px; font-size: 0.71rem; }
-            .mobile-header { padding-right: 118px !important; }
+            #btn-switch-account-fixed { right: 108px; }
+            .mobile-header { padding-right: 210px !important; }
+        }
+        @media (max-width: 480px) {
+            .btn-logout span.btn-logout-label { display: none; }
+            #btn-switch-account-fixed { right: 60px; padding: 9px 11px; }
+            .btn-logout { padding: 9px 11px; }
+            .mobile-header { padding-right: 108px !important; }
         }
 
         /* ── Logo Container ──────────────────────────── */
@@ -1130,8 +1139,11 @@
         <nav class="bottom-nav" id="bottom-nav-container"></nav>
     </div>
 
+    <button id="btn-switch-account-fixed" class="btn-logout hidden" style="right:150px" onclick="openAccountSwitcher()">
+        <i class="bi bi-people-fill"></i><span class="btn-logout-label">Switch</span>
+    </button>
     <button id="btn-logout-fixed" class="btn-logout hidden" onclick="logout()">
-        <i class="bi bi-box-arrow-right"></i> Logout
+        <i class="bi bi-box-arrow-right"></i><span class="btn-logout-label">Logout</span>
     </button>
 
     <!-- ── Attendance UI (inlined from attendance_ui.html) ───────────────── -->
@@ -1534,7 +1546,7 @@
         function resetUI() {
             try {
                 uiEpoch++;
-                const els = ['login-section', 'form-section', 'admin-section', 'btn-logout-fixed', 'sidebar-container', 'mobile-header'];
+                const els = ['login-section', 'form-section', 'admin-section', 'btn-logout-fixed', 'btn-switch-account-fixed', 'sidebar-container', 'mobile-header'];
                 els.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) {
@@ -1542,6 +1554,7 @@
                         else el.classList.add('hidden');
                     }
                 });
+                _renderAccountSwitchButton();
                 const items = document.getElementById('sidebar-items');
                 const bottom = document.getElementById('bottom-nav-container');
                 if(items) items.innerHTML = '';
@@ -2083,6 +2096,93 @@
             resetUI();
         }
 
+        // ── Multi-account (one device, several children) ───────────────────
+        // A parent logging in for more than one child shouldn't have to
+        // retype credentials each time — every successful non-admin login is
+        // remembered here (student_id + the exact credential that worked),
+        // and the active session can be swapped between them without a full
+        // logout/relogin round trip.
+        function _getSavedAccounts() {
+            try { return JSON.parse(localStorage.getItem('student_accounts') || '[]'); } catch (e) { return []; }
+        }
+        function _setSavedAccounts(list) {
+            try { localStorage.setItem('student_accounts', JSON.stringify(list)); } catch (e) {}
+        }
+        function _upsertSavedAccount(acc) {
+            if (!acc || !acc.student_id || acc.student_id === 'admin') return;
+            const list = _getSavedAccounts().filter(a => a.student_id !== acc.student_id);
+            list.unshift(acc);
+            _setSavedAccounts(list.slice(0, 8));
+        }
+        function _removeSavedAccount(id) {
+            _setSavedAccounts(_getSavedAccounts().filter(a => a.student_id !== id));
+            openAccountSwitcher();
+        }
+        function _renderAccountSwitchButton() {
+            const btn = document.getElementById('btn-switch-account-fixed');
+            if (!btn) return;
+            const isStudent = loggedInStudent && loggedInStudent.student_id && loggedInStudent.student_id !== 'admin';
+            btn.classList.toggle('hidden', !isStudent);
+        }
+        function _accountInitials(name) {
+            return String(name || 'ST').trim().split(/\s+/).slice(0, 2).map(n => n[0]).join('').toUpperCase();
+        }
+        function openAccountSwitcher() {
+            document.getElementById('account-switch-modal')?.remove();
+            const accounts = _getSavedAccounts();
+            const activeId = loggedInStudent && loggedInStudent.student_id;
+            const back = document.createElement('div');
+            back.className = 'cant-modal-back';
+            back.id = 'account-switch-modal';
+            back.onclick = (e) => { if (e.target === back) back.remove(); };
+            back.innerHTML = `
+                <div class="cant-modal">
+                    <h3>Switch account</h3>
+                    <p class="sub">Saved children on this device. Handy if more than one of your kids uses this app.</p>
+                    <div style="display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto">
+                        ${accounts.length ? accounts.map(a => `
+                            <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;background:${a.student_id === activeId ? 'var(--p-primary-t,#F1F5F9)' : '#fff'};border:1.5px solid ${a.student_id === activeId ? 'var(--p-primary)' : 'rgba(0,0,0,0.08)'}">
+                                <div onclick="_switchToAccount('${String(a.student_id).replace(/'/g, "\\'")}')" style="flex:1;display:flex;align-items:center;gap:12px;cursor:pointer;min-width:0">
+                                    <div style="width:38px;height:38px;border-radius:50%;background:var(--p-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.8rem;flex-shrink:0">${_accountInitials(a.name)}</div>
+                                    <div style="min-width:0">
+                                        <div style="font-weight:700;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.name || a.student_id}${a.student_id === activeId ? ' <span style=\"color:var(--p-primary);font-weight:800\">(active)</span>' : ''}</div>
+                                        <div style="font-size:0.72rem;color:var(--p-ink-dim)">ID: ${a.student_id}</div>
+                                    </div>
+                                </div>
+                                <button type="button" title="Remove" onclick="_removeSavedAccount('${String(a.student_id).replace(/'/g, "\\'")}')" style="background:none;border:none;color:#EF4444;font-size:1.1rem;padding:4px;flex-shrink:0"><i class="bi bi-trash3"></i></button>
+                            </div>`).join('') : `<div class="cant-empty">No saved accounts yet.</div>`}
+                    </div>
+                    <button class="btn w-100 py-3 fw-800 mt-3" style="border-radius:14px;background:var(--p-primary);color:var(--p-surface);border:none" onclick="_addAnotherAccount()">+ Add another child</button>
+                    <button class="btn w-100 py-2 mt-2" style="border-radius:12px;background:transparent;color:var(--p-ink-dim);border:none;font-size:0.82rem" onclick="document.getElementById('account-switch-modal').remove()">Close</button>
+                </div>`;
+            document.body.appendChild(back);
+        }
+        function _switchToAccount(studentId) {
+            const acc = _getSavedAccounts().find(a => a.student_id === studentId);
+            if (!acc) return;
+            document.getElementById('account-switch-modal')?.remove();
+            if (studentId === activeIdSafe()) return; // already active
+            portalFetch('login', { student_id: acc.student_id, phone_number: acc.phone_number }).then(json => {
+                if (json.result === 'success') {
+                    loggedInStudent = { student_id: acc.student_id, phone_number: acc.phone_number, role: json.role || 'student' };
+                    try { localStorage.setItem('student_session', JSON.stringify(loggedInStudent)); } catch (e) {}
+                    if (json.role === 'admin') showAdminPanel(); else showForm(json);
+                } else {
+                    alert('Could not switch account: ' + (json.message || 'login failed. Saved credentials may be out of date.'));
+                }
+            }).catch(err => alert('Network error while switching account: ' + err.message));
+        }
+        function activeIdSafe() { return loggedInStudent && loggedInStudent.student_id; }
+        function _addAnotherAccount() {
+            document.getElementById('account-switch-modal')?.remove();
+            // Deliberately does NOT touch student_accounts — this only clears the
+            // *active* session so the login form is free to authenticate a
+            // different child; every previously saved account stays in the switcher.
+            localStorage.removeItem('student_session');
+            loggedInStudent = null;
+            resetUI();
+        }
+
         function showAdminPanel() {
             try {
                 const els = ['login-section', 'admin-section', 'btn-logout-fixed', 'sidebar-container', 'mobile-header'];
@@ -2093,6 +2193,7 @@
                         else el.classList.remove('hidden');
                     }
                 });
+                document.getElementById('btn-switch-account-fixed')?.classList.add('hidden');
 
                 // Populate Mobile Nav for Admin
                 const bottom = document.getElementById('bottom-nav-container');
@@ -3858,6 +3959,16 @@
                 if(logoutBtn) logoutBtn.classList.remove('hidden');
                 if(sidebarCont) sidebarCont.classList.remove('hidden');
                 if(mobHeader) mobHeader.classList.remove('hidden');
+
+                if (loggedInStudent && loggedInStudent.student_id && loggedInStudent.phone_number) {
+                    _upsertSavedAccount({
+                        student_id: loggedInStudent.student_id,
+                        phone_number: loggedInStudent.phone_number,
+                        name: loggedInStudent.student_name || loggedInStudent.name || loggedInStudent.student_id,
+                        photo: loggedInStudent.photo || null
+                    });
+                }
+                _renderAccountSwitchButton();
 
                 const sidebar = document.getElementById('sidebar-items');
                 const bottom = document.getElementById('bottom-nav-container');
