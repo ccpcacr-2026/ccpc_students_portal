@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "cap:sync": "cap sync android",
+    "cap:open:android": "cap open android",
+    "cap:assets": "capacitor-assets generate --android"
   },
   "dependencies": {
     "@capacitor/cli": "^8.5.0",
