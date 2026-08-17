@@ -509,17 +509,20 @@
         .btn-logout:hover { background: #EF4444; color: #fff; border-color: transparent; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(239,68,68,0.3); }
         #btn-switch-account-fixed { border-color: rgba(59,130,246,0.25); color: #3B82F6; }
         #btn-switch-account-fixed:hover { background: #3B82F6; color: #fff; border-color: transparent; box-shadow: 0 8px 24px rgba(59,130,246,0.3); }
+        #btn-switch-portal-fixed:hover { background: #10B981; color: #fff; border-color: transparent; box-shadow: 0 8px 24px rgba(16,185,129,0.3); }
 
         @media (max-width: 991px) {
             .btn-logout { top: 12px; right: 13px; padding: 9px 15px; font-size: 0.71rem; }
             #btn-switch-account-fixed { right: 108px; }
-            .mobile-header { padding-right: 210px !important; }
+            #btn-switch-portal-fixed { right: 203px; }
+            .mobile-header { padding-right: 300px !important; }
         }
         @media (max-width: 480px) {
             .btn-logout span.btn-logout-label { display: none; }
             #btn-switch-account-fixed { right: 60px; padding: 9px 11px; }
+            #btn-switch-portal-fixed { right: 108px; padding: 9px 11px; }
             .btn-logout { padding: 9px 11px; }
-            .mobile-header { padding-right: 108px !important; }
+            .mobile-header { padding-right: 156px !important; }
         }
 
         /* ── Logo Container ──────────────────────────── */
@@ -1139,6 +1142,9 @@
         <nav class="bottom-nav" id="bottom-nav-container"></nav>
     </div>
 
+    <button id="btn-switch-portal-fixed" class="btn-logout hidden" style="right:278px;border-color:rgba(16,185,129,0.25);color:#10B981" onclick="switchToTeacherPortal()">
+        <i class="bi bi-arrow-left-right"></i><span class="btn-logout-label">Faculty Portal</span>
+    </button>
     <button id="btn-switch-account-fixed" class="btn-logout hidden" style="right:150px" onclick="openAccountSwitcher()">
         <i class="bi bi-people-fill"></i><span class="btn-logout-label">Switch</span>
     </button>
@@ -1546,7 +1552,7 @@
         function resetUI() {
             try {
                 uiEpoch++;
-                const els = ['login-section', 'form-section', 'admin-section', 'btn-logout-fixed', 'btn-switch-account-fixed', 'sidebar-container', 'mobile-header'];
+                const els = ['login-section', 'form-section', 'admin-section', 'btn-logout-fixed', 'btn-switch-account-fixed', 'btn-switch-portal-fixed', 'sidebar-container', 'mobile-header'];
                 els.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) {
@@ -2119,10 +2125,21 @@
             openAccountSwitcher();
         }
         function _renderAccountSwitchButton() {
-            const btn = document.getElementById('btn-switch-account-fixed');
-            if (!btn) return;
+            const swBtn = document.getElementById('btn-switch-account-fixed');
             const isStudent = loggedInStudent && loggedInStudent.student_id && loggedInStudent.student_id !== 'admin';
-            btn.classList.toggle('hidden', !isStudent);
+            if (swBtn) swBtn.classList.toggle('hidden', !isStudent);
+
+            const portalBtn = document.getElementById('btn-switch-portal-fixed');
+            const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+            if (portalBtn) portalBtn.classList.toggle('hidden', !(isNative && loggedInStudent));
+        }
+        // Only meaningful inside the packaged native app, where this portal and
+        // the faculty portal are the SAME installed app switching which live
+        // URL its WebView points at — this keeps the current origin's
+        // localStorage/session untouched, so switching back later doesn't
+        // require logging in again. Irrelevant (and hidden) in a browser tab.
+        function switchToTeacherPortal() {
+            window.location.href = 'https://ccpc-acr.vercel.app';
         }
         function _accountInitials(name) {
             return String(name || 'ST').trim().split(/\s+/).slice(0, 2).map(n => n[0]).join('').toUpperCase();
@@ -2194,6 +2211,7 @@
                     }
                 });
                 document.getElementById('btn-switch-account-fixed')?.classList.add('hidden');
+                document.getElementById('btn-switch-portal-fixed')?.classList.remove('hidden');
 
                 // Populate Mobile Nav for Admin
                 const bottom = document.getElementById('bottom-nav-container');
