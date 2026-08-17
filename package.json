@@ -8,8 +8,13 @@
     "start": "next start"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.0"
   }
 }

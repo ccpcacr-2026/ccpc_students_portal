@@ -1,0 +1,9 @@
+{
+  "appId": "com.ccpc.studentportal",
+  "appName": "CCPC Student Portal",
+  "webDir": "public",
+  "server": {
+    "url": "https://ccpc-students-portal.vercel.app",
+    "cleartext": false
+  }
+}
