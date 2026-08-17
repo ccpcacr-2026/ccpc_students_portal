@@ -1358,20 +1358,24 @@
             const idx = _modalBackStack.indexOf(el);
             if (idx === -1) return; // already popped by the popstate handler below
             _modalBackStack.splice(idx, 1);
-            history.back(); // consume the stale entry from a non-back-button close
+            // Closed by something other than the back button — the pushed
+            // entry is now stale but is deliberately left in place rather
+            // than consumed with history.back(): if this was the first
+            // thing opened this page load, going back would navigate past
+            // the app's own starting point entirely, not just close the
+            // modal. Costs one harmless no-op Back press later instead.
         }
         // Called from switchTab/showMobileHomeGrid (every tab-navigation runs
         // through one of these two) — pushes the home-guard entry the first
-        // time a mobile session leaves the home grid, and consumes it
-        // (silently, if reached by something other than the back button) once
-        // it returns.
+        // time a mobile session leaves the home grid, and drops it (silently,
+        // no history.back() — see _onModalClose above for why) if reached by
+        // something other than the back button.
         function _trackMobileHomeGuard(onHome) {
             if (window.innerWidth >= 992) return; // desktop: no drawer/home-grid concept, Back should behave normally
             if (!onHome) {
                 if (!_mobileHomeGuardActive) { history.pushState({ _homeGuard: true }, ''); _mobileHomeGuardActive = true; }
             } else if (_mobileHomeGuardActive) {
                 _mobileHomeGuardActive = false;
-                history.back();
             }
         }
 
