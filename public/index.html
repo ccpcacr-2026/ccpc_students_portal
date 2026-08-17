@@ -507,20 +507,16 @@
             text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer;
         }
         .btn-logout:hover { background: #EF4444; color: #fff; border-color: transparent; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(239,68,68,0.3); }
-        #btn-switch-account-fixed { border-color: rgba(59,130,246,0.25); color: #3B82F6; }
-        #btn-switch-account-fixed:hover { background: #3B82F6; color: #fff; border-color: transparent; box-shadow: 0 8px 24px rgba(59,130,246,0.3); }
         #btn-switch-portal-fixed:hover { background: #10B981; color: #fff; border-color: transparent; box-shadow: 0 8px 24px rgba(16,185,129,0.3); }
 
         @media (max-width: 991px) {
             .btn-logout { top: 12px; right: 13px; padding: 9px 15px; font-size: 0.71rem; }
-            #btn-switch-portal-fixed { right: 108px; }
-            .mobile-header { padding-right: 195px !important; }
+            .mobile-header { padding-right: 118px !important; }
         }
         @media (max-width: 480px) {
             .btn-logout span.btn-logout-label { display: none; }
-            #btn-switch-portal-fixed { right: 60px; padding: 9px 11px; }
             .btn-logout { padding: 9px 11px; }
-            .mobile-header { padding-right: 108px !important; }
+            .mobile-header { padding-right: 60px !important; }
         }
 
         /* ── Logo Container ──────────────────────────── */
@@ -1140,11 +1136,8 @@
         <nav class="bottom-nav" id="bottom-nav-container"></nav>
     </div>
 
-    <button id="btn-switch-portal-fixed" class="btn-logout hidden" style="right:150px;border-color:rgba(16,185,129,0.25);color:#10B981" onclick="switchToTeacherPortal()">
+    <button id="btn-switch-portal-fixed" class="btn-logout hidden" style="right:22px;border-color:rgba(16,185,129,0.25);color:#10B981" onclick="switchToTeacherPortal()">
         <i class="bi bi-arrow-left-right"></i><span class="btn-logout-label">Faculty Portal</span>
-    </button>
-    <button id="btn-switch-account-fixed" class="btn-logout hidden" style="right:22px" onclick="openAccountSwitcher()">
-        <i class="bi bi-people-fill"></i><span class="btn-logout-label">Switch</span>
     </button>
 
     <!-- ── Attendance UI (inlined from attendance_ui.html) ───────────────── -->
@@ -1547,7 +1540,7 @@
         function resetUI() {
             try {
                 uiEpoch++;
-                const els = ['login-section', 'form-section', 'admin-section', 'btn-switch-account-fixed', 'btn-switch-portal-fixed', 'sidebar-container', 'mobile-header'];
+                const els = ['login-section', 'form-section', 'admin-section', 'btn-switch-portal-fixed', 'sidebar-container', 'mobile-header'];
                 els.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) {
@@ -2120,10 +2113,6 @@
             openAccountSwitcher();
         }
         function _renderAccountSwitchButton() {
-            const swBtn = document.getElementById('btn-switch-account-fixed');
-            const isStudent = loggedInStudent && loggedInStudent.student_id && loggedInStudent.student_id !== 'admin';
-            if (swBtn) swBtn.classList.toggle('hidden', !isStudent);
-
             const portalBtn = document.getElementById('btn-switch-portal-fixed');
             const isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
             if (portalBtn) portalBtn.classList.toggle('hidden', !(isNative && loggedInStudent));
@@ -2205,7 +2194,6 @@
                         else el.classList.remove('hidden');
                     }
                 });
-                document.getElementById('btn-switch-account-fixed')?.classList.add('hidden');
                 document.getElementById('btn-switch-portal-fixed')?.classList.remove('hidden');
 
                 // Populate Mobile Nav for Admin
