@@ -137,6 +137,16 @@ export async function GET(req) {
       if (!ins?.error) logged++;
     }
 
+    // Retention: this table is written every ~30s per moving bus with no
+    // other cleanup, so left alone it grows forever. Deleting anything
+    // older than 3 days here (piggybacked on the same cron tick rather
+    // than a separate job) keeps just enough history for the admin route-
+    // history viewer (ccpc-teachers, get_bus_route_history) without an
+    // unbounded table.
+    const cutoff = new Date(Date.now() - 3 * 24 * 3600 * 1000);
+    const cutoffStr = cutoff.toISOString().slice(0, 19).replace('T', ' ');
+    await sb(`bus_location_history?location_time=lt.${encodeURIComponent(cutoffStr)}`, 'DELETE');
+
     return NextResponse.json({ ok: true, buses: items.length, logged });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
