@@ -356,11 +356,19 @@
    when collapsed, the only trace of it is #bt-fleet-toggle above the zoom
    buttons. */
 @media (max-width: 991px) {
-  .bt-fit-btn { top: 68px; right: 10px; bottom: auto; left: auto; }
   #geofence-alerts { right: 100px; }
 
-  #bt-fleet-toggle { top: 68px; right: 10px; left: auto; bottom: auto; }
+  /* Fit-all and the fleet-list toggle side by side, icon-only, top-right —
+     their text labels (still shown on desktop) would make two buttons
+     too wide to sit next to each other at phone width. */
+  .bt-fit-btn, #bt-fleet-toggle {
+    top: 68px; bottom: auto; left: auto;
+    width: 34px; height: 34px; padding: 0; justify-content: center;
+  }
+  .bt-fit-btn { right: 10px; }
+  #bt-fleet-toggle { right: 50px; }
   #bt-fleet-toggle.bt-visible { display: flex; }
+  .bt-fit-label, .bt-fleet-toggle-label { display: none; }
 
   /* Narrow, hidable strip pinned to the right edge instead of a
      full-width bottom sheet — a phone screen can't spare a half-height

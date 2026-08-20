@@ -73,7 +73,8 @@ function initBusMap() {
 
     const fitBtn = document.createElement('button');
     fitBtn.className = 'bt-fit-btn';
-    fitBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i> Fit all';
+    fitBtn.title = 'Fit all';
+    fitBtn.innerHTML = '<i class="bi bi-arrows-fullscreen"></i><span class="bt-fit-label"> Fit all</span>';
     fitBtn.onclick = fitBusesInBounds;
     mapContainer.appendChild(fitBtn);
 
