@@ -348,27 +348,37 @@
   }
   .bt-fit-btn-inline:hover { background: rgba(5,150,105,0.15); color: var(--primary); }
 
+  /* Chrome on Android auto-inflates any text it judges "too small to
+     read" (a11y font-boosting) — silently overriding every small
+     font-size below unless disabled here. */
+  .bus-sidebar, .bus-sidebar * { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
   .bus-sidebar {
     top: 68px; right: 10px; bottom: 10px; left: auto;
-    width: auto; max-width: min(72vw, 260px); min-width: 60px;
+    /* Name still isn't truncated (row 1), but the address (row 2) now
+       is — an address line was often far longer than any bus name, so
+       sizing the whole panel to fit it made "dynamic width" useless. */
+    width: auto; max-width: 148px; min-width: 60px;
     /* Lighter than the desktop sidebar (0.72) — this close to the map
        edge it needs to stay unobtrusive, not just translucent. */
     background: rgba(255,255,255,0.18);
-    border-radius: 16px; padding: 4px;
+    border-radius: 16px; padding: 3px;
   }
   .bus-sidebar.bt-collapsed { bottom: auto; }
   .bus-sidebar.bt-collapsed #bt-panel-body { display: none; }
 
   .bt-sheet-handle { display: none; }
 
-  .bus-list-item { padding: 5px 7px; }
-  .bli-row1-name { font-size: 0.68rem; }
-  .bli-row2 .bli-addr { font-size: 0.55rem; }
+  .bus-list-item { padding: 4px 6px; }
+  .bli-row1-name { font-size: 0.62rem; }
+  .bli-row2 { gap: 4px; }
+  .bli-badge-mini { padding: 1px 5px; font-size: 0.45rem; }
+  .bli-row2 .bli-addr { font-size: 0.45rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
-  /* "Fleet N" + All/None buttons — stacked so a short name doesn't force
-     the whole panel wider just to fit this row. */
-  .bt-fleet-head { flex-direction: column; align-items: stretch; gap: 3px; padding: 2px 2px 4px; }
-  .bt-fleet-title { font-size: 0.55rem; justify-content: center; }
-  .bt-fleet-actions { gap: 3px; }
-  .bt-fleet-actions button { flex: 1; padding: 2px 0; font-size: 0.5rem; }
+  /* "Fleet N" + All/None buttons — stacked and shrunk to a minimum so
+     they don't force the panel wider just to fit this one row. */
+  .bt-fleet-head { flex-direction: column; align-items: stretch; gap: 2px; padding: 2px; }
+  .bt-fleet-title { font-size: 0.5rem; justify-content: center; }
+  .bt-fleet-actions { gap: 2px; }
+  .bt-fleet-actions button { flex: 1; padding: 1.5px 0; font-size: 0.45rem; }
 }
