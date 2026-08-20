@@ -359,20 +359,46 @@
   .bt-fit-btn { top: 68px; right: 10px; bottom: auto; left: auto; }
   #geofence-alerts { right: 100px; }
 
-  #bt-fleet-toggle { bottom: 84px; left: 10px; }
+  #bt-fleet-toggle { top: 68px; right: 10px; left: auto; bottom: auto; }
   #bt-fleet-toggle.bt-visible { display: flex; }
 
+  /* Narrow, hidable strip pinned to the right edge instead of a
+     full-width bottom sheet — a phone screen can't spare a half-height
+     sheet's worth of map real estate, and per bus there's rarely room
+     (or need) for more than its name and current speed (see .bli-addr
+     below, which drops the address text at this width). */
   .bus-sidebar {
-    left: 0; right: 0; bottom: 0; width: 100%; max-height: 50vh;
-    border-radius: 20px 20px 0 0; padding: 0 10px 10px;
-    transform: translateY(0);
+    top: 68px; right: 10px; bottom: 10px; left: auto; width: 104px; max-height: none;
+    /* Lighter than the desktop sidebar (0.72) — a narrow strip this
+       close to the map edge needs to stay unobtrusive. */
+    background: rgba(255,255,255,0.18);
+    border-radius: 16px; padding: 4px;
+    transform: translateX(0);
     transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
   }
-  .bus-sidebar.bt-collapsed { transform: translateY(110%); }
+  .bus-sidebar.bt-collapsed { transform: translateX(130%); }
 
   .bt-sheet-handle {
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    padding: 8px 0 6px; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 4px 0; cursor: pointer; flex-shrink: 0;
   }
-  .bt-sheet-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--border); }
+  .bt-sheet-grip { width: 24px; height: 3px; border-radius: 2px; background: rgba(148,163,184,0.6); }
+
+  /* Shortest-possible per-row info at this width: name + speed only,
+     with every element shrunk further so a truncated name still gets a
+     usable sliver of space in a ~90px-wide row. */
+  .bus-list-item { padding: 5px 4px; }
+  .bli-top { gap: 4px; }
+  .bli-avatar { width: 15px; height: 15px; border-radius: 4px; font-size: 0.5rem; }
+  .bli-check { width: 11px !important; height: 11px !important; min-width: 11px !important; }
+  .bli-meta { padding-left: 0; font-size: 0.5rem; }
+  .bli-meta .bli-addr, .bli-meta .sep { display: none; }
+  #bus-info-panel { display: none; }
+
+  /* "Fleet N" + All/None buttons side by side don't fit a ~90px column —
+     stacked instead, with the buttons shrunk and split evenly. */
+  .bt-fleet-head { flex-direction: column; align-items: stretch; gap: 3px; padding: 2px 2px 4px; }
+  .bt-fleet-title { font-size: 0.55rem; justify-content: center; }
+  .bt-fleet-actions { gap: 3px; }
+  .bt-fleet-actions button { flex: 1; padding: 2px 0; font-size: 0.5rem; }
 }

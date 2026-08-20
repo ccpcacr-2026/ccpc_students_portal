@@ -423,7 +423,7 @@ function updateBusList(buses) {
           </div>
           <div class="bli-dot ${mv ? 'moving' : 'idle'}"></div>
         </div>
-        <div class="bli-meta"><span class="spd ${mv ? 'moving' : 'idle'}">${mv ? `${spd} km/h` : 'Idle'}</span><span class="sep">·</span>${addr}</div>
+        <div class="bli-meta"><span class="spd ${mv ? 'moving' : 'idle'}">${mv ? `${spd} km/h` : 'Idle'}</span><span class="sep">·</span><span class="bli-addr">${addr}</span></div>
       </div>
     `;
   }).join('');
