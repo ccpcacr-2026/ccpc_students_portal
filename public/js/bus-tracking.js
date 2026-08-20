@@ -423,6 +423,7 @@ function updateBusList(buses) {
                  style="width:14px!important;height:14px!important;min-width:14px!important;flex-shrink:0;accent-color:#059669!important;cursor:pointer"
                  onclick="event.stopPropagation()" onchange='toggleBusVisibility(${JSON.stringify(bus.imei)}, this.checked)'>
           <span class="bli-row1-name">${name}</span>
+          <span class="bli-status-dot ${mv ? 'moving' : 'idle'}"></span>
         </div>
         <div class="bli-row2">
           <span class="bli-badge-mini ${mv ? 'moving' : 'idle'}">${mv ? 'Moving' : 'Idle'}</span>
