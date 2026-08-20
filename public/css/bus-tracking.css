@@ -251,37 +251,10 @@
 .bus-list-item.active { border-color: var(--primary); background: rgba(5,150,105,0.05); box-shadow: 0 0 0 2px rgba(16,185,129,0.12); }
 .bus-list-item.dimmed { opacity: 0.45; }
 
-.bli-top { display: flex; align-items: center; gap: 8px; }
-
 .bli-check {
   width: 14px; height: 14px; flex-shrink: 0; cursor: pointer;
   accent-color: var(--primary); border-radius: 3px;
 }
-
-.bli-avatar {
-  width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 0.62rem; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-}
-.bli-avatar.moving { background: linear-gradient(135deg, var(--primary), var(--primary-l)); }
-.bli-avatar.idle   { background: linear-gradient(135deg, var(--warning), #D97706); }
-
-.bli-info { flex: 1; min-width: 0; }
-.bli-name { font-size: 0.76rem; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
-
-.bli-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.bli-dot.moving { background: var(--primary); animation: btPulse 2s infinite; }
-.bli-dot.idle   { background: var(--warning); }
-
-.bli-meta {
-  font-size: 0.64rem; color: var(--text-3); font-weight: 500;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  padding-left: 32px;
-}
-.bli-meta .spd { font-weight: 800; }
-.bli-meta .spd.moving { color: var(--primary); }
-.bli-meta .spd.idle   { color: var(--warning); }
-.bli-meta .sep { opacity: 0.5; margin: 0 2px; }
 
 .bus-empty { text-align: center; color: var(--text-3); padding: 18px 12px; font-size: 0.76rem; font-weight: 600; }
 .bus-empty i { font-size: 1.3rem; display: block; margin-bottom: 6px; color: var(--border); }
@@ -326,22 +299,26 @@
 }
 @keyframes btSlideIn { from { transform: translateX(-16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-/* Floating "N buses" pill — only ever shown below 992px, and only while the
-   sheet is collapsed (see JS toggleFleetSheet/collapseFleetSheet). Sits
-   directly above the zoom control cluster, matching where it points. */
-#bt-fleet-toggle {
-  display: none; position: absolute; z-index: 950;
-  align-items: center; gap: 6px;
-  padding: 8px 14px; border-radius: 50px; border: none;
-  background: var(--surface); color: var(--text-2);
-  font-weight: 700; font-size: 0.72rem; cursor: pointer;
-  box-shadow: var(--shadow);
+/* Fleet list row — row 1: checkbox + name (never truncated; the panel's
+   own width grows to fit, see .bus-sidebar). Row 2: status badge +
+   location. Mobile media query below just shrinks these. */
+.bli-row1 { display: flex; align-items: center; gap: 8px; }
+.bli-row1-name { font-size: 0.76rem; font-weight: 800; color: var(--text); white-space: nowrap; }
+.bli-row2 { display: flex; align-items: center; gap: 6px; margin-top: 4px; white-space: nowrap; }
+.bli-badge-mini {
+  padding: 2px 8px; border-radius: 999px; font-size: 0.6rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.03em; flex-shrink: 0;
 }
-#bt-fleet-toggle i { color: var(--primary); }
+.bli-badge-mini.moving { background: rgba(5,150,105,0.12); color: var(--primary); }
+.bli-badge-mini.idle   { background: rgba(217,119,6,0.12); color: var(--warning); }
+.bli-row2 .bli-addr { font-size: 0.65rem; color: var(--text-3); font-weight: 600; }
 
 /* Desktop/tablet (≥992px, matching the app's own sidebar breakpoint):
    sidebar floats as a card on the right; always open, no toggle needed —
-   there's room for both map and list at once. */
+   there's room for both map and list at once. The merged header
+   (Fit-all + list-toggle icons, mobile-only) stays hidden here since
+   desktop already has its own persistent bottom-left fit button and
+   never collapses the sidebar at all. */
 @media (min-width: 992px) {
   .bus-sidebar {
     top: 68px; right: 10px; bottom: 10px; width: 300px;
@@ -349,62 +326,47 @@
   }
   .bt-fit-btn { bottom: 16px; left: 56px; right: auto; }
   .bt-sheet-handle { display: none; }
+  #bt-panel-header { display: none; }
 }
 
-/* Below 992px: bottom sheet that slides fully off-screen when collapsed —
-   tapping the map (or selecting a bus) brings it back (handled in JS);
-   when collapsed, the only trace of it is #bt-fleet-toggle above the zoom
-   buttons. */
+/* Below 992px: Fit-all + the list-toggle live inside the sidebar's own
+   header instead of as separate floating buttons — collapsing now just
+   hides the list body (#bt-panel-body), leaving that two-icon header as
+   the only thing on screen, rather than sliding the whole panel away.
+   Width is content-driven so a bus's full name never truncates, capped
+   so a very long name can't take over the screen. */
 @media (max-width: 991px) {
   #geofence-alerts { right: 100px; }
+  #bus-map-container .bt-fit-btn { display: none; }
 
-  /* Fit-all and the fleet-list toggle side by side, icon-only, top-right —
-     their text labels (still shown on desktop) would make two buttons
-     too wide to sit next to each other at phone width. */
-  .bt-fit-btn, #bt-fleet-toggle {
-    top: 68px; bottom: auto; left: auto;
-    width: 34px; height: 34px; padding: 0; justify-content: center;
+  #bt-panel-header { padding: 2px; }
+  .bt-fit-btn-inline {
+    width: 30px; height: 30px; border-radius: 999px; border: none;
+    background: rgba(15,23,42,0.06); color: var(--text-2);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.15s;
   }
-  .bt-fit-btn { right: 10px; }
-  #bt-fleet-toggle { right: 50px; }
-  #bt-fleet-toggle.bt-visible { display: flex; }
-  .bt-fit-label, .bt-fleet-toggle-label { display: none; }
+  .bt-fit-btn-inline:hover { background: rgba(5,150,105,0.15); color: var(--primary); }
 
-  /* Narrow, hidable strip pinned to the right edge instead of a
-     full-width bottom sheet — a phone screen can't spare a half-height
-     sheet's worth of map real estate, and per bus there's rarely room
-     (or need) for more than its name and current speed (see .bli-addr
-     below, which drops the address text at this width). */
   .bus-sidebar {
-    top: 68px; right: 10px; bottom: 10px; left: auto; width: 104px; max-height: none;
-    /* Lighter than the desktop sidebar (0.72) — a narrow strip this
-       close to the map edge needs to stay unobtrusive. */
+    top: 68px; right: 10px; bottom: 10px; left: auto;
+    width: auto; max-width: min(72vw, 260px); min-width: 60px;
+    /* Lighter than the desktop sidebar (0.72) — this close to the map
+       edge it needs to stay unobtrusive, not just translucent. */
     background: rgba(255,255,255,0.18);
     border-radius: 16px; padding: 4px;
-    transform: translateX(0);
-    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
   }
-  .bus-sidebar.bt-collapsed { transform: translateX(130%); }
+  .bus-sidebar.bt-collapsed { bottom: auto; }
+  .bus-sidebar.bt-collapsed #bt-panel-body { display: none; }
 
-  .bt-sheet-handle {
-    display: flex; align-items: center; justify-content: center;
-    padding: 4px 0; cursor: pointer; flex-shrink: 0;
-  }
-  .bt-sheet-grip { width: 24px; height: 3px; border-radius: 2px; background: rgba(148,163,184,0.6); }
+  .bt-sheet-handle { display: none; }
 
-  /* Shortest-possible per-row info at this width: name + speed only,
-     with every element shrunk further so a truncated name still gets a
-     usable sliver of space in a ~90px-wide row. */
-  .bus-list-item { padding: 5px 4px; }
-  .bli-top { gap: 4px; }
-  .bli-avatar { width: 15px; height: 15px; border-radius: 4px; font-size: 0.5rem; }
-  .bli-check { width: 11px !important; height: 11px !important; min-width: 11px !important; }
-  .bli-meta { padding-left: 0; font-size: 0.5rem; }
-  .bli-meta .bli-addr, .bli-meta .sep { display: none; }
-  #bus-info-panel { display: none; }
+  .bus-list-item { padding: 5px 7px; }
+  .bli-row1-name { font-size: 0.68rem; }
+  .bli-row2 .bli-addr { font-size: 0.55rem; }
 
-  /* "Fleet N" + All/None buttons side by side don't fit a ~90px column —
-     stacked instead, with the buttons shrunk and split evenly. */
+  /* "Fleet N" + All/None buttons — stacked so a short name doesn't force
+     the whole panel wider just to fit this row. */
   .bt-fleet-head { flex-direction: column; align-items: stretch; gap: 3px; padding: 2px 2px 4px; }
   .bt-fleet-title { font-size: 0.55rem; justify-content: center; }
   .bt-fleet-actions { gap: 3px; }

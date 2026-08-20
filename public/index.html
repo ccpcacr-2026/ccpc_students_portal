@@ -2230,15 +2230,19 @@
                           <button class="btn-export" onclick="BusTracking.exportBusData()"><i class="bi bi-download"></i> Export</button>
                         </div>
 
-                        <button id="bt-fleet-toggle" onclick="toggleFleetSheet()" title="Show bus list"><i class="bi bi-bus-front-fill"></i><span class="bt-fleet-toggle-label"> <span id="bt-fleet-toggle-count">0</span> buses</span></button>
-
                         <div class="bus-sidebar" id="bus-sidebar">
+                          <div id="bt-panel-header" style="display:flex;align-items:center;justify-content:flex-end;gap:6px">
+                            <button onclick="fitBusesInBounds()" title="Fit all" class="bt-fit-btn-inline"><i class="bi bi-arrows-fullscreen"></i></button>
+                            <button id="bt-fleet-toggle" onclick="toggleFleetSheet()" title="Show/hide bus list" class="bt-fit-btn-inline"><i class="bi bi-bus-front-fill"></i></button>
+                          </div>
+                          <div id="bt-panel-body">
                           <div id="bus-info-panel">
                             <div class="bt-info-card">
                               <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
                             </div>
                           </div>
                           <div id="bus-list"><div class="bus-empty"><i class="bi bi-broadcast"></i>Waiting for GPS data…</div></div>
+                          </div>
                         </div>
                       </div>
                     `;
@@ -4243,15 +4247,19 @@
                       </div>
                     </div>
 
-                    <button id="bt-fleet-toggle" onclick="toggleFleetSheet()" title="Show bus list"><i class="bi bi-bus-front-fill"></i><span class="bt-fleet-toggle-label"> <span id="bt-fleet-toggle-count">0</span> buses</span></button>
-
                     <div class="bus-sidebar" id="bus-sidebar">
+                      <div id="bt-panel-header" style="display:flex;align-items:center;justify-content:flex-end;gap:6px">
+                        <button onclick="fitBusesInBounds()" title="Fit all" class="bt-fit-btn-inline"><i class="bi bi-arrows-fullscreen"></i></button>
+                        <button id="bt-fleet-toggle" onclick="toggleFleetSheet()" title="Show/hide bus list" class="bt-fit-btn-inline"><i class="bi bi-bus-front-fill"></i></button>
+                      </div>
+                      <div id="bt-panel-body">
                       <div id="bus-info-panel">
                         <div class="bt-info-card">
                           <div class="bt-info-empty"><i class="bi bi-bus-front-fill"></i>Select a bus to view details</div>
                         </div>
                       </div>
                       <div id="bus-list"><div class="bus-empty"><i class="bi bi-broadcast"></i>Waiting for GPS data…</div></div>
+                      </div>
                     </div>
                   </div>
                 `;

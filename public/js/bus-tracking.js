@@ -391,8 +391,6 @@ function updateBusList(buses) {
   if (countEl) countEl.textContent = buses.length;
   const toolbarCountEl = document.getElementById('bt-toolbar-count');
   if (toolbarCountEl) toolbarCountEl.textContent = buses.length;
-  const toggleCountEl = document.getElementById('bt-fleet-toggle-count');
-  if (toggleCountEl) toggleCountEl.textContent = buses.length;
 
   if (!buses.length) {
     listContainer.innerHTML = `<div class="bus-empty"><i class="bi bi-exclamation-circle"></i>No buses configured yet</div>`;
@@ -404,27 +402,27 @@ function updateBusList(buses) {
     busName(a.imei).localeCompare(busName(b.imei), undefined, { numeric: true, sensitivity: 'base' })
   );
 
+  // Row 1: checkbox + name. Row 2: status badge + location. Name is
+  // never truncated (see .bus-sidebar's dynamic width).
   listContainer.innerHTML = sortedBuses.map(bus => {
     const name = busName(bus.imei);
     const mv = !!bus.isMoving;
     const isSelected = selectedBusImei === bus.imei;
     const isChecked = selectedImeis.has(bus.imei);
-    const spd = parseFloat(bus.speed) || 0;
     const addr = (bus.address || 'Locating…');
 
     return `
       <div class="bus-list-item ${isSelected ? 'active' : ''} ${isChecked ? '' : 'dimmed'}" title="${name}" onclick='selectBus(${JSON.stringify(bus.imei)}, ${JSON.stringify(bus)})'>
-        <div class="bli-top">
+        <div class="bli-row1">
           <input class="bli-check" type="checkbox" ${isChecked ? 'checked' : ''}
                  style="width:14px!important;height:14px!important;min-width:14px!important;flex-shrink:0;accent-color:#059669!important;cursor:pointer"
                  onclick="event.stopPropagation()" onchange='toggleBusVisibility(${JSON.stringify(bus.imei)}, this.checked)'>
-          <div class="bli-avatar ${mv ? 'moving' : 'idle'}"><i class="bi bi-bus-front-fill"></i></div>
-          <div class="bli-info">
-            <div class="bli-name">${name}</div>
-          </div>
-          <div class="bli-dot ${mv ? 'moving' : 'idle'}"></div>
+          <span class="bli-row1-name">${name}</span>
         </div>
-        <div class="bli-meta"><span class="spd ${mv ? 'moving' : 'idle'}">${mv ? `${spd} km/h` : 'Idle'}</span><span class="sep">·</span><span class="bli-addr">${addr}</span></div>
+        <div class="bli-row2">
+          <span class="bli-badge-mini ${mv ? 'moving' : 'idle'}">${mv ? 'Moving' : 'Idle'}</span>
+          <span class="bli-addr">${addr}</span>
+        </div>
       </div>
     `;
   }).join('');
