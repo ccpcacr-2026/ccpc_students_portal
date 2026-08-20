@@ -476,6 +476,8 @@ function exitFollowMode() {
   closeBusDetails();
   const card = document.getElementById('bt-follow-card');
   if (card) card.remove();
+  const toggle = document.getElementById('bt-fleet-toggle');
+  if (toggle) toggle.style.display = '';
   redrawMarkers();
   updateBusList(Object.values(allBusData));
 }
@@ -503,7 +505,15 @@ function selectBus(imei, busData) {
   updateBusInfoPanel(busData);
   renderFollowCard(busData);
   updateBusList(Object.values(allBusData));
-  expandFleetSheet();
+  // Collapse the fleet sheet instead of expanding it — the whole point of
+  // follow mode is a clear, unobstructed view of the map with just the
+  // small floating card, not the full bottom sheet covering half the
+  // screen (which is what tapping a bus used to open on mobile). The
+  // "N buses" toggle pill normally shown while collapsed would otherwise
+  // sit right underneath the follow card, so it's hidden too.
+  collapseFleetSheet();
+  const toggle = document.getElementById('bt-fleet-toggle');
+  if (toggle) toggle.style.display = 'none';
 }
 
 /**
