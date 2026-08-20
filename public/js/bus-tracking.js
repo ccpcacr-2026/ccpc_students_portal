@@ -529,7 +529,6 @@ function renderFollowCard(bus) {
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
       <div>
         <div style="font-weight:900;font-size:14px;color:#1e293b">${name}</div>
-        <div style="font-size:10px;color:#94a3b8;font-weight:700">${bus.imei}</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <span style="padding:3px 8px;border-radius:999px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;${mv ? 'background:#dbeafe;color:#2563eb' : 'background:#fef3c7;color:#b45309'}">${mv ? 'Moving' : 'Idle'}</span>
