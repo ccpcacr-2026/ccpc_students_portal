@@ -200,7 +200,7 @@ function addGeofenceCircle(name, lat, lng, radius) {
 function startBusTracking() {
   updateBusPositions();
   if (busUpdateInterval) clearInterval(busUpdateInterval);
-  busUpdateInterval = setInterval(updateBusPositions, 30000);
+  busUpdateInterval = setInterval(updateBusPositions, 8000);
 }
 
 /**
