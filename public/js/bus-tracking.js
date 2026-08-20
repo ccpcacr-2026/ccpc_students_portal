@@ -536,26 +536,22 @@ function renderFollowCard(bus) {
   const mv = !!bus.isMoving;
   const spd = Math.round(parseFloat(bus.speed)) || 0;
   card.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
+      <div style="font-weight:900;font-size:11px;color:#1e293b;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
+      <button type="button" onclick="exitFollowMode()" title="Stop following" style="width:16px;height:16px;border-radius:999px;border:none;background:rgba(15,23,42,0.1);color:#475569;font-size:10px;line-height:1;cursor:pointer;flex-shrink:0">✕</button>
+    </div>
+    <div style="margin-top:2px"><span style="padding:1.5px 6px;border-radius:999px;font-size:7px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;${mv ? 'background:rgba(37,99,235,0.15);color:#2563eb' : 'background:rgba(180,83,9,0.15);color:#b45309'}">${mv ? 'Moving' : 'Idle'}</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px">
       <div>
-        <div style="font-weight:900;font-size:14px;color:#1e293b">${name}</div>
+        <div style="font-size:7px;font-weight:800;color:#94a3b8;text-transform:uppercase">Speed</div>
+        <div style="font-size:10px;font-weight:900;color:#1e293b">${spd} km/h</div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span style="padding:3px 8px;border-radius:999px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;${mv ? 'background:#dbeafe;color:#2563eb' : 'background:#fef3c7;color:#b45309'}">${mv ? 'Moving' : 'Idle'}</span>
-        <button type="button" onclick="exitFollowMode()" title="Stop following" style="width:22px;height:22px;border-radius:999px;border:none;background:rgba(15,23,42,0.08);color:#475569;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0">✕</button>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-      <div style="background:rgba(15,23,42,0.04);border-radius:10px;padding:6px 10px">
-        <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase">Speed</div>
-        <div style="font-size:13px;font-weight:900;color:#1e293b">${spd} km/h</div>
-      </div>
-      <div style="background:rgba(15,23,42,0.04);border-radius:10px;padding:6px 10px">
-        <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase">Engine</div>
-        <div style="font-size:13px;font-weight:900;color:#1e293b">${bus.engine ? 'On' : 'Off'}</div>
+      <div>
+        <div style="font-size:7px;font-weight:800;color:#94a3b8;text-transform:uppercase">Engine</div>
+        <div style="font-size:10px;font-weight:900;color:#1e293b">${bus.engine ? 'On' : 'Off'}</div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:700;color:#475569"><i class="bi bi-geo-alt-fill" style="color:#2563eb"></i>${bus.address || 'Locating…'}</div>
+    <div style="display:flex;align-items:flex-start;gap:4px;margin-top:5px;font-size:8px;font-weight:700;color:#475569;line-height:1.3"><i class="bi bi-geo-alt-fill" style="color:#2563eb;margin-top:1px"></i><span>${bus.address || 'Locating…'}</span></div>
   `;
 }
 

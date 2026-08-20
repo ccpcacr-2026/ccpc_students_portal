@@ -134,7 +134,7 @@
   /* Semi-transparent + blurred rather than solid — the fleet list sits
      directly on top of the map, so a solid background hides whatever
      part of the map is underneath it the whole time it's open. */
-  background: rgba(255,255,255,0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  background: rgba(255,255,255,0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 8px 30px rgba(15,23,42,0.18);
   overflow: hidden;
   display: flex;
@@ -143,23 +143,27 @@
 }
 
 /* Floating "follow" card — shown only while a single bus is selected
-   (see selectBus/exitFollowMode in bus-tracking.js), sitting directly on
-   the map so details are visible even with the sidebar collapsed. */
+   (see selectBus/exitFollowMode in bus-tracking.js), pinned to the map's
+   left edge (out of the way of the fleet sidebar, which floats on the
+   right/bottom) instead of requiring that sidebar to be open. Very
+   light (~15% opacity) — this sits directly over the map while
+   following, so it needs to stay unobtrusive, not just translucent. */
 #bt-follow-card {
-  position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 980;
-  background: rgba(255,255,255,0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(226,232,240,0.9); border-radius: 18px;
-  box-shadow: 0 8px 30px rgba(15,23,42,0.18);
-  padding: 12px 14px;
-}
-@media (min-width: 768px) {
-  #bt-follow-card { left: 10px; right: 320px; bottom: 10px; }
+  position: absolute; left: 10px; top: 68px; z-index: 980;
+  width: 190px; max-width: 46vw;
+  background: rgba(255,255,255,0.15); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(226,232,240,0.5); border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(15,23,42,0.10);
+  padding: 8px 10px;
 }
 
 #bus-info-panel { flex-shrink: 0; }
 
+/* This card fills nearly the whole sidebar's interior, so a solid
+   background here would defeat the sidebar's own translucency almost
+   entirely — kept semi-transparent instead of solid var(--surface). */
 .bt-info-card {
-  background: var(--surface); border: 1px solid var(--border);
+  background: rgba(255,255,255,0.6); border: 1px solid var(--border);
   border-radius: var(--radius-md); box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
@@ -233,14 +237,17 @@
 #bus-list::-webkit-scrollbar-track { background: transparent; }
 #bus-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
+/* Same reasoning as .bt-info-card above — these rows fill the sidebar's
+   interior, so a solid background here defeats the container's own
+   translucency almost entirely. */
 .bus-list-item {
   display: flex; flex-direction: column; gap: 1px;
   padding: 6px 9px;
-  background: var(--surface); border: 1px solid var(--border);
+  background: rgba(255,255,255,0.55); border: 1px solid var(--border);
   border-radius: var(--radius-sm); cursor: pointer;
   transition: all 0.15s;
 }
-.bus-list-item:hover { border-color: var(--primary-l); background: var(--bg); }
+.bus-list-item:hover { border-color: var(--primary-l); background: rgba(255,255,255,0.75); }
 .bus-list-item.active { border-color: var(--primary); background: rgba(5,150,105,0.05); box-shadow: 0 0 0 2px rgba(16,185,129,0.12); }
 .bus-list-item.dimmed { opacity: 0.45; }
 
