@@ -11,6 +11,13 @@ let geofenceCircles = {};
 let busUpdateInterval = null;
 let selectedBusImei = null;
 let hasFittedOnce = false;
+// Follow mode: tapping a bus isolates it (every other pin hidden) and
+// re-centers the map on it every time a new position arrives, not just
+// once at selection time — see redrawMarkers. _preFollowSelectedImeis
+// remembers what was checked before so exitFollowMode can restore it
+// instead of just dumping the user back to an empty map.
+let _followImei = null;
+let _preFollowSelectedImeis = null;
 
 // One id per browser tab, reused across polls (so the server counts this
 // tab once, not once per poll) but distinct from any other tab/device —
@@ -307,6 +314,10 @@ function redrawMarkers() {
       busMarkers[imei].setLatLng([bus.lat, bus.lng]);
       busMarkers[imei].setIcon(icon);
       busMarkers[imei].setTooltipContent(label);
+      if (_followImei === imei) {
+        map.panTo([bus.lat, bus.lng]);
+        renderFollowCard(bus);
+      }
     } else {
       const marker = L.marker([bus.lat, bus.lng], { icon }).addTo(map);
       marker.bindTooltip(label, { permanent: true, direction: 'top', className: 'bt-marker-label', offset: [0, selected ? -24 : -20] });
@@ -425,13 +436,14 @@ function toggleBusVisibility(imei, checked) {
   if (checked) selectedImeis.add(imei);
   else {
     selectedImeis.delete(imei);
-    if (selectedBusImei === imei) closeBusDetails();
+    if (selectedBusImei === imei) exitFollowMode();
   }
   redrawMarkers();
   updateBusList(Object.values(allBusData));
 }
 
 function selectAllBuses() {
+  exitFollowMode();
   Object.keys(allBusData).forEach(imei => selectedImeis.add(imei));
   redrawMarkers();
   updateBusList(Object.values(allBusData));
@@ -439,8 +451,8 @@ function selectAllBuses() {
 }
 
 function selectNoneBuses() {
+  exitFollowMode();
   selectedImeis.clear();
-  closeBusDetails();
   redrawMarkers();
   updateBusList(Object.values(allBusData));
 }
@@ -452,13 +464,34 @@ function closeBusDetails() {
 }
 
 /**
- * Select a bus and highlight on map
+ * Turns off follow mode — restores whichever buses were checked before
+ * following started (not just clearing to none, which would leave the
+ * map blank) and removes the floating card.
+ */
+function exitFollowMode() {
+  if (_followImei === null) { closeBusDetails(); return; }
+  if (_preFollowSelectedImeis) selectedImeis = _preFollowSelectedImeis;
+  _followImei = null;
+  _preFollowSelectedImeis = null;
+  closeBusDetails();
+  const card = document.getElementById('bt-follow-card');
+  if (card) card.remove();
+  redrawMarkers();
+  updateBusList(Object.values(allBusData));
+}
+
+/**
+ * Select a bus, isolate it on the map (every other pin hidden), and
+ * follow it — the map re-centers on it every time a fresh position
+ * comes in (see redrawMarkers), not just once here.
  */
 function selectBus(imei, busData) {
   selectedBusImei = imei;
 
-  if (!selectedImeis.has(imei)) {
-    selectedImeis.add(imei);
+  if (_followImei !== imei) {
+    if (_followImei === null) _preFollowSelectedImeis = new Set(selectedImeis);
+    _followImei = imei;
+    selectedImeis = new Set([imei]);
     redrawMarkers();
   }
 
@@ -468,8 +501,53 @@ function selectBus(imei, busData) {
   }
 
   updateBusInfoPanel(busData);
+  renderFollowCard(busData);
   updateBusList(Object.values(allBusData));
   expandFleetSheet();
+}
+
+/**
+ * The follow-mode details card floated directly on the map (see
+ * #bt-follow-card in public/css/bus-tracking.css for the semi-
+ * transparent/blurred styling) — created once per selection, then just
+ * refreshed in place on every subsequent poll tick from redrawMarkers so
+ * it stays live while following, without needing to re-tap the bus.
+ */
+function renderFollowCard(bus) {
+  const mapContainer = document.getElementById('bus-map-container');
+  if (!mapContainer || _followImei !== bus.imei) return;
+  let card = document.getElementById('bt-follow-card');
+  if (!card) {
+    card = document.createElement('div');
+    card.id = 'bt-follow-card';
+    mapContainer.appendChild(card);
+  }
+  const name = busName(bus.imei);
+  const mv = !!bus.isMoving;
+  const spd = Math.round(parseFloat(bus.speed)) || 0;
+  card.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+      <div>
+        <div style="font-weight:900;font-size:14px;color:#1e293b">${name}</div>
+        <div style="font-size:10px;color:#94a3b8;font-weight:700">${bus.imei}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="padding:3px 8px;border-radius:999px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;${mv ? 'background:#dbeafe;color:#2563eb' : 'background:#fef3c7;color:#b45309'}">${mv ? 'Moving' : 'Idle'}</span>
+        <button type="button" onclick="exitFollowMode()" title="Stop following" style="width:22px;height:22px;border-radius:999px;border:none;background:rgba(15,23,42,0.08);color:#475569;font-size:13px;line-height:1;cursor:pointer;flex-shrink:0">✕</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <div style="background:rgba(15,23,42,0.04);border-radius:10px;padding:6px 10px">
+        <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase">Speed</div>
+        <div style="font-size:13px;font-weight:900;color:#1e293b">${spd} km/h</div>
+      </div>
+      <div style="background:rgba(15,23,42,0.04);border-radius:10px;padding:6px 10px">
+        <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase">Engine</div>
+        <div style="font-size:13px;font-weight:900;color:#1e293b">${bus.engine ? 'On' : 'Off'}</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;font-weight:700;color:#475569"><i class="bi bi-geo-alt-fill" style="color:#2563eb"></i>${bus.address || 'Locating…'}</div>
+  `;
 }
 
 /**
@@ -614,6 +692,8 @@ function resetBusMap() {
   geofenceCircles = {};
   selectedBusImei = null;
   hasFittedOnce = false;
+  _followImei = null;
+  _preFollowSelectedImeis = null;
   const head = document.getElementById('bt-fleet-head');
   if (head) head.remove();
   const handle = document.getElementById('bt-sheet-handle');

@@ -131,11 +131,29 @@
 
 .bus-sidebar {
   position: absolute; z-index: 900;
-  background: var(--surface); box-shadow: 0 8px 30px rgba(15,23,42,0.18);
+  /* Semi-transparent + blurred rather than solid — the fleet list sits
+     directly on top of the map, so a solid background hides whatever
+     part of the map is underneath it the whole time it's open. */
+  background: rgba(255,255,255,0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 30px rgba(15,23,42,0.18);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+
+/* Floating "follow" card — shown only while a single bus is selected
+   (see selectBus/exitFollowMode in bus-tracking.js), sitting directly on
+   the map so details are visible even with the sidebar collapsed. */
+#bt-follow-card {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 980;
+  background: rgba(255,255,255,0.88); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(226,232,240,0.9); border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(15,23,42,0.18);
+  padding: 12px 14px;
+}
+@media (min-width: 768px) {
+  #bt-follow-card { left: 10px; right: 320px; bottom: 10px; }
 }
 
 #bus-info-panel { flex-shrink: 0; }
