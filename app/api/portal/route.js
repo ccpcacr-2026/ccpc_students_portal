@@ -1527,6 +1527,17 @@ export async function POST(req) {
     }
   }
 
+  // ── Active Announcements (read-only feed) ───────────────────────────────
+  // public.announcements is the same table ccpc-teachers' Announcements
+  // module writes to (targeting P10 displays) — sb() defaults to the
+  // student schema, so this one call needs the public-schema override,
+  // same technique _resolveAuthorNames already uses above for `teacher`.
+  if (action === 'get_active_announcements') {
+    const rows = await sb('announcements?active=eq.true&select=id,title,file_url,created_at&order=created_at.desc&limit=20', 'GET', null, { 'Accept-Profile': 'public', 'Content-Profile': 'public' });
+    if (rows?.error) return NextResponse.json({ result: 'error', message: 'Could not load announcements.' });
+    return NextResponse.json({ result: 'success', announcements: rows || [] });
+  }
+
   // ── Get Attendance History ────────────────────────────────────────────────
   if (action === 'get_attendance') {
     const { student_id } = payload;

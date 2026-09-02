@@ -2714,6 +2714,9 @@
                         // before Schedule/Attendance became real top-level tabs.
                         loadAttendanceHistoryInHub();
                     }
+                    if (id === 'announcements') {
+                        loadAnnouncementsFeed();
+                    }
                     if (id === 'schedule') {
                         loadPresentStatus();
                     }
@@ -4051,6 +4054,7 @@
                 addNav('profile', 'Personal Hub', 'bi-person-badge-fill', true);
                 addNav('schedule', 'Schedule', 'bi-calendar3');
                 addNav('attendance', 'Attendance', 'bi-fingerprint');
+                addNav('announcements', 'Announcements', 'bi-megaphone-fill');
                 addNav('notifications', 'Notifications', 'bi-bell-fill');
                 addNav('student-diary', 'Diary', 'bi-journal-text');
                 addNav('student-forum', 'Forum', 'bi-chat-square-text-fill');
@@ -4335,6 +4339,11 @@
                     <h2 class="ccpc-page-title">Recent <em>Activity</em></h2>
                     <div id="attendance-section"></div>`;
                 if (content) content.appendChild(attendancePane);
+
+                const announcementsPane = document.createElement('div');
+                announcementsPane.className = 'tab-pane ccpc-page'; announcementsPane.id = 'announcements-content';
+                announcementsPane.innerHTML = `<div id="announcements-section"></div>`;
+                if (content) content.appendChild(announcementsPane);
 
                 // Mobile lands on the app-launcher home grid instead of
                 // Personal Hub directly — desktop (sidebar always visible,
@@ -5648,5 +5657,6 @@
     <!-- xlsx (~880 KB) is admin-only (bulk import); loaded on demand by ensureXLSX() -->
     <script src="/js/bus-tracking.js?v=3"></script>
     <script src="/js/attendance-dashboard.js"></script>
+    <script src="/js/announcements-feed.js"></script>
 </body>
 </html>
