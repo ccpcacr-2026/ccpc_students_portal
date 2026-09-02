@@ -116,6 +116,8 @@ function renderAttendanceHistory() {
     return;
   }
 
+  const fmtTime = t => t ? new Date(`2000-01-01 ${t}`).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit' }) : '—';
+
   const rows = attendanceData.map(record => {
     const date = new Date(record.date);
     const dateStr = date.toLocaleDateString('en-BD', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
@@ -123,15 +125,20 @@ function renderAttendanceHistory() {
       present: '<span class="badge bg-success">Present</span>',
       absent: '<span class="badge bg-danger">Absent</span>',
       late: '<span class="badge bg-warning">Late</span>',
+      leave: '<span class="badge bg-info">Leave</span>',
     }[record.status] || '<span class="badge bg-secondary">Unknown</span>';
+
+    const passLines = (record.pass_events || []).map(p =>
+      `<div class="small text-muted"><i class="bi bi-arrow-left-right"></i> out ${fmtTime(p.out)} &rarr; in ${p.in ? fmtTime(p.in) : '<span class="text-warning">not back yet</span>'}</div>`
+    ).join('');
 
     return `
       <tr>
         <td><strong>${dateStr}</strong></td>
-        <td>${record.entry_time ? new Date(`2000-01-01 ${record.entry_time}`).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-        <td>${record.exit_time ? new Date(`2000-01-01 ${record.exit_time}`).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+        <td>${fmtTime(record.entry_time)}</td>
+        <td>${fmtTime(record.exit_time)}</td>
         <td>${statusBadge}</td>
-        <td><small class="text-muted">${record.method || 'manual'}</small></td>
+        <td>${passLines || '<span class="text-muted small">—</span>'}</td>
       </tr>
     `;
   }).join('');
@@ -145,7 +152,7 @@ function renderAttendanceHistory() {
             <th>Entry Time</th>
             <th>Exit Time</th>
             <th>Status</th>
-            <th>Method</th>
+            <th>Mid-day Pass</th>
           </tr>
         </thead>
         <tbody>
@@ -189,24 +196,16 @@ function showManualAttendanceForm() {
                   <option value="present">Present</option>
                   <option value="late">Late</option>
                   <option value="absent">Absent</option>
+                  <option value="leave">Leave</option>
                 </select>
               </div>
             </div>
 
-            <div class="row">
-              <div class="col-md-6 mb-3">
-                <label class="form-label fw-600">Entry Time</label>
-                <input type="time" class="form-control" id="ma-entry-time" />
-              </div>
-              <div class="col-md-6 mb-3">
-                <label class="form-label fw-600">Exit Time</label>
-                <input type="time" class="form-control" id="ma-exit-time" />
-              </div>
-            </div>
+            <p class="small text-muted mb-3">Entry/exit times aren't set here — those come from the NFC gate hardware automatically. This is a correction on top of that (or a plain manual mark, if the hardware has no record for the day).</p>
 
             <div class="mb-3">
-              <label class="form-label fw-600">Notes</label>
-              <textarea class="form-control" id="ma-notes" rows="2" placeholder="Optional notes"></textarea>
+              <label class="form-label fw-600">Reason</label>
+              <textarea class="form-control" id="ma-reason" rows="2" placeholder="Optional — why this correction"></textarea>
             </div>
           </form>
         </div>
@@ -229,10 +228,8 @@ function showManualAttendanceForm() {
   document.getElementById('save-manual-attendance-btn').onclick = async () => {
     const studentId = document.getElementById('ma-student-id').value.trim();
     const date = document.getElementById('ma-date').value;
-    const entryTime = document.getElementById('ma-entry-time').value;
-    const exitTime = document.getElementById('ma-exit-time').value;
     const status = document.getElementById('ma-status').value;
-    const notes = document.getElementById('ma-notes').value;
+    const reason = document.getElementById('ma-reason').value;
 
     if (!studentId || !date) {
       alert('Student ID and date are required.');
@@ -243,10 +240,8 @@ function showManualAttendanceForm() {
       const response = await portalFetch('manual_attendance_entry', {
         student_id: studentId,
         date,
-        entry_time: entryTime || null,
-        exit_time: exitTime || null,
         status,
-        notes,
+        reason,
       });
 
       if (response.result === 'success') {
@@ -281,8 +276,9 @@ function showBulkAttendanceImport() {
         </div>
         <div class="modal-body">
           <div class="alert alert-info mb-3">
-            <strong>CSV Format:</strong> student_id, date, entry_time, exit_time, status<br/>
-            <strong>Example:</strong> 2031122001, 2026-06-30, 08:00, 16:30, present
+            <strong>CSV Format:</strong> student_id, date, status, reason<br/>
+            <strong>Example:</strong> 2031122001, 2026-06-30, leave, Sick leave — doctor's note on file<br/>
+            <small>This corrects/overrides the hardware-recorded day (or marks one manually if the hardware has no record) — it doesn't set entry/exit times, those only ever come from the NFC gate.</small>
           </div>
           <textarea id="bulk-import-csv" class="form-control" rows="6" placeholder="Paste CSV data here..."></textarea>
         </div>
@@ -308,8 +304,8 @@ function showBulkAttendanceImport() {
       // Parse CSV
       const lines = csvData.split('\n').filter(l => l.trim());
       const records = lines.map(line => {
-        const [student_id, date, entry_time, exit_time, status] = line.split(',').map(s => s.trim());
-        return { student_id, date, entry_time, exit_time, status };
+        const [student_id, date, status, ...rest] = line.split(',').map(s => s.trim());
+        return { student_id, date, status, reason: rest.join(',') };
       });
 
       const response = await portalFetch('bulk_attendance_import', { records });
@@ -337,14 +333,13 @@ function exportAttendanceData(studentId) {
     return;
   }
 
-  const headers = ['Date', 'Entry Time', 'Exit Time', 'Status', 'Method', 'Notes'];
+  const headers = ['Date', 'Entry Time', 'Exit Time', 'Status', 'Pass Events'];
   const rows = attendanceData.map(r => [
     r.date,
     r.entry_time || '—',
     r.exit_time || '—',
     r.status,
-    r.method || 'manual',
-    r.notes || '',
+    (r.pass_events || []).map(p => `out ${p.out || '—'} / in ${p.in || 'not back yet'}`).join('; '),
   ]);
 
   const csv = [

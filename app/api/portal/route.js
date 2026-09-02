@@ -1536,85 +1536,91 @@ export async function POST(req) {
   }
 
   // ── Get Attendance Summary ─────────────────────────────────────────────────
+  // attendance_records has no status/method/present/absent columns (a row
+  // simply IS a present day, entry/exit-time stamped by the NFC hardware) —
+  // this used to filter on r.status, which never existed, so present/
+  // absent/percentage were always 0. Rebuilt on the same logic
+  // getMyClassAttendanceReport (ccpc-teachers/app/api/exec/route.js) already
+  // uses: a date only counts as a real school day if SOMEBODY (any student)
+  // has a row or override for it, not just this one child — otherwise a
+  // school holiday would wrongly count as "absent". manual_attendance_
+  // overrides (status: present/absent/late/leave/...) wins over a device
+  // row when both exist for the same day.
   if (action === 'get_attendance_summary') {
-    const { student_id, year, month } = payload;
-    let query = `attendance_records?student_id=eq.${encodeURIComponent(student_id)}&order=date.asc`;
-    const rows = await sb(query);
-    if (rows?.error) return NextResponse.json({ result: 'error', message: 'Could not load attendance.' });
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    const [ownRows, allDateRows, overrides] = await Promise.all([
+      sb(`attendance_records?student_id=eq.${encodeURIComponent(student_id)}&select=date,entry_time,exit_time,pass&order=date.asc`),
+      sb(`attendance_records?select=date`),
+      sb(`manual_attendance_overrides?student_id=eq.${encodeURIComponent(student_id)}&select=date,status`),
+    ]);
+    if (ownRows?.error || allDateRows?.error || overrides?.error) {
+      return NextResponse.json({ result: 'error', message: 'Could not load attendance.' });
+    }
+    const ownByDate = {};
+    (ownRows || []).forEach(r => { ownByDate[r.date] = r; });
+    const overrideByDate = {};
+    (overrides || []).forEach(o => { overrideByDate[o.date] = o.status; });
+    const allDates = Array.from(new Set((allDateRows || []).map(r => r.date))).sort();
 
-    // Calculate summary
-    const records = rows || [];
-    const summary = {
-      total_days: new Set(records.map(r => r.date)).size,
-      present: records.filter(r => r.status === 'present').length,
-      absent: records.filter(r => r.status === 'absent').length,
-      late: records.filter(r => r.status === 'late').length,
-      percentage: 0,
-      by_month: {},
-    };
+    const summary = { total_days: allDates.length, present: 0, absent: 0, late: 0, leave: 0, percentage: 0, by_month: {} };
+    const records = [];
+    allDates.forEach(dt => {
+      const own = ownByDate[dt];
+      const status = overrideByDate[dt] || (own ? 'present' : 'absent');
+      if (status === 'leave') summary.leave++;
+      else if (status === 'late') { summary.late++; summary.present++; } // late still counts as attended
+      else if (status === 'present') summary.present++;
+      else summary.absent++;
 
-    // Calculate percentage (present + late / total)
-    const attended = summary.present + summary.late;
-    summary.percentage = summary.total_days > 0 ? Math.round((attended / summary.total_days) * 100) : 0;
-
-    // Group by month
-    records.forEach(r => {
-      const dateObj = new Date(r.date);
-      const monthKey = dateObj.toISOString().substring(0, 7); // YYYY-MM
-      if (!summary.by_month[monthKey]) {
-        summary.by_month[monthKey] = { present: 0, absent: 0, late: 0, total: 0 };
-      }
+      const monthKey = dt.slice(0, 7);
+      if (!summary.by_month[monthKey]) summary.by_month[monthKey] = { present: 0, absent: 0, late: 0, leave: 0, total: 0 };
       summary.by_month[monthKey].total++;
-      summary.by_month[monthKey][r.status || 'present']++;
-    });
+      summary.by_month[monthKey][status === 'present' || status === 'late' ? 'present' : status] = (summary.by_month[monthKey][status === 'present' || status === 'late' ? 'present' : status] || 0) + 1;
 
-    return NextResponse.json({ result: 'success', data: records, summary });
+      if (own || overrideByDate[dt]) {
+        const history = own && own.pass && Array.isArray(own.pass.history) ? own.pass.history : [];
+        records.push({
+          date: dt,
+          entry_time: own ? own.entry_time : null,
+          exit_time: own ? own.exit_time : null,
+          status,
+          pass_events: history.map(h => ({ out: h.out || null, in: h.in || null, status: h.status || null })),
+        });
+      }
+    });
+    summary.percentage = summary.total_days > 0 ? Math.round((summary.present / summary.total_days) * 100) : 0;
+
+    return NextResponse.json({ result: 'success', data: records.reverse(), summary });
   }
 
-  // ── Manual Attendance Entry ────────────────────────────────────────────────
+  // ── Manual Attendance Entry ──────────────────────────────────────────────
+  // Corrections live in manual_attendance_overrides (student_id, date,
+  // status, marked_by, reason) — the same table ccpc-teachers' own
+  // save_manual_attendance writes to (app/api/student-admin/route.js) —
+  // rather than attendance_records itself, which is device-written only
+  // (entry_time/exit_time/pass come from the NFC hardware; there's no
+  // status/method/recorded_by/notes column on it at all).
   if (action === 'manual_attendance_entry') {
-    const { student_id, date, entry_time, exit_time, status, method, recorded_by, notes } = payload;
-    if (!student_id || !date) {
-      return NextResponse.json({ result: 'error', message: 'Student ID and date are required.' });
+    const { student_id, date, status, marked_by, reason } = payload;
+    if (!student_id || !date || !status) {
+      return NextResponse.json({ result: 'error', message: 'Student ID, date, and status are required.' });
     }
-
-    // Validate date (no future dates)
-    const entryDate = new Date(date);
-    if (entryDate > new Date()) {
+    if (new Date(date) > new Date()) {
       return NextResponse.json({ result: 'error', message: 'Cannot record attendance for future dates.' });
     }
-
-    const record = {
-      student_id,
-      date,
-      entry_time: entry_time || null,
-      exit_time: exit_time || null,
-      status: status || 'present',
-      method: method || 'manual',
-      recorded_by: recorded_by || 'admin',
-      notes: notes || null,
-      recorded_at: new Date().toISOString(),
-    };
-
-    // Check for existing record
-    const existing = await sb(`attendance_records?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`);
-
-    if (existing && !existing.error && existing.length > 0) {
-      // Update existing
-      await sb(
-        `attendance_records?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`,
-        'PATCH',
-        record
-      );
+    const record = { student_id, date, status, marked_by: marked_by || null, reason: reason || '' };
+    const existing = await sb(`manual_attendance_overrides?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`);
+    if (existing?.error) return NextResponse.json({ result: 'error', message: existing.error });
+    if (existing.length > 0) {
+      await sb(`manual_attendance_overrides?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`, 'PATCH', record);
       return NextResponse.json({ result: 'success', message: 'Attendance updated.' });
-    } else {
-      // Create new
-      await sb('attendance_records', 'POST', record);
-      return NextResponse.json({ result: 'success', message: 'Attendance recorded.' });
     }
+    await sb('manual_attendance_overrides', 'POST', record);
+    return NextResponse.json({ result: 'success', message: 'Attendance recorded.' });
   }
 
-  // ── Bulk Attendance Import ─────────────────────────────────────────────────
+  // ── Bulk Attendance Import ────────────────────────────────────────────────
   if (action === 'bulk_attendance_import') {
     const { records } = payload;
     if (!Array.isArray(records) || records.length === 0) {
@@ -1625,35 +1631,24 @@ export async function POST(req) {
 
     for (const record of records) {
       try {
-        const { student_id, date, entry_time, exit_time, status, method, recorded_by, notes } = record;
-        if (!student_id || !date) {
+        const { student_id, date, status, marked_by, reason } = record;
+        if (!student_id || !date || !status) {
           results.skipped++;
           continue;
         }
+        const data = { student_id, date, status, marked_by: marked_by || null, reason: reason || '' };
+        const existing = await sb(`manual_attendance_overrides?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`);
+        if (existing?.error) { results.errors.push(existing.error); continue; }
 
-        const data = {
-          student_id,
-          date,
-          entry_time: entry_time || null,
-          exit_time: exit_time || null,
-          status: status || 'present',
-          method: method || 'import',
-          recorded_by: recorded_by || 'bulk_import',
-          notes: notes || null,
-          recorded_at: new Date().toISOString(),
-        };
-
-        const existing = await sb(`attendance_records?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`);
-
-        if (existing && !existing.error && existing.length > 0) {
+        if (existing.length > 0) {
           await sb(
-            `attendance_records?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`,
+            `manual_attendance_overrides?student_id=eq.${encodeURIComponent(student_id)}&date=eq.${encodeURIComponent(date)}`,
             'PATCH',
             data
           );
           results.updated++;
         } else {
-          await sb('attendance_records', 'POST', data);
+          await sb('manual_attendance_overrides', 'POST', data);
           results.inserted++;
         }
       } catch (e) {
