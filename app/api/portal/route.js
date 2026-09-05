@@ -247,29 +247,55 @@ function normKey(s)   { return String(s || '').toLowerCase().replace(/[\s_]/g, '
 // across the student and teacher portals — same bus_tracker_presence table,
 // same 'student' schema as portal_settings). No cron: every get_bus_data
 // call upserts its own heartbeat, prunes anything not refreshed in 90s
-// (3x the 30s poll interval, so one missed poll doesn't drop a viewer), and
-// counts what's left. Never lets a presence hiccup break the bus data itself.
+// (the real client poll is every 8s — public/js/bus-tracking.js's
+// busUpdateInterval — so 90s is a generous margin, not literally 3x
+// anything; a stale comment here used to claim a 30s poll), and counts
+// what's left. Never lets a presence hiccup break the bus data itself.
 // `label` is a client-supplied display string stored alongside the
 // heartbeat purely so an Admin (in ccpc-teachers' Bus Tracker) can see WHO
 // is watching, not just a count — this app itself has no UI for the list,
 // only ccpc-teachers does; this side just needs to keep contributing a
 // readable label into the shared table.
+//
+// The self-upsert and the stale-prune are independent of each other —
+// run them together instead of one-after-another (this endpoint gets
+// polled every 8s per open tab, so shaving round-trips here matters).
 async function _trackPresence(trackerId, label) {
   if (!trackerId || typeof trackerId !== 'string') return { count: 0, watchers: [] };
   try {
     const id = trackerId.slice(0, 64);
     const nowIso = new Date().toISOString();
     const cutoffIso = new Date(Date.now() - 90000).toISOString();
-    await sb('bus_tracker_presence?on_conflict=tracker_id', 'POST',
-      { tracker_id: id, last_seen_at: nowIso, label: String(label || '').slice(0, 120) || null },
-      { Prefer: 'resolution=merge-duplicates,return=minimal' });
-    await sb(`bus_tracker_presence?last_seen_at=lt.${encodeURIComponent(cutoffIso)}`, 'DELETE');
+    await Promise.all([
+      sb('bus_tracker_presence?on_conflict=tracker_id', 'POST',
+        { tracker_id: id, last_seen_at: nowIso, label: String(label || '').slice(0, 120) || null },
+        { Prefer: 'resolution=merge-duplicates,return=minimal' }),
+      sb(`bus_tracker_presence?last_seen_at=lt.${encodeURIComponent(cutoffIso)}`, 'DELETE'),
+    ]);
     const live = await sb('bus_tracker_presence?select=tracker_id,label,last_seen_at&order=last_seen_at.desc');
     const rows = Array.isArray(live) ? live : [];
     return { count: rows.length, watchers: rows.map(r => ({ label: r.label || 'Viewer', lastSeen: r.last_seen_at })) };
   } catch (_) {
     return { count: 0, watchers: [] };
   }
+}
+
+// Short-lived cache for the GP bus-location fetch (which is itself a token
+// request + a location request — two outbound calls to Grameenphone's API
+// per miss). Many concurrent viewers polling within the same few seconds
+// would otherwise each trigger their own identical upstream fetch; this
+// collapses them into one. Best-effort module-level state only (resets on
+// a cold start) — a miss just means one fresh fetch, never a failure, and
+// an 8s TTL means a single steady viewer still gets fresh-enough data on
+// nearly every one of their own 8s polls while concurrent viewers share it.
+let _busDataCache = { key: '', data: null, expiresAt: 0 };
+async function _getCachedBusLocations(creds, imeiList) {
+  const key = (creds.api_key || '') + '|' + imeiList.join(',');
+  const now = Date.now();
+  if (_busDataCache.key === key && _busDataCache.expiresAt > now) return _busDataCache.data;
+  const items = await queryGPLocations(creds, imeiList);
+  _busDataCache = { key, data: items, expiresAt: now + 8000 };
+  return items;
 }
 
 // Shared by the login handler and reset_pin (the "Forgot PIN?" flow uses the
@@ -1340,8 +1366,10 @@ export async function POST(req) {
   // ── Get All Bus Data (live tracker polling) ───────────────────────────────
   if (action === 'get_bus_data') {
     try {
-      const { count: trackers, watchers } = await _trackPresence(payload.tracker_id, payload.label);
-      const rows = await sb('portal_settings?key=in.(gp_credentials,bus_registry)');
+      const [{ count: trackers, watchers }, rows] = await Promise.all([
+        _trackPresence(payload.tracker_id, payload.label),
+        sb('portal_settings?key=in.(gp_credentials,bus_registry)'),
+      ]);
       if (rows?.error) return NextResponse.json({ result: 'error', message: 'Settings not found.' });
       const sm = {};
       rows.forEach(r => { sm[r.key] = r.value; });
@@ -1349,7 +1377,7 @@ export async function POST(req) {
       const busRegistry = sm.bus_registry || [];
       if (!busRegistry.length) return NextResponse.json({ result: 'success', data: [], trackers, watchers, dataAge: 0 });
 
-      const items = await queryGPLocations(creds, busRegistry.map(b => String(b.imei)));
+      const items = await _getCachedBusLocations(creds, busRegistry.map(b => String(b.imei)));
       const dataMap = {};
       items.forEach(d => { dataMap[d.imei] = d; });
 

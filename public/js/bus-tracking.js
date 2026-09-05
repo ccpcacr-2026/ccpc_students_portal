@@ -208,7 +208,10 @@ function addGeofenceCircle(name, lat, lng, radius) {
 function startBusTracking() {
   updateBusPositions();
   if (busUpdateInterval) clearInterval(busUpdateInterval);
-  busUpdateInterval = setInterval(updateBusPositions, 8000);
+  // 8s was needlessly aggressive for a bus that doesn't move much in a few
+  // extra seconds — 15s cuts total poll volume by ~47% with no perceptible
+  // change to how "live" the map feels.
+  busUpdateInterval = setInterval(updateBusPositions, 15000);
 }
 
 /**
