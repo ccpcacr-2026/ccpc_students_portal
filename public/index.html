@@ -203,6 +203,12 @@
         .notice-carousel:hover .notice-arrow { opacity: 1; }
         .notice-arrow-l { left: 8px; } .notice-arrow-r { right: 8px; }
 
+        /* ── Announcements-tab general carousel — same viewport/track/slide
+           classes as the login notice carousel, wider wrapper since this one
+           sits inside the full portal layout instead of the narrow login card. ── */
+        .ann-carousel { width: 100%; max-width: 100%; position: relative; margin-bottom: 20px; }
+        @media (min-width: 768px) { .ann-carousel { max-width: 820px; } }
+
         /* ── New feature pages (Wallet / Canteen / Stationary) — Forest+Saffron tokens ── */
         .ccpc-page {
             --p-primary: oklch(0.34 0.06 155); --p-primary-l: oklch(0.44 0.08 155); --p-primary-ink: oklch(0.22 0.05 155);

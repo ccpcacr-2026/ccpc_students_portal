@@ -1557,13 +1557,27 @@ export async function POST(req) {
 
   // ── Active Announcements (read-only feed) ───────────────────────────────
   // public.announcements is the same table ccpc-teachers' Announcements
-  // module writes to (targeting P10 displays) — sb() defaults to the
-  // student schema, so this one call needs the public-schema override,
-  // same technique _resolveAuthorNames already uses above for `teacher`.
+  // module writes to — sb() defaults to the student schema, so this one
+  // call needs the public-schema override, same technique
+  // _resolveAuthorNames already uses above for `teacher`.
+  //
+  // Three announcement_type values live in this table: 'general' (shown to
+  // every student, rendered as a carousel by announcements-feed.js —
+  // never has audio), 'student' (shown only to the one student it names),
+  // and 'device' (a class's P10 speaker broadcast — never reaches the
+  // student portal at all, on purpose: it plays over campus speakers, it
+  // isn't a message for guardians to read). target_student_id is stripped
+  // before returning so a guardian's own feed never reveals another
+  // student's id.
   if (action === 'get_active_announcements') {
-    const rows = await sb('announcements?active=eq.true&select=id,title,file_url,created_at&order=created_at.desc&limit=20', 'GET', null, { 'Accept-Profile': 'public', 'Content-Profile': 'public' });
+    const { student_id } = payload;
+    const rows = await sb('announcements?active=eq.true&select=id,announcement_type,title,subtitle,body,file_url,created_at,target_student_id&order=created_at.desc&limit=100', 'GET', null, { 'Accept-Profile': 'public', 'Content-Profile': 'public' });
     if (rows?.error) return NextResponse.json({ result: 'error', message: 'Could not load announcements.' });
-    return NextResponse.json({ result: 'success', announcements: rows || [] });
+    const visible = (rows || [])
+      .filter(a => a.announcement_type === 'general' || (a.announcement_type === 'student' && student_id && a.target_student_id === student_id))
+      .slice(0, 20)
+      .map(({ target_student_id: _drop, ...rest }) => rest);
+    return NextResponse.json({ result: 'success', announcements: visible });
   }
 
   // ── Get Attendance History ────────────────────────────────────────────────
