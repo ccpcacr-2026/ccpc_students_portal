@@ -239,6 +239,29 @@ async function sb(path, method = 'GET', body = null, extra = {}) {
   return text ? JSON.parse(text) : [];
 }
 
+// PostgREST silently caps ANY select at this project's configured max_rows
+// (3000) with no explicit Range header and no guaranteed row order — a
+// plain sb() call against a school-wide, unfiltered table (e.g. every
+// attendance_records row ever written) only ever returns an arbitrary 3000
+// of them. Paginates with Range instead of trusting one request.
+async function sbAllRows(path) {
+  const PAGE = 3000;
+  let all = [];
+  let offset = 0;
+  while (true) {
+    const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Accept-Profile': 'student', Range: `${offset}-${offset + PAGE - 1}` },
+    });
+    if (!res.ok) return { error: await res.text() };
+    const page = await res.json();
+    if (!Array.isArray(page)) return { error: 'Unexpected response shape' };
+    all = all.concat(page);
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+
 function normPhone(p) { return String(p || '').replace(/\D/g, '').slice(-10); }
 function normKey(s)   { return String(s || '').toLowerCase().replace(/[\s_]/g, ''); }
 
@@ -1602,9 +1625,13 @@ export async function POST(req) {
   if (action === 'get_attendance_summary') {
     const { student_id } = payload;
     if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    // allDateRows is school-wide and unfiltered by date — plain sb() would
+    // silently cap at PostgREST's 3000-row max_rows with no guaranteed
+    // order, corrupting total_days/percentage/by_month for every guardian
+    // on a school with any real attendance history. Must paginate.
     const [ownRows, allDateRows, overrides] = await Promise.all([
       sb(`attendance_records?student_id=eq.${encodeURIComponent(student_id)}&select=date,entry_time,exit_time,pass&order=date.asc`),
-      sb(`attendance_records?select=date`),
+      sbAllRows(`attendance_records?select=date`),
       sb(`manual_attendance_overrides?student_id=eq.${encodeURIComponent(student_id)}&select=date,status`),
     ]);
     if (ownRows?.error || allDateRows?.error || overrides?.error) {
