@@ -117,8 +117,9 @@ function renderAttendanceHistory() {
   }
 
   const fmtTime = t => t ? new Date(`2000-01-01 ${t}`).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit' }) : '—';
+  const totalPassEvents = attendanceData.reduce((n, r) => n + (r.pass_events || []).length, 0);
 
-  const rows = attendanceData.map(record => {
+  const rows = attendanceData.map((record, idx) => {
     const date = new Date(record.date);
     const dateStr = date.toLocaleDateString('en-BD', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
     const statusBadge = {
@@ -128,9 +129,12 @@ function renderAttendanceHistory() {
       leave: '<span class="badge bg-info">Leave</span>',
     }[record.status] || '<span class="badge bg-secondary">Unknown</span>';
 
-    const passLines = (record.pass_events || []).map(p =>
-      `<div class="small text-muted"><i class="bi bi-arrow-left-right"></i> out ${fmtTime(p.out)} &rarr; in ${p.in ? fmtTime(p.in) : '<span class="text-warning">not back yet</span>'}</div>`
-    ).join('');
+    const passCount = (record.pass_events || []).length;
+    // A click reveals that day's out/in detail in a modal instead of always
+    // spelling it out inline — keeps the table scannable on a busy month.
+    const passCell = passCount
+      ? `<button type="button" class="btn btn-sm btn-outline-primary rounded-pill fw-700" onclick="showPassDetails(${idx})"><i class="bi bi-arrow-left-right me-1"></i>${passCount}</button>`
+      : '<span class="text-muted small">—</span>';
 
     return `
       <tr>
@@ -138,12 +142,16 @@ function renderAttendanceHistory() {
         <td>${fmtTime(record.entry_time)}</td>
         <td>${fmtTime(record.exit_time)}</td>
         <td>${statusBadge}</td>
-        <td>${passLines || '<span class="text-muted small">—</span>'}</td>
+        <td>${passCell}</td>
       </tr>
     `;
   }).join('');
 
   container.innerHTML = `
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <span class="small text-muted fw-600">${attendanceData.length} record${attendanceData.length === 1 ? '' : 's'}</span>
+      ${totalPassEvents ? `<button type="button" class="btn btn-sm btn-primary rounded-pill fw-700" onclick="showAllPassEvents()"><i class="bi bi-list-ul me-1"></i>View All Pass Events (${totalPassEvents})</button>` : ''}
+    </div>
     <div class="table-responsive">
       <table class="table table-hover">
         <thead class="table-light">
@@ -161,6 +169,85 @@ function renderAttendanceHistory() {
       </table>
     </div>
   `;
+}
+
+function _passEventRowHtml(dateStr, p) {
+  const fmtTime = t => t ? new Date(`2000-01-01 ${t}`).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit' }) : '—';
+  return `
+    <div class="d-flex align-items-center gap-3 p-3 mb-2 rounded-4" style="background:rgba(99,102,241,0.06)">
+      <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;background:rgba(99,102,241,0.15);color:#6366f1;"><i class="bi bi-arrow-left-right"></i></div>
+      <div class="flex-grow-1 min-w-0">
+        ${dateStr ? `<div class="fw-800 small">${dateStr}</div>` : ''}
+        <div class="small text-muted">Out <strong>${fmtTime(p.out)}</strong> &rarr; In ${p.in ? `<strong>${fmtTime(p.in)}</strong>` : '<span class="text-warning fw-700">not back yet</span>'}</div>
+      </div>
+    </div>`;
+}
+
+/**
+ * One day's mid-day pass detail, opened from the history table's Pass button.
+ */
+function showPassDetails(idx) {
+  const record = attendanceData[idx];
+  if (!record) return;
+  const dateStr = new Date(record.date).toLocaleDateString('en-BD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const events = record.pass_events || [];
+
+  document.getElementById('pass-details-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = 'pass-details-modal';
+  modal.setAttribute('tabindex', '-1');
+  modal.innerHTML = `
+    <div class="modal-dialog">
+      <div class="modal-content rounded-4 border-0 shadow-lg">
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-800"><i class="bi bi-arrow-left-right me-2 text-primary"></i>Mid-day Pass</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body pt-0">
+          <p class="text-muted small fw-700 mb-3">${dateStr}</p>
+          ${events.map(p => _passEventRowHtml('', p)).join('') || '<p class="text-muted text-center py-3">No pass events.</p>'}
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+  modal.addEventListener('hidden.bs.modal', () => modal.remove());
+}
+
+/**
+ * Every mid-day pass event across the whole loaded history, newest first —
+ * the "whole list" view alongside the per-day detail above.
+ */
+function showAllPassEvents() {
+  const rows = [];
+  attendanceData.forEach(record => {
+    (record.pass_events || []).forEach(p => rows.push({ date: record.date, out: p.out, in: p.in }));
+  });
+  rows.sort((a, b) => b.date.localeCompare(a.date));
+
+  document.getElementById('all-pass-events-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal fade';
+  modal.id = 'all-pass-events-modal';
+  modal.setAttribute('tabindex', '-1');
+  modal.innerHTML = `
+    <div class="modal-dialog modal-dialog-scrollable">
+      <div class="modal-content rounded-4 border-0 shadow-lg">
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-800"><i class="bi bi-list-ul me-2 text-primary"></i>All Mid-day Pass Events</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body pt-0">
+          ${rows.length ? rows.map(r => _passEventRowHtml(new Date(r.date).toLocaleDateString('en-BD', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }), r)).join('') : '<p class="text-muted text-center py-3">No pass events yet.</p>'}
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+  modal.addEventListener('hidden.bs.modal', () => modal.remove());
 }
 
 /**
@@ -362,4 +449,6 @@ window.AttendanceDashboard = {
   showManualAttendanceForm,
   showBulkAttendanceImport,
   exportAttendanceData,
+  showPassDetails,
+  showAllPassEvents,
 };
