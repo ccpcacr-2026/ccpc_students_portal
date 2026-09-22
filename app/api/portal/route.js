@@ -212,7 +212,7 @@ async function _resolveAuthorNames(authorIds) {
   const studentIds = authorIds.filter(id => id.startsWith('student:')).map(id => id.slice('student:'.length));
   const teacherIds = authorIds.filter(id => !id.startsWith('student:'));
   const [profiles, students] = await Promise.all([
-    teacherIds.length ? sb(`users_profile?teacher_id=in.(${teacherIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name`, 'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }) : [],
+    teacherIds.length ? sb(`users_profile?teacher_id=in.(${teacherIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name`, 'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }) : [],
     studentIds.length ? sb(`students_data?student_id=in.(${studentIds.map(encodeURIComponent).join(',')})&select=student_id,student_name`) : [],
   ]);
   if (Array.isArray(profiles)) profiles.forEach(p => { nameById[p.teacher_id] = p.full_name; });
@@ -387,7 +387,7 @@ async function _getClassTeacherName(cls, section, studentRow) {
   const profRows = await sb(
     `users_profile?teacher_id=eq.${encodeURIComponent(userId)}&select=full_name`,
     'GET', null,
-    { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+    { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
   );
   return (!profRows?.error && profRows[0] && profRows[0].full_name) ? profRows[0].full_name : null;
 }
@@ -569,7 +569,7 @@ export async function POST(req) {
     if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
     const rows = await sb(
       `notifications?user_id=eq.${encodeURIComponent('student:' + student_id)}&order=created_at.desc&limit=100`,
-      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
     const list = Array.isArray(rows) ? rows : [];
@@ -579,14 +579,14 @@ export async function POST(req) {
   if (action === 'mark_notification_read') {
     const { id } = payload;
     if (!id) return NextResponse.json({ result: 'error', message: 'id required.' });
-    await sb(`notifications?id=eq.${encodeURIComponent(id)}`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    await sb(`notifications?id=eq.${encodeURIComponent(id)}`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
     return NextResponse.json({ result: 'success' });
   }
 
   if (action === 'mark_all_notifications_read') {
     const { student_id } = payload;
     if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
-    await sb(`notifications?user_id=eq.${encodeURIComponent('student:' + student_id)}&is_read=eq.false`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    await sb(`notifications?user_id=eq.${encodeURIComponent('student:' + student_id)}&is_read=eq.false`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
     return NextResponse.json({ result: 'success' });
   }
 
@@ -602,7 +602,7 @@ export async function POST(req) {
     if (!student_id || !cls) return NextResponse.json({ result: 'error', message: 'student_id and class required.' });
     const rows = await sb(
       `forum_posts?section=eq.student&audience->>class=eq.${encodeURIComponent(cls)}&order=created_at.desc&limit=100&select=id,body,photo_urls,author_id,audience,created_at`,
-      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
     const visible = (Array.isArray(rows) ? rows : []).filter(p => {
@@ -636,7 +636,7 @@ export async function POST(req) {
       is_system: false, is_pinned: false, section: 'student',
       audience: { mode: 'class_section', class: student.class, section: student.section || null, student_ids: [] },
       last_activity_at: now, created_at: now,
-    }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    }, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
     if (created?.error) return NextResponse.json({ result: 'error', message: created.error });
     return NextResponse.json({ result: 'success', post: created[0] });
   }
@@ -650,7 +650,7 @@ export async function POST(req) {
     if (!post_id) return NextResponse.json({ result: 'error', message: 'post_id required.' });
     const rows = await sb(
       `forum_replies?post_id=eq.${encodeURIComponent(post_id)}&order=created_at.asc&select=id,body,author_id,created_at`,
-      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
     const list = Array.isArray(rows) ? rows : [];
@@ -668,11 +668,11 @@ export async function POST(req) {
     const created = await sb('forum_replies', 'POST', {
       post_id, parent_reply_id: null, author_id: 'student:' + student_id,
       body: text, photo_urls: [], tagged_user_ids: [], created_at: now,
-    }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    }, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
     if (created?.error) return NextResponse.json({ result: 'error', message: created.error });
-    const postRows = await sb(`forum_posts?id=eq.${encodeURIComponent(post_id)}&select=reply_count`, 'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    const postRows = await sb(`forum_posts?id=eq.${encodeURIComponent(post_id)}&select=reply_count`, 'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
     const post = Array.isArray(postRows) && postRows[0];
-    await sb(`forum_posts?id=eq.${encodeURIComponent(post_id)}`, 'PATCH', { reply_count: ((post && post.reply_count) || 0) + 1, last_activity_at: now }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    await sb(`forum_posts?id=eq.${encodeURIComponent(post_id)}`, 'PATCH', { reply_count: ((post && post.reply_count) || 0) + 1, last_activity_at: now }, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
     return NextResponse.json({ result: 'success', reply: created[0] });
   }
 
@@ -684,7 +684,7 @@ export async function POST(req) {
     if (!student_id || !cls) return NextResponse.json({ result: 'error', message: 'student_id and class required.' });
     const rows = await sb(
       `student_diary_entries?audience->>class=eq.${encodeURIComponent(cls)}&order=created_at.desc&limit=100&select=id,entry_type,audience,subject,message,due_date,teacher_id,created_at`,
-      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
     const visible = (Array.isArray(rows) ? rows : []).filter(e => {
@@ -697,7 +697,7 @@ export async function POST(req) {
     const teacherIds = [...new Set(visible.map(e => e.teacher_id))];
     const profiles = await sb(
       `users_profile?teacher_id=in.(${teacherIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name`,
-      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     const nameById = {};
     if (Array.isArray(profiles)) profiles.forEach(p => { nameById[p.teacher_id] = p.full_name; });
@@ -716,7 +716,7 @@ export async function POST(req) {
     const sid = 'student:' + student_id;
     const rows = await sb(
       `direct_messages?or=(sender_id.eq.${encodeURIComponent(sid)},recipient_id.eq.${encodeURIComponent(sid)})&order=created_at.desc&limit=500`,
-      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
     const seen = new Map();
@@ -730,7 +730,7 @@ export async function POST(req) {
     if (teacherIds.length) {
       const profiles = await sb(
         `users_profile?teacher_id=in.(${teacherIds.map(encodeURIComponent).join(',')})&select=teacher_id,full_name,photo_url`,
-        'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+        'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
       );
       (Array.isArray(profiles) ? profiles : []).forEach(p => {
         const t = seen.get(p.teacher_id);
@@ -746,12 +746,12 @@ export async function POST(req) {
     const sid = 'student:' + student_id;
     const rows = await sb(
       `direct_messages?or=(and(sender_id.eq.${encodeURIComponent(sid)},recipient_id.eq.${encodeURIComponent(teacher_id)}),and(sender_id.eq.${encodeURIComponent(teacher_id)},recipient_id.eq.${encodeURIComponent(sid)}))&order=created_at.asc&limit=500`,
-      'GET', null, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
     // Mark the teacher's messages to this student read now that the student
     // has opened the thread — fire-and-forget, doesn't block the response.
-    sb(`direct_messages?sender_id=eq.${encodeURIComponent(teacher_id)}&recipient_id=eq.${encodeURIComponent(sid)}&is_read=eq.false`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }).catch(() => {});
+    sb(`direct_messages?sender_id=eq.${encodeURIComponent(teacher_id)}&recipient_id=eq.${encodeURIComponent(sid)}&is_read=eq.false`, 'PATCH', { is_read: true }, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }).catch(() => {});
     return NextResponse.json({ result: 'success', messages: Array.isArray(rows) ? rows : [] });
   }
 
@@ -762,7 +762,7 @@ export async function POST(req) {
     const created = await sb('direct_messages', 'POST', {
       sender_id: 'student:' + student_id, recipient_id: teacher_id, message: text,
       is_read: false, created_at: new Date().toISOString(),
-    }, { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' });
+    }, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
     if (created?.error) return NextResponse.json({ result: 'error', message: created.error });
     return NextResponse.json({ result: 'success' });
   }
@@ -1431,7 +1431,7 @@ export async function POST(req) {
     const rows = await sb(
       `users_profile?select=${fields}&order=full_name.asc`,
       'GET', null,
-      { 'Accept-Profile': 'teacher', 'Content-Profile': 'teacher' }
+      { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     if (rows?.error) return NextResponse.json([]);
 
