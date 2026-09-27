@@ -171,3 +171,19 @@ BEGIN
      AND id <> p_invite_id;
 END;
 $$;
+
+-- ── Grants ────────────────────────────────────────────────────────────────
+-- The `student` schema's other tables (portal_tabs, students_data, …) are
+-- readable/writable by service_role today, but that grant was evidently set
+-- up by hand at some point rather than via a schema-wide default-privilege
+-- rule — a brand new table created here does NOT inherit it automatically.
+-- Confirmed live: right after this migration first ran, every one of the
+-- four tables above returned 403 "permission denied" to the service key
+-- (PostgREST error 42501) until these grants were added. Both apps
+-- (ccpc-students and ccpc-teachers) hit the same tables with the same
+-- service-role key, so one grant here covers both.
+GRANT ALL ON student.group_forms, student.group_form_teams, student.group_form_team_members, student.group_form_team_invites
+  TO anon, authenticated, service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA student TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION student.group_team_create(bigint, text, jsonb) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION student.group_team_accept_invite(bigint, text) TO anon, authenticated, service_role;
