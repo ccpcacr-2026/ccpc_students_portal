@@ -943,10 +943,20 @@
                                 <div class="tab-pane active" id="admin-manage">
                                     <div class="sticky-builder-controls shadow-sm border rounded-4">
                                         <div class="row g-3 align-items-end">
-                                            <div class="col-md-4"><label class="small fw-800 text-muted">TAB NAME</label><input type="text" id="new-tab-name" class="form-control"></div>
-                                            <div class="col-md-3"><label class="small fw-800 text-muted">ICON (BI Class)</label><input type="text" id="new-tab-icon" class="form-control" placeholder="bi-folder-fill"></div>
-                                            <div class="col-md-3 pb-2"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="new-tab-editable" checked><label class="form-check-label fw-800">Allows Edits</label></div></div>
-                                            <div class="col-md-2"><button onclick="saveNewTab()" class="btn btn-primary w-100">Save</button></div>
+                                            <div class="col-md-5"><label class="small fw-800 text-muted">TAB NAME</label><input type="text" id="new-tab-name" class="form-control"></div>
+                                            <div class="col-md-4 pb-2"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="new-tab-editable" checked><label class="form-check-label fw-800">Allows Edits</label></div></div>
+                                            <div class="col-md-3"><button onclick="saveNewTab()" class="btn btn-primary w-100">Save</button></div>
+                                        </div>
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label class="small fw-800 text-muted">ICON</label>
+                                                <input type="hidden" id="new-tab-icon" value="bi-folder-fill">
+                                                <div class="d-flex align-items-center gap-2 mt-1">
+                                                    <span id="new-tab-icon-preview" class="d-flex align-items-center justify-content-center flex-shrink-0" style="width:38px;height:38px;border-radius:10px;background:#eef2ff;color:#4f46e5;font-size:1.1rem"><i class="bi bi-folder-fill"></i></span>
+                                                    <span class="small text-muted">Pick an icon below</span>
+                                                </div>
+                                                <div id="new-tab-icon-grid" data-input-id="new-tab-icon" data-preview-id="new-tab-icon-preview" class="d-flex flex-wrap gap-1 mt-2"></div>
+                                            </div>
                                         </div>
                                         <div class="row g-2 mt-4">
                                             <div class="col-6"><button onclick="addTabRow('field')" class="btn btn-outline-primary fw-800 w-100">+ New Input</button></div>
@@ -1137,11 +1147,23 @@
                                     <div class="sticky-builder-controls shadow-sm border rounded-4">
                                         <input type="hidden" id="gf-editing-id" value="">
                                         <div class="row g-3 align-items-end">
-                                            <div class="col-md-4"><label class="small fw-800 text-muted">FORM TITLE</label><input type="text" id="gf-title" class="form-control" placeholder="e.g. Science Fair 2026"></div>
-                                            <div class="col-md-2"><label class="small fw-800 text-muted">ICON (BI Class)</label><input type="text" id="gf-icon" class="form-control" placeholder="bi-people-fill"></div>
-                                            <div class="col-md-2"><label class="small fw-800 text-muted">MAX TEAM SIZE</label><input type="number" id="gf-max-size" class="form-control" min="1" value="4"></div>
-                                            <div class="col-md-4 pb-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-members-required"><label class="form-check-label fw-700 small" for="gf-members-required">Team must be full to count as complete</label></div></div>
+                                            <div class="col-md-6"><label class="small fw-800 text-muted">FORM TITLE</label><input type="text" id="gf-title" class="form-control" placeholder="e.g. Science Fair 2026"></div>
+                                            <div class="col-md-3"><label class="small fw-800 text-muted">MAX TEAM SIZE</label><input type="number" id="gf-max-size" class="form-control" min="1" value="4"></div>
+                                            <div class="col-md-3 pb-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-members-required"><label class="form-check-label fw-700 small" for="gf-members-required">Team must be full to count as complete</label></div></div>
+                                        </div>
+                                        <div class="row g-3 mt-1">
+                                            <div class="col-md-6">
+                                                <label class="small fw-800 text-muted">ICON</label>
+                                                <input type="hidden" id="gf-icon" value="bi-people-fill">
+                                                <div class="d-flex align-items-center gap-2 mt-1">
+                                                    <span id="gf-icon-preview" class="d-flex align-items-center justify-content-center flex-shrink-0" style="width:38px;height:38px;border-radius:10px;background:#eef2ff;color:#4f46e5;font-size:1.1rem"><i class="bi bi-people-fill"></i></span>
+                                                    <span class="small text-muted">Pick an icon below</span>
+                                                </div>
+                                                <div id="gf-icon-grid" data-input-id="gf-icon" data-preview-id="gf-icon-preview" class="d-flex flex-wrap gap-1 mt-2"></div>
+                                            </div>
                                             <div class="col-12"><label class="small fw-800 text-muted">DESCRIPTION (shown to students)</label><textarea id="gf-description" class="form-control" rows="2" placeholder="What is this sign-up for?"></textarea></div>
+                                        </div>
+                                        <div class="row g-3 align-items-end mt-1">
                                             <div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="gf-is-enabled" checked><label class="form-check-label fw-800">Visible to students</label></div></div>
                                             <div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="gf-accepting-new" checked><label class="form-check-label fw-800">Accepting new teams</label></div></div>
                                         </div>
@@ -5316,7 +5338,8 @@
         function cancelGroupFormEdit() {
             document.getElementById('gf-editing-id').value = '';
             document.getElementById('gf-title').value = '';
-            document.getElementById('gf-icon').value = '';
+            document.getElementById('gf-icon').value = 'bi-people-fill';
+            _syncIconPicker('gf-icon-grid');
             document.getElementById('gf-max-size').value = '4';
             document.getElementById('gf-members-required').checked = false;
             document.getElementById('gf-description').value = '';
@@ -5332,7 +5355,8 @@
             _activeFieldsContainerId = 'gf-fields-list';
             document.getElementById('gf-editing-id').value = f.id;
             document.getElementById('gf-title').value = f.title || '';
-            document.getElementById('gf-icon').value = f.icon_class || '';
+            document.getElementById('gf-icon').value = f.icon_class || 'bi-people-fill';
+            _syncIconPicker('gf-icon-grid');
             document.getElementById('gf-max-size').value = f.max_team_size || 4;
             document.getElementById('gf-members-required').checked = !!f.members_required;
             document.getElementById('gf-description').value = f.description || '';
@@ -5816,6 +5840,57 @@
             <button type="button" onclick="pasteField(this)" class="btn btn-outline-secondary border-0" title="Paste after this field (Ctrl+V)"><i class="bi bi-clipboard-check"></i></button>
             <button type="button" onclick="this.closest('.draggable-row').remove()" class="btn btn-outline-danger border-0" title="Delete"><i class="bi bi-trash3-fill"></i></button>`;
 
+        // ── Icon picker — click a Bootstrap Icon instead of typing its class name ──
+        // Shared by the ordinary Tab builder's icon field and the Group Form
+        // builder's icon field: each grid is just a wrapper div carrying
+        // data-input-id/data-preview-id pointing at ITS OWN hidden input and
+        // preview badge, so one _pickIcon/renderIconPicker pair serves both.
+        const ICON_CHOICES = [
+            'bi-folder-fill', 'bi-journal-bookmark-fill', 'bi-people-fill', 'bi-person-fill', 'bi-mortarboard-fill',
+            'bi-book-fill', 'bi-clipboard-fill', 'bi-trophy-fill', 'bi-award-fill', 'bi-star-fill',
+            'bi-flask', 'bi-palette-fill', 'bi-music-note-beamed', 'bi-controller', 'bi-globe',
+            'bi-camera-fill', 'bi-heart-fill', 'bi-flag-fill', 'bi-bullseye', 'bi-briefcase-fill',
+            'bi-megaphone-fill', 'bi-calendar-event-fill', 'bi-chat-dots-fill', 'bi-envelope-fill', 'bi-house-fill',
+            'bi-shield-fill', 'bi-gift-fill', 'bi-lightbulb-fill', 'bi-puzzle-fill', 'bi-rocket-takeoff-fill',
+            'bi-pencil-fill', 'bi-easel-fill',
+        ];
+        function renderIconPicker(gridId) {
+            const grid = document.getElementById(gridId);
+            if (!grid) return;
+            const current = document.getElementById(grid.dataset.inputId)?.value || ICON_CHOICES[0];
+            grid.innerHTML = ICON_CHOICES.map(ic => `<button type="button" onclick="_pickIcon(this)" data-icon="${ic}" class="btn btn-sm ${ic === current ? 'btn-primary' : 'btn-outline-secondary'} d-flex align-items-center justify-content-center" style="width:36px;height:36px;padding:0" title="${ic}"><i class="bi ${ic}"></i></button>`).join('');
+        }
+        function _pickIcon(btn) {
+            const grid = btn.closest('[data-input-id]');
+            const icon = btn.dataset.icon;
+            const input = document.getElementById(grid.dataset.inputId);
+            if (input) input.value = icon;
+            const preview = document.getElementById(grid.dataset.previewId);
+            if (preview) preview.innerHTML = `<i class="bi ${icon}"></i>`;
+            grid.querySelectorAll('button').forEach(b => {
+                const sel = b === btn;
+                b.classList.toggle('btn-primary', sel);
+                b.classList.toggle('btn-outline-secondary', !sel);
+            });
+        }
+        // Re-syncs a picker's preview + highlighted button after the hidden
+        // input's value was set programmatically (editTab/editGroupForm loading
+        // an existing icon_class) rather than by a click.
+        function _syncIconPicker(gridId) {
+            const grid = document.getElementById(gridId);
+            if (!grid) return;
+            const current = document.getElementById(grid.dataset.inputId)?.value || ICON_CHOICES[0];
+            const preview = document.getElementById(grid.dataset.previewId);
+            if (preview) preview.innerHTML = `<i class="bi ${current}"></i>`;
+            grid.querySelectorAll('button').forEach(b => {
+                const sel = b.dataset.icon === current;
+                b.classList.toggle('btn-primary', sel);
+                b.classList.toggle('btn-outline-secondary', !sel);
+            });
+        }
+        renderIconPicker('new-tab-icon-grid');
+        renderIconPicker('gf-icon-grid');
+
         function addTabRow(type, data = null) {
             const container = document.getElementById(_activeFieldsContainerId);
             const row = document.createElement('div');
@@ -6104,7 +6179,8 @@
             _activeFieldsContainerId = 'fields-list'; // in case a Group Form edit left this pointed elsewhere
             const t = allTabs[i];
             document.getElementById('new-tab-name').value = t.tab_name;
-            document.getElementById('new-tab-icon').value = t.icon_class || '';
+            document.getElementById('new-tab-icon').value = t.icon_class || 'bi-folder-fill';
+            _syncIconPicker('new-tab-icon-grid');
             document.getElementById('new-tab-editable').checked = t.default_editable === 'YES';
             document.getElementById('fields-list').innerHTML = '';
             JSON.parse(t.fields_json).forEach(f => addTabRow(f.type==='group_label'?'label':'field', f));
