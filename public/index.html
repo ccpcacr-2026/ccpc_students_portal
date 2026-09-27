@@ -3460,6 +3460,8 @@
         //   { field, value }                     → single condition (value may be an array = OR)
         //   { all: [ {field,value}, ... ] }       → every condition must match (AND, for nested logic)
         //   { any: [ {field,value}, ... ] }       → at least one matches (OR)
+        // Any shape may also carry `negate: true`, which inverts the whole result —
+        // this is what the builder's "Hide if" mode produces, vs. the default "Show if".
         function matchSingle(cond, currentVal) {
             const cur = String(currentVal == null ? '' : currentVal).toLowerCase().trim();
             const targets = Array.isArray(cond.value) ? cond.value
@@ -3472,23 +3474,28 @@
         function matchShowIf(showIf, currentVal) {
             if (!showIf) return true;
             if (Array.isArray(showIf.all) || Array.isArray(showIf.any)) return true; // needs form context; handled by matchShowIfForm
-            return matchSingle(showIf, currentVal);
+            const result = matchSingle(showIf, currentVal);
+            return showIf.negate ? !result : result;
         }
 
         // Evaluate a show_if against a live <form> (used for real-time show/hide)
         function matchShowIfForm(showIf, form) {
             if (!showIf) return true;
-            if (Array.isArray(showIf.all)) return showIf.all.every(c => matchSingle(c, getFieldValue(form, c.field)));
-            if (Array.isArray(showIf.any)) return showIf.any.some(c => matchSingle(c, getFieldValue(form, c.field)));
-            return matchSingle(showIf, getFieldValue(form, showIf.field));
+            let result;
+            if (Array.isArray(showIf.all)) result = showIf.all.every(c => matchSingle(c, getFieldValue(form, c.field)));
+            else if (Array.isArray(showIf.any)) result = showIf.any.some(c => matchSingle(c, getFieldValue(form, c.field)));
+            else result = matchSingle(showIf, getFieldValue(form, showIf.field));
+            return showIf.negate ? !result : result;
         }
 
         // Evaluate a show_if against a data object (used for initial render visibility)
         function matchShowIfData(showIf, lookup) {
             if (!showIf) return true;
-            if (Array.isArray(showIf.all)) return showIf.all.every(c => matchSingle(c, lookup(c.field)));
-            if (Array.isArray(showIf.any)) return showIf.any.some(c => matchSingle(c, lookup(c.field)));
-            return matchSingle(showIf, lookup(showIf.field));
+            let result;
+            if (Array.isArray(showIf.all)) result = showIf.all.every(c => matchSingle(c, lookup(c.field)));
+            else if (Array.isArray(showIf.any)) result = showIf.any.some(c => matchSingle(c, lookup(c.field)));
+            else result = matchSingle(showIf, lookup(showIf.field));
+            return showIf.negate ? !result : result;
         }
 
         function getFieldValue(form, name) {
@@ -5796,17 +5803,24 @@
         // Turn a show_if.value into a display string for the editor
         function _showIfValStr(v) { return Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v)); }
 
-        // Normalise any stored show_if into up to 2 editor condition slots
+        // Normalise any stored show_if into up to 2 editor condition slots, plus
+        // the mode ('show'/'hide', from `negate`) and logic ('all'/'any') — both
+        // stashed as extra properties on the returned array so existing c[0]/c[1]
+        // callers keep working unchanged.
         function parseShowIfForEditor(showIf) {
             const empty = [{ field: '', value: '' }, { field: '', value: '' }];
+            empty.mode = 'show'; empty.logic = 'all';
             if (!showIf) return empty;
             const list = Array.isArray(showIf.all) ? showIf.all
                 : Array.isArray(showIf.any) ? showIf.any
                 : [{ field: showIf.field, value: showIf.value }];
-            return [
+            const result = [
                 { field: list[0]?.field || '', value: _showIfValStr(list[0]?.value) },
                 { field: list[1]?.field || '', value: _showIfValStr(list[1]?.value) },
             ];
+            result.mode = showIf.negate ? 'hide' : 'show';
+            result.logic = Array.isArray(showIf.any) ? 'any' : 'all';
+            return result;
         }
 
         // Build the "Show only if" line for a field/label row, pre-filled from data.show_if
@@ -5817,14 +5831,21 @@
                 <div class="col-12 mt-2">
                     <div class="showif-block ${has ? '' : 'hidden'} p-2 rounded-3" style="background:#f1f5f9">
                         <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:0.78rem">
-                            <span class="fw-800 text-muted"><i class="bi bi-diagram-3-fill me-1"></i>Show only if</span>
-                            <select class="form-select form-select-sm showif-field" style="max-width:210px"><option value="">(always visible)</option></select>
+                            <i class="bi bi-diagram-3-fill text-muted"></i>
+                            <select class="form-select form-select-sm showif-mode fw-800" style="max-width:100px">
+                                <option value="show" ${c.mode==='show'?'selected':''}>Show if</option>
+                                <option value="hide" ${c.mode==='hide'?'selected':''}>Hide if</option>
+                            </select>
+                            <select class="form-select form-select-sm showif-field" style="max-width:200px"><option value="">(always visible)</option></select>
                             <span class="text-muted fw-700">=</span>
-                            <input type="text" class="form-control form-control-sm showif-value" placeholder="value" style="max-width:150px" value="${(c[0].value||'').replace(/"/g,'&quot;')}">
-                            <span class="badge bg-dark-subtle text-dark">AND</span>
-                            <select class="form-select form-select-sm showif-field2" style="max-width:210px"><option value="">(none)</option></select>
+                            <input type="text" class="form-control form-control-sm showif-value" placeholder="value" style="max-width:140px" value="${(c[0].value||'').replace(/"/g,'&quot;')}">
+                            <select class="form-select form-select-sm showif-logic fw-800" style="max-width:80px">
+                                <option value="all" ${c.logic==='all'?'selected':''}>AND</option>
+                                <option value="any" ${c.logic==='any'?'selected':''}>OR</option>
+                            </select>
+                            <select class="form-select form-select-sm showif-field2" style="max-width:200px"><option value="">(none)</option></select>
                             <span class="text-muted fw-700">=</span>
-                            <input type="text" class="form-control form-control-sm showif-value2" placeholder="value" style="max-width:150px" value="${(c[1].value||'').replace(/"/g,'&quot;')}">
+                            <input type="text" class="form-control form-control-sm showif-value2" placeholder="value" style="max-width:140px" value="${(c[1].value||'').replace(/"/g,'&quot;')}">
                         </div>
                     </div>
                     <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 mt-1 showif-toggle" style="font-size:0.72rem" onclick="const b=this.previousElementSibling; b.classList.toggle('hidden'); this.innerHTML = b.classList.contains('hidden') ? '<i class=\\'bi bi-plus-circle\\'></i> Add condition (dependable)' : '<i class=\\'bi bi-dash-circle\\'></i> Hide condition';">${has ? '<i class="bi bi-dash-circle"></i> Hide condition' : '<i class="bi bi-plus-circle"></i> Add condition (dependable)'}</button>
@@ -5967,6 +5988,8 @@
         // by saveNewTab() (which used to have its own private copy of this) and the
         // duplicate/cut/copy serializer below, so both read it identically.
         function _readRowShowIf(row) {
+            const mode = row.querySelector('.showif-mode')?.value || 'show';
+            const logic = row.querySelector('.showif-logic')?.value || 'all';
             const f1 = row.querySelector('.showif-field')?.value.trim();
             const v1 = row.querySelector('.showif-value')?.value.trim();
             const f2 = row.querySelector('.showif-field2')?.value.trim();
@@ -5975,8 +5998,9 @@
             if (f1) conds.push({ field: f1, value: v1 });
             if (f2) conds.push({ field: f2, value: v2 });
             if (conds.length === 0) return null;
-            if (conds.length === 1) return conds[0];
-            return { all: conds };
+            const result = conds.length === 1 ? { ...conds[0] } : { [logic]: conds };
+            if (mode === 'hide') result.negate = true;
+            return result;
         }
         // A duplicated/cut/copied field is a NEW field — deliberately omits
         // data_key so addTabRow leaves it blank; saveNewTab() then derives a
