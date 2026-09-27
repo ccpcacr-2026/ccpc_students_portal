@@ -3619,21 +3619,15 @@
             }
         }
 
-        // Self-service photo upload — same square-crop + 130KB compression
-        // approach used across this project's other photo-upload flows
-        // (ccpc-teachers admin Photo tab, ccpc-teachers own faculty photos).
-        function handleOwnPhotoSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            if (file.size > 5 * 1024 * 1024) {
-                if (typeof showToast === 'function') showToast('Photo must be under 5 MB.', 'error');
-                event.target.value = '';
-                return;
-            }
-            const sid = loggedInStudent && loggedInStudent.student_id;
-            if (!sid) return;
-            const status = document.getElementById('hub-photo-status');
-            if (status) status.textContent = 'Processing...';
+        // Square-crop + 130KB compression + upload_photo — shared by the "My
+        // Profile" avatar uploader below AND any form's embedded Profile
+        // Picture field (see renderProfilePictureFieldHtml /
+        // wireProfilePictureField), so there is exactly one place that knows
+        // how to turn a chosen file into a saved students_data.photo.
+        function cropCompressAndUploadPhoto(file, studentId, { onStatus, onDone } = {}) {
+            if (!file || !studentId) return;
+            if (file.size > 5 * 1024 * 1024) { if (onStatus) onStatus('Photo must be under 5 MB.', true); return; }
+            if (onStatus) onStatus('Processing...');
 
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -3657,28 +3651,84 @@
                         if (approxBytes <= TARGET) break;
                     }
                     const finalBytes = Math.ceil((base64.length - base64.indexOf(',') - 1) * 0.75);
-                    if (finalBytes > TARGET) {
-                        if (status) status.textContent = 'Could not compress under 130KB — use a smaller image.';
-                        return;
-                    }
+                    if (finalBytes > TARGET) { if (onStatus) onStatus('Could not compress under 130KB — use a smaller image.', true); return; }
 
-                    if (status) status.textContent = 'Uploading...';
-                    portalFetch('upload_photo', { student_id: sid, photo_base64: base64 }).then(res => {
+                    if (onStatus) onStatus('Uploading...');
+                    portalFetch('upload_photo', { student_id: studentId, photo_base64: base64 }).then(res => {
                         if (res && res.result === 'success') {
                             loggedInStudent = { ...loggedInStudent, photo: res.photo };
-                            try { localStorage.setItem('student_session', JSON.stringify(loggedInStudent)); } catch(e) {}
-                            renderOwnPhotoAvatar();
-                            if (status) status.textContent = 'Photo saved!';
+                            try { localStorage.setItem('student_session', JSON.stringify(loggedInStudent)); } catch(err) {}
+                            if (onStatus) onStatus('Photo saved!');
                             if (typeof showToast === 'function') showToast('Photo updated', 'success');
+                            if (onDone) onDone(res.photo);
                         } else {
-                            if (status) status.textContent = (res && res.message) || 'Upload failed.';
+                            if (onStatus) onStatus((res && res.message) || 'Upload failed.', true);
                         }
-                    }).catch(() => { if (status) status.textContent = 'Network error.'; });
+                    }).catch(() => { if (onStatus) onStatus('Network error.', true); });
                 };
-                img.onerror = function() { if (status) status.textContent = 'Could not read image file.'; };
+                img.onerror = function() { if (onStatus) onStatus('Could not read image file.', true); };
                 img.src = e.target.result;
             };
             reader.readAsDataURL(file);
+        }
+
+        function handleOwnPhotoSelect(event) {
+            const file = event.target.files[0];
+            const sid = loggedInStudent && loggedInStudent.student_id;
+            if (!file || !sid) return;
+            const status = document.getElementById('hub-photo-status');
+            cropCompressAndUploadPhoto(file, sid, {
+                onStatus: (msg) => { if (status) status.textContent = msg; },
+                onDone: () => renderOwnPhotoAvatar(),
+            });
+        }
+
+        // ── Profile Picture as a form field ──────────────────────────────────────
+        // A field type any dynamic form (Group Form or ordinary Tab) can add:
+        // shows the student's photo if students_data.photo is already set, or —
+        // if not — forces an upload right there before the surrounding form can
+        // be submitted at all. Deliberately outside renderField()'s normal
+        // name="…" + FormData collection: this isn't per-submission data, it's
+        // an enforcement checkpoint on the ONE shared students_data.photo, so
+        // it carries no `name` attribute and is simply invisible to FormData.
+        function renderProfilePictureFieldHtml(fieldUid) {
+            if (loggedInStudent && loggedInStudent.photo) {
+                return `<div class="col-md-6"><div class="premium-form-group" style="padding:10px 0">
+                    <div class="d-flex align-items-center gap-3">
+                        <img src="${loggedInStudent.photo}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--primary)">
+                        <div><div class="small fw-800 text-muted text-uppercase" style="font-size:0.65rem">Profile Picture</div><div class="small text-success fw-700"><i class="bi bi-check-circle-fill me-1"></i>On file</div></div>
+                    </div>
+                </div></div>`;
+            }
+            return `<div class="col-12"><div class="alert alert-warning rounded-4 border-0" id="${fieldUid}-wrap">
+                <div class="fw-800 small mb-2"><i class="bi bi-camera-fill me-1"></i>A profile picture is required — please upload one to continue</div>
+                <input type="file" accept="image/*" id="${fieldUid}-input" class="form-control form-control-sm" style="max-width:280px">
+                <div id="${fieldUid}-status" class="small text-muted mt-1"></div>
+            </div></div>`;
+        }
+
+        // Called once the HTML from renderProfilePictureFieldHtml is actually in
+        // the DOM. No-op when the student already has a photo (nothing was
+        // rendered to wire in that case). Disables the surrounding form's own
+        // submit button until the upload succeeds — that's the "force" part.
+        function wireProfilePictureField(fieldUid, formEl) {
+            const input = document.getElementById(`${fieldUid}-input`);
+            if (!input) return;
+            const submitBtn = formEl ? formEl.querySelector('button[type="submit"]') : null;
+            if (submitBtn) submitBtn.disabled = true;
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const sid = loggedInStudent && loggedInStudent.student_id;
+                const status = document.getElementById(`${fieldUid}-status`);
+                cropCompressAndUploadPhoto(file, sid, {
+                    onStatus: (msg, isError) => { if (status) { status.textContent = msg; status.className = 'small mt-1 ' + (isError ? 'text-danger' : 'text-muted'); } },
+                    onDone: () => {
+                        const wrap = document.getElementById(`${fieldUid}-wrap`);
+                        if (wrap) { wrap.className = 'alert alert-success rounded-4 border-0'; wrap.innerHTML = `<div class="fw-800 small"><i class="bi bi-check-circle-fill me-1"></i>Profile picture uploaded</div>`; }
+                        if (submitBtn) submitBtn.disabled = false;
+                    },
+                });
+            };
         }
 
         function renderProfilePane(editMode) {
@@ -4499,6 +4549,9 @@
                                          const showIfAttr = f.show_if ? ` data-show-if='${JSON.stringify(f.show_if).replace(/'/g, "&#39;")}'` : '';
                                          const hideStyle = visible ? '' : ' style="display:none"';
                                          if(f.type === 'group_label') html += `<div class="col-12 mt-4"${showIfAttr}${hideStyle}><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`;
+                                         // Not per-submission data (see renderProfilePictureFieldHtml) — an
+                                         // unconditional gate, so show_if is deliberately not applied here.
+                                         else if(f.type === 'profile_picture') html += renderProfilePictureFieldHtml(`${tid}-photo`);
                                          else {
                                              const val = findInBoth(data, loggedInStudent, f.data_key || f.name);
                                              html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, readOnly)}</div>`;
@@ -4507,6 +4560,10 @@
  
                                      html += `</div>${!readOnly?`<button type="submit" class="btn btn-premium-save w-100 mt-5"><i class="bi bi-cloud-arrow-up-fill fs-5"></i> Sync & Save Information</button>`:''}<div class="status-msg text-center mt-3 small fw-bold"></div></form></div>`;
                                     pane.innerHTML = html;
+
+                                    // ── Wire up the Profile Picture field, if this tab has one ──
+                                    const _condForm0 = document.getElementById(`${tid}-form`);
+                                    if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, _condForm0);
 
                                     // ── Wire up conditional ("dependable") fields ──
                                     const _condForm = document.getElementById(`${tid}-form`);
@@ -4519,6 +4576,10 @@
                                     const _inputFields = fields.filter(f => f.type !== 'group_label');
                                     if (_inputFields.length > 0) {
                                         const _filled = _inputFields.filter(f => {
+                                            // Never written into the submission itself (see
+                                            // renderProfilePictureFieldHtml) — "filled" means the
+                                            // student actually has a photo on file, not a data lookup.
+                                            if (f.type === 'profile_picture') return !!(loggedInStudent && loggedInStudent.photo);
                                             const v = findInBoth(data, loggedInStudent, f.data_key || f.name);
                                             return v !== null && v !== undefined && String(v).trim() !== '';
                                         }).length;
@@ -4707,6 +4768,7 @@
             html += `<form id="${tid}-form"><div class="row g-4">`;
             fields.forEach(f => {
                 if (f.type === 'group_label') { html += `<div class="col-12 mt-4"><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
+                if (f.type === 'profile_picture') { html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
                 html += `<div class="col-md-6">${renderField(f, '', false)}</div>`;
             });
             html += `</div><button type="submit" class="btn btn-premium-save w-100 mt-5"><i class="bi bi-people-fill me-2"></i>Create Your Team</button>
@@ -4714,6 +4776,7 @@
             pane.innerHTML = html;
 
             const form_el = document.getElementById(`${tid}-form`);
+            if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, form_el);
             if (form_el) form_el.onsubmit = (e) => {
                 e.preventDefault();
                 const btn = form_el.querySelector('button[type="submit"]');
@@ -4799,6 +4862,9 @@
                 html += `<form id="${tid}-gd-form" class="mt-4"><span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Team details</span><div class="row g-4 mt-1">`;
                 fields.forEach(f => {
                     if (f.type === 'group_label') { html += `<div class="col-12 mt-2"><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
+                    // This is the leader's own field to fill — a non-leader viewing
+                    // the (read-only) team details has nothing of theirs to upload here.
+                    if (f.type === 'profile_picture') { if (isLeader) html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
                     const val = (team.group_data || {})[f.data_key] || '';
                     html += `<div class="col-md-6">${renderField(f, val, locked || !isLeader)}</div>`;
                 });
@@ -4815,6 +4881,7 @@
 
             if (fields.length && !locked && isLeader) {
                 const gdForm = document.getElementById(`${tid}-gd-form`);
+                if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, gdForm);
                 if (gdForm) gdForm.onsubmit = (e) => {
                     e.preventDefault();
                     const btn = gdForm.querySelector('button[type="submit"]');
@@ -5786,6 +5853,7 @@
                             <option value="number" ${data?.type==='number'?'selected':''}>Number</option>
                             <option value="checkbox" ${data?.type==='checkbox'?'selected':''}>Checkbox</option>
                             <option value="choose" ${data?.type==='choose'?'selected':''}>Dropdown</option>
+                            <option value="profile_picture" ${data?.type==='profile_picture'?'selected':''}>Profile Picture</option>
                         </select>
                     </div>
                     <div class="col-md-4"><input type="text" placeholder="Options (comma separated)" class="form-control f-options ${['checkbox','choose'].includes(data?.type)?'':'hidden'}" value="${(data?.options||[]).join(',')}"></div>
