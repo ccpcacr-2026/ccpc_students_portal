@@ -1,0 +1,173 @@
+-- Group Forms — team sign-up (e.g. Science Fair) for the student portal.
+-- Run in the Supabase SQL editor (same project as the rest of the portal).
+--
+-- Every object below is explicitly qualified with `student.` — schema-portal.sql's
+-- existing tables (portal_tabs, portal_submissions, …) are bare `CREATE TABLE`
+-- statements that only land in the `student` schema because whoever first ran
+-- that file had a search_path starting with `student`. Confirmed live: there is
+-- a stray, empty `public.portal_tabs` table left over from some earlier session
+-- that ran the same bare SQL with a plain search_path — completely invisible to
+-- the app, which always sends `Accept-Profile: student`. Qualifying every name
+-- here removes that risk entirely, independent of whoever's session runs this.
+
+CREATE SCHEMA IF NOT EXISTS student; -- already exists in production; harmless if run elsewhere
+
+-- ── Group Forms (the admin-built template, e.g. "Science Fair 2026") ────────
+CREATE TABLE IF NOT EXISTS student.group_forms (
+  id                bigserial PRIMARY KEY,
+  title             text        NOT NULL,
+  description       text,
+  icon_class        text        NOT NULL DEFAULT 'bi-people-fill',
+  max_team_size     int         NOT NULL DEFAULT 4,      -- includes the leader
+  members_required  boolean     NOT NULL DEFAULT false,  -- true = a team must reach max_team_size to count as "complete"
+  fields_json       text        NOT NULL DEFAULT '[]',   -- same shape as portal_tabs.fields_json — group-level fields, filled once by the leader
+  eligibility_json  text        NOT NULL DEFAULT '{}',   -- who a leader may invite, relative to the leader — see checkGroupEligibility() in route.js for the shape
+  is_enabled        boolean     NOT NULL DEFAULT true,   -- hides from every student's nav entirely (mirrors portal_tabs.is_enabled)
+  accepting_new     boolean     NOT NULL DEFAULT true,   -- false = no NEW teams can be created; existing teams keep working
+  sort_order        int         NOT NULL DEFAULT 0,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE student.group_forms ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_forms_all" ON student.group_forms;
+CREATE POLICY "group_forms_all" ON student.group_forms FOR ALL USING (true);
+
+-- ── Teams (the student-built roster inside one Group Form) ──────────────────
+CREATE TABLE IF NOT EXISTS student.group_form_teams (
+  id                 bigserial PRIMARY KEY,
+  group_form_id      bigint      NOT NULL,
+  leader_student_id  text        NOT NULL,
+  group_data         jsonb       NOT NULL DEFAULT '{}', -- answers to fields_json, entered by the leader only
+  status             text        NOT NULL DEFAULT 'active', -- 'active' | 'disbanded'
+  is_locked          boolean     NOT NULL DEFAULT false, -- admin per-team freeze — read-only to the leader and members
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS group_form_teams_form_idx ON student.group_form_teams (group_form_id);
+ALTER TABLE student.group_form_teams ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_form_teams_all" ON student.group_form_teams;
+CREATE POLICY "group_form_teams_all" ON student.group_form_teams FOR ALL USING (true);
+
+-- ── Team members (the accepted roster) ───────────────────────────────────────
+-- group_form_id is denormalized here on purpose: it is what lets Postgres
+-- itself enforce "a student may be an accepted member of only ONE team per
+-- Group Form" with a plain UNIQUE constraint, instead of an app-level
+-- check-then-insert that a fast double-click could race past.
+CREATE TABLE IF NOT EXISTS student.group_form_team_members (
+  id             bigserial PRIMARY KEY,
+  group_form_id  bigint      NOT NULL,
+  team_id        bigint      NOT NULL,
+  student_id     text        NOT NULL,
+  role           text        NOT NULL DEFAULT 'member', -- 'leader' | 'member'
+  joined_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (group_form_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS group_form_team_members_team_idx ON student.group_form_team_members (team_id);
+ALTER TABLE student.group_form_team_members ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_form_team_members_all" ON student.group_form_team_members;
+CREATE POLICY "group_form_team_members_all" ON student.group_form_team_members FOR ALL USING (true);
+
+-- ── Invitations (pending until the invited student logs in and responds) ────
+CREATE TABLE IF NOT EXISTS student.group_form_team_invites (
+  id                  bigserial PRIMARY KEY,
+  group_form_id       bigint      NOT NULL,
+  team_id             bigint      NOT NULL,
+  invited_by          text        NOT NULL, -- leader's student_id
+  invited_student_id  text        NOT NULL,
+  status              text        NOT NULL DEFAULT 'pending', -- 'pending' | 'accepted' | 'declined' | 'cancelled'
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  responded_at        timestamptz,
+  UNIQUE (team_id, invited_student_id)
+);
+CREATE INDEX IF NOT EXISTS group_form_team_invites_student_idx ON student.group_form_team_invites (invited_student_id, status);
+ALTER TABLE student.group_form_team_invites ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_form_team_invites_all" ON student.group_form_team_invites;
+CREATE POLICY "group_form_team_invites_all" ON student.group_form_team_invites FOR ALL USING (true);
+
+-- ── RPC: create a team + the leader's own membership row, atomically ────────
+-- Called as POST rest/v1/rpc/group_team_create with Content-Profile: student.
+-- If the leader already has an active team for this Group Form, the member
+-- insert below hits the UNIQUE(group_form_id, student_id) constraint; the
+-- exception raised here aborts the WHOLE function call as one transaction,
+-- so the team row inserted a moment earlier is rolled back too — there is
+-- no path that leaves an orphan, member-less team behind.
+CREATE OR REPLACE FUNCTION student.group_team_create(
+  p_group_form_id bigint,
+  p_leader_id     text,
+  p_group_data    jsonb
+) RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = student, pg_temp
+AS $$
+DECLARE
+  v_team_id bigint;
+BEGIN
+  INSERT INTO student.group_form_teams (group_form_id, leader_student_id, group_data)
+  VALUES (p_group_form_id, p_leader_id, COALESCE(p_group_data, '{}'::jsonb))
+  RETURNING id INTO v_team_id;
+
+  BEGIN
+    INSERT INTO student.group_form_team_members (group_form_id, team_id, student_id, role)
+    VALUES (p_group_form_id, v_team_id, p_leader_id, 'leader');
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'ALREADY_IN_TEAM';
+  END;
+
+  RETURN v_team_id;
+END;
+$$;
+
+-- ── RPC: accept an invite, atomically ────────────────────────────────────────
+-- Called as POST rest/v1/rpc/group_team_accept_invite with Content-Profile:
+-- student. Re-validates everything at the moment of acceptance (the invite
+-- may be stale by the time the student gets to it), inserts the membership
+-- row, marks this invite accepted, and — in the same transaction — cancels
+-- every OTHER pending invite to this same student for the SAME Group Form,
+-- since accepting one settles which team they're on for that event.
+CREATE OR REPLACE FUNCTION student.group_team_accept_invite(
+  p_invite_id  bigint,
+  p_student_id text
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = student, pg_temp
+AS $$
+DECLARE
+  v_invite group_form_team_invites%ROWTYPE;
+  v_team   group_form_teams%ROWTYPE;
+  v_form   group_forms%ROWTYPE;
+  v_count  int;
+BEGIN
+  SELECT * INTO v_invite FROM student.group_form_team_invites WHERE id = p_invite_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'INVITE_NOT_FOUND'; END IF;
+  IF v_invite.invited_student_id <> p_student_id THEN RAISE EXCEPTION 'NOT_YOUR_INVITE'; END IF;
+  IF v_invite.status <> 'pending' THEN RAISE EXCEPTION 'INVITE_NOT_PENDING'; END IF;
+
+  SELECT * INTO v_team FROM student.group_form_teams WHERE id = v_invite.team_id FOR UPDATE;
+  IF NOT FOUND OR v_team.status <> 'active' THEN RAISE EXCEPTION 'TEAM_NOT_ACTIVE'; END IF;
+  IF v_team.is_locked THEN RAISE EXCEPTION 'TEAM_LOCKED'; END IF;
+
+  SELECT * INTO v_form FROM student.group_forms WHERE id = v_team.group_form_id;
+  SELECT count(*) INTO v_count FROM student.group_form_team_members WHERE team_id = v_team.id;
+  IF v_count >= v_form.max_team_size THEN RAISE EXCEPTION 'TEAM_FULL'; END IF;
+
+  BEGIN
+    INSERT INTO student.group_form_team_members (group_form_id, team_id, student_id, role)
+    VALUES (v_invite.group_form_id, v_team.id, p_student_id, 'member');
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'ALREADY_IN_TEAM';
+  END;
+
+  UPDATE student.group_form_team_invites
+     SET status = 'accepted', responded_at = now()
+   WHERE id = p_invite_id;
+
+  UPDATE student.group_form_team_invites
+     SET status = 'cancelled', responded_at = now()
+   WHERE invited_student_id = p_student_id
+     AND group_form_id = v_invite.group_form_id
+     AND status = 'pending'
+     AND id <> p_invite_id;
+END;
+$$;

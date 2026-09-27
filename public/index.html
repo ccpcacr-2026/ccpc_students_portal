@@ -934,7 +934,8 @@
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-nfc" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">NFC</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-tracking" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Bus</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-notices" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Notices</button>
-                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-import" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Import</button>
+                                <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-import" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Import</button>
+                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-groups" onclick="loadAdminGroupForms()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Groups</button>
                             </div>
                         </div>
                         <div class="p-4 bg-white">
@@ -1130,6 +1131,62 @@
 
                                     <!-- Step 4: Result -->
                                     <div id="import-result-section" class="p-4 rounded-4 border shadow-sm hidden" style="background:#fff"></div>
+                                </div>
+                                <div class="tab-pane" id="admin-groups">
+                                    <p class="small text-muted mb-4" style="font-size:0.72rem">A Group Form is a form several students submit ONE shared entry for, as a team — e.g. Science Fair sign-up. A student becomes a team's leader by creating it, invites teammates by Student ID, and each teammate must log in and accept before they count as a member.</p>
+                                    <div class="sticky-builder-controls shadow-sm border rounded-4">
+                                        <input type="hidden" id="gf-editing-id" value="">
+                                        <div class="row g-3 align-items-end">
+                                            <div class="col-md-4"><label class="small fw-800 text-muted">FORM TITLE</label><input type="text" id="gf-title" class="form-control" placeholder="e.g. Science Fair 2026"></div>
+                                            <div class="col-md-2"><label class="small fw-800 text-muted">ICON (BI Class)</label><input type="text" id="gf-icon" class="form-control" placeholder="bi-people-fill"></div>
+                                            <div class="col-md-2"><label class="small fw-800 text-muted">MAX TEAM SIZE</label><input type="number" id="gf-max-size" class="form-control" min="1" value="4"></div>
+                                            <div class="col-md-4 pb-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-members-required"><label class="form-check-label fw-700 small" for="gf-members-required">Team must be full to count as complete</label></div></div>
+                                            <div class="col-12"><label class="small fw-800 text-muted">DESCRIPTION (shown to students)</label><textarea id="gf-description" class="form-control" rows="2" placeholder="What is this sign-up for?"></textarea></div>
+                                            <div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="gf-is-enabled" checked><label class="form-check-label fw-800">Visible to students</label></div></div>
+                                            <div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="gf-accepting-new" checked><label class="form-check-label fw-800">Accepting new teams</label></div></div>
+                                        </div>
+                                        <div class="mt-4 p-4 bg-light rounded-4 border">
+                                            <span class="small fw-800 text-muted text-uppercase" style="letter-spacing:0.06em">Who can a leader invite?</span>
+                                            <p class="small text-muted mt-1 mb-3" style="font-size:0.7rem">Every rule is relative to the LEADER — e.g. "same class" means the same class AS WHOEVER LEADS that team, not one fixed class for everyone.</p>
+                                            <div class="row g-3 align-items-center">
+                                                <div class="col-md-5">
+                                                    <select id="gf-class-mode" onchange="gfOnClassModeChange()" class="form-select form-select-sm">
+                                                        <option value="none">No class restriction</option>
+                                                        <option value="exact">Must be the exact same class as the leader</option>
+                                                        <option value="band">Must be in the same class group as the leader</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-same-section"><label class="form-check-label small fw-700" for="gf-same-section">Same section too</label></div></div>
+                                                <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-same-house"><label class="form-check-label small fw-700" for="gf-same-house">Same house too</label></div></div>
+                                            </div>
+                                            <div id="gf-bands-wrap" class="mt-3 hidden">
+                                                <p class="small text-muted mb-2" style="font-size:0.7rem">Group classes into bands — e.g. Six/Seven/Eight in one band, Nine/Ten in another. A leader in Seven may then invite anyone from Six, Seven or Eight, but not Nine.</p>
+                                                <div id="gf-bands-list" class="d-flex flex-column gap-2"></div>
+                                                <button type="button" onclick="gfAddBand()" class="btn btn-sm btn-outline-dark rounded-pill px-3 mt-2">+ Add Class Group</button>
+                                            </div>
+                                        </div>
+                                        <div class="row g-2 mt-4">
+                                            <div class="col-6"><button onclick="addTabRow('field')" class="btn btn-outline-primary fw-800 w-100">+ New Input</button></div>
+                                            <div class="col-6"><button onclick="addTabRow('label')" class="btn btn-outline-secondary fw-800 w-100">+ New Header</button></div>
+                                        </div>
+                                        <p class="small text-muted mt-3 mb-0" style="font-size:0.7rem">These fields are filled ONCE by the team leader, describing the team's entry (e.g. Project Title, Category) — not one field set per member. The roster itself (who's on the team) is handled automatically.</p>
+                                    </div>
+                                    <div id="gf-fields-list" class="mt-5"></div>
+                                    <div class="d-flex justify-content-end gap-2 mt-4">
+                                        <button type="button" onclick="cancelGroupFormEdit()" class="btn btn-outline-secondary rounded-pill px-4 fw-800">Cancel</button>
+                                        <button type="button" onclick="saveGroupForm()" class="btn btn-primary rounded-pill px-4 fw-800"><i class="bi bi-check-lg me-1"></i>Save Group Form</button>
+                                    </div>
+
+                                    <hr class="my-5">
+                                    <div id="admin-group-forms-list" class="row g-4"></div>
+
+                                    <div id="admin-group-roster" class="hidden mt-4">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <h5 class="fw-800 m-0" id="admin-group-roster-title">Teams</h5>
+                                            <button onclick="closeGroupRoster()" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Close</button>
+                                        </div>
+                                        <div id="admin-group-roster-list" class="d-flex flex-column gap-3"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -4480,7 +4537,7 @@
                                         }
 
                                         // Badge + red dot on sidebar + bottom nav buttons
-                                        document.querySelectorAll(`[data-tabId="${tid}"]`).forEach(btn => {
+                                        document.querySelectorAll(`[data-tab-id="${tid}"]`).forEach(btn => {
                                             let badge = btn.querySelector('.nav-fill-badge');
                                             if (!badge) { badge = document.createElement('small'); btn.appendChild(badge); }
                                             badge.className = `nav-fill-badge ${badgeClass}`;
@@ -4523,7 +4580,7 @@
                                                                 if(data) Object.assign(data, submission);
                                                                 if(btn) btn.disabled = false;
                                                                 // Update fill badge + bar to 100%, remove red dot
-                                                                document.querySelectorAll(`[data-tabId="${tid}"]`).forEach(btn => {
+                                                                document.querySelectorAll(`[data-tab-id="${tid}"]`).forEach(btn => {
                                                                     let badge = btn.querySelector('.nav-fill-badge');
                                                                     if (!badge) { badge = document.createElement('small'); btn.appendChild(badge); }
                                                                     badge.className = 'nav-fill-badge full';
@@ -4568,11 +4625,276 @@
                         } catch (e) { console.error("Error in tabs loop", e); }
                     });
                 }).catch(err => console.error("Error fetching tabs", err));
+
+                // Group Forms (team sign-up, e.g. Science Fair) — a parallel nav
+                // loop to the one above, one entry per enabled form.
+                loadStudentGroupForms();
             } catch(e) {
                 console.error("showForm critical error", e);
                 alert("An error occurred while loading your profile. Please try again.\n\nDetails: " + (e && e.message) + "\n" + (e && e.stack ? e.stack.split('\n').slice(0, 3).join('\n') : ''));
                 resetUI();
             }
+        }
+
+        // ── Group Forms (student side) — team sign-up, e.g. Science Fair ────────────
+        // "Group Form" is the admin-built template; "Team" is the roster a student
+        // builds inside one. Each enabled form gets its own nav entry, exactly the
+        // way get_tabs' loop above adds one per portal_tabs row — get_group_forms
+        // (called with student_id) already tells us this student's status for every
+        // form (no_team / has_pending_invite / is_leader / is_member) in one call.
+        function loadStudentGroupForms() {
+            const gfEpoch = uiEpoch;
+            portalFetch('get_group_forms', { student_id: loggedInStudent.student_id }).then(forms => {
+                if (gfEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
+                if (!Array.isArray(forms)) return;
+                forms.forEach((f, i) => {
+                    try {
+                        const tid = `gf-${f.id}`;
+                        addNav(tid, f.title, f.icon_class || 'bi-people-fill');
+                        _refreshHomeGridIfVisible();
+                        _tryRestorePendingTab();
+                        const _sbar = document.getElementById('sidebar-items');
+                        const _bnav = document.getElementById('bottom-nav-container');
+                        if (_sbar?.lastElementChild) _sbar.lastElementChild.classList.add('nav-dynamic');
+                        if (_bnav?.lastElementChild) _bnav.lastElementChild.classList.add('nav-dynamic');
+                        // Same red-dot visual the fill badges above use, repurposed here
+                        // to mean "you have something to respond to" for this form.
+                        if (f.my_status === 'has_pending_invite') {
+                            document.querySelectorAll(`[data-tab-id="${tid}"]`).forEach(btn => {
+                                if (!btn.querySelector('.nav-unfilled-dot')) { const dot = document.createElement('span'); dot.className = 'nav-unfilled-dot'; btn.appendChild(dot); }
+                            });
+                        }
+                        const pane = document.createElement('div');
+                        pane.className = 'tab-pane'; pane.id = `${tid}-content`;
+                        pane.innerHTML = `<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>`;
+                        if (content) content.appendChild(pane);
+                        renderGroupFormPane(tid, pane, f);
+                    } catch (e) { console.error("Error in group forms loop", e); }
+                });
+            }).catch(err => console.error("Error fetching group forms", err));
+        }
+
+        // Fetches this student's status for one Group Form and renders the right
+        // view: create-a-team, respond-to-an-invite, or the team roster (editable
+        // if leader and not locked, read-only otherwise).
+        function renderGroupFormPane(tid, pane, form) {
+            portalFetch('get_my_team', { student_id: loggedInStudent.student_id, group_form_id: form.id }).then(res => {
+                if (!res || res.result !== 'success') { pane.innerHTML = `<div class="alert alert-danger">${(res && res.message) || 'Could not load this form.'}</div>`; return; }
+                pane._gfForm = form; // stashed for the button handlers below to read back
+                if (res.team) { pane._gfTeam = res.team; renderTeamView(tid, pane, form, res.team, res.is_leader); return; }
+                if (res.invite) { renderInviteView(tid, pane, form, res.invite); return; }
+                renderCreateTeamView(tid, pane, form);
+            }).catch(err => { console.error("Error fetching my team", err); pane.innerHTML = '<div class="alert alert-danger">Network error.</div>'; });
+        }
+
+        function gfNameOf(p, fallbackId) {
+            if (!p) return fallbackId || 'Unknown';
+            return `${p.student_name}${p.class ? ' · ' + p.class + (p.section ? '-' + p.section : '') : ''}`;
+        }
+
+        // ── State: no team yet, no invite ────────────────────────────────────────
+        function renderCreateTeamView(tid, pane, form) {
+            if (!form.accepting_new) {
+                pane.innerHTML = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>
+                    <div class="alert alert-warning mt-3 rounded-4 border-0"><i class="bi bi-lock-fill me-2"></i>Registration is closed for new teams.</div></div>`;
+                return;
+            }
+            let fields = [];
+            try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
+            let html = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>`;
+            if (form.description) html += `<p class="text-muted small mb-4">${form.description}</p>`;
+            html += `<div class="alert alert-info rounded-4 border-0 mb-4" style="font-size:0.8rem"><i class="bi bi-info-circle-fill me-2"></i>Create your team below (up to ${form.max_team_size} members including you). Teammates must log in and accept before they count.</div>`;
+            html += `<form id="${tid}-form"><div class="row g-4">`;
+            fields.forEach(f => {
+                if (f.type === 'group_label') { html += `<div class="col-12 mt-4"><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
+                html += `<div class="col-md-6">${renderField(f, '', false)}</div>`;
+            });
+            html += `</div><button type="submit" class="btn btn-premium-save w-100 mt-5"><i class="bi bi-people-fill me-2"></i>Create Your Team</button>
+                <div class="status-msg text-center mt-3 small fw-bold"></div></form></div>`;
+            pane.innerHTML = html;
+
+            const form_el = document.getElementById(`${tid}-form`);
+            if (form_el) form_el.onsubmit = (e) => {
+                e.preventDefault();
+                const btn = form_el.querySelector('button[type="submit"]');
+                const status = form_el.querySelector('.status-msg');
+                const group_data = Object.fromEntries(new FormData(form_el));
+                fields.filter(f => f.type === 'checkbox').forEach(f => {
+                    group_data[f.data_key] = Array.from(form_el.querySelectorAll(`input[name="${f.data_key}"]:checked`)).map(c => c.value).join(', ');
+                });
+                if (btn) btn.disabled = true;
+                if (status) status.textContent = 'Creating your team…';
+                portalFetch('create_group', { student_id: loggedInStudent.student_id, group_form_id: form.id, group_data }).then(res => {
+                    if (res && res.result === 'success') { renderGroupFormPane(tid, pane, form); if (typeof showToast === 'function') showToast('Team created', 'success'); }
+                    else {
+                        if (btn) btn.disabled = false;
+                        if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = (res && res.message) || 'Could not create the team.'; }
+                    }
+                }).catch(() => { if (btn) btn.disabled = false; if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = 'Network error.'; } });
+            };
+        }
+
+        // ── State: a pending invite, no team yet ─────────────────────────────────
+        function renderInviteView(tid, pane, form, invite) {
+            pane.innerHTML = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>
+                <div class="alert alert-primary rounded-4 border-0 mt-3">
+                    <i class="bi bi-envelope-heart-fill me-2"></i>You've been invited to join <strong>${gfNameOf(invite.leader_profile, invite.invited_by)}</strong>'s team.
+                </div>
+                <div class="d-flex gap-2">
+                    <button onclick="gfRespondInvite('${tid}', ${invite.id}, true)" class="btn btn-premium-save flex-fill"><i class="bi bi-check-lg me-1"></i>Accept</button>
+                    <button onclick="gfRespondInvite('${tid}', ${invite.id}, false)" class="btn btn-outline-secondary flex-fill">Decline</button>
+                </div>
+                <div class="status-msg text-center mt-3 small fw-bold"></div></div>`;
+        }
+
+        function gfRespondInvite(tid, inviteId, accept) {
+            const pane = document.getElementById(`${tid}-content`);
+            portalFetch('respond_to_invite', { invite_id: inviteId, student_id: loggedInStudent.student_id, accept }).then(res => {
+                if (res && res.result === 'success') {
+                    if (typeof showToast === 'function') showToast(accept ? 'You joined the team' : 'Invite declined', 'success');
+                    if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm);
+                } else if (typeof showToast === 'function') showToast((res && res.message) || 'Could not respond to the invite.', 'error');
+                else alert((res && res.message) || 'Failed');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        // ── State: already a member (leader or not) ──────────────────────────────
+        function renderTeamView(tid, pane, form, team, isLeader) {
+            const locked = team.is_locked;
+            let fields = [];
+            try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
+            const rosterHtml = team.members.map(m => `
+                <div class="d-flex align-items-center justify-content-between p-2 border-bottom">
+                    <span>${gfNameOf(m.profile, m.student_id)}${m.role === 'leader' ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1">Leader</span>' : ''}</span>
+                    ${(!locked && isLeader && m.role !== 'leader') ? `<button onclick="gfRemoveMember('${tid}', ${team.id}, '${m.student_id}')" class="btn btn-xs btn-outline-danger rounded-pill px-2" title="Remove from team">×</button>` : ''}
+                </div>`).join('');
+            const pendingHtml = (isLeader && team.pending_invites.length) ? `
+                <div class="mt-3"><span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Pending invites</span>
+                ${team.pending_invites.map(inv => `
+                    <div class="d-flex align-items-center justify-content-between p-2 border-bottom">
+                        <span class="text-muted fst-italic">${gfNameOf(inv.profile, inv.invited_student_id)}</span>
+                        <button onclick="gfCancelInvite('${tid}', ${inv.id})" class="btn btn-xs btn-outline-secondary rounded-pill px-2">Cancel</button>
+                    </div>`).join('')}</div>` : '';
+            const canInviteMore = isLeader && !locked && team.members.length < form.max_team_size;
+
+            let html = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>`;
+            if (locked) html += `<div class="alert alert-info py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-shield-check-fill me-2 fs-5"></i>Verified & Locked</div>`;
+            html += `<p class="small text-muted mb-2">${team.members.length} of ${form.max_team_size} members${form.members_required && team.members.length < form.max_team_size ? ' — team must be full to count as complete' : ''}</p>`;
+            html += `<div class="rounded-4 border overflow-hidden mb-3">${rosterHtml}</div>${pendingHtml}`;
+
+            if (canInviteMore) {
+                const eligNote = gfEligibilitySummary(form.eligibility_json);
+                html += `<div class="mt-4 p-3 rounded-4 border bg-light">
+                    <span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Invite a teammate</span>
+                    ${eligNote ? `<p class="small text-muted mb-2 mt-1" style="font-size:0.72rem"><i class="bi bi-info-circle me-1"></i>Eligible teammates${eligNote}.</p>` : ''}
+                    <div class="d-flex gap-2 mt-2">
+                        <input type="text" id="${tid}-invite-id" class="form-control" placeholder="Teammate's Student ID">
+                        <button onclick="gfLookupTeammate('${tid}')" class="btn btn-outline-dark flex-shrink-0">Look up</button>
+                    </div>
+                    <div id="${tid}-invite-preview" class="mt-2"></div>
+                </div>`;
+            }
+
+            if (fields.length) {
+                html += `<form id="${tid}-gd-form" class="mt-4"><span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Team details</span><div class="row g-4 mt-1">`;
+                fields.forEach(f => {
+                    if (f.type === 'group_label') { html += `<div class="col-12 mt-2"><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
+                    const val = (team.group_data || {})[f.data_key] || '';
+                    html += `<div class="col-md-6">${renderField(f, val, locked || !isLeader)}</div>`;
+                });
+                html += `</div>${(!locked && isLeader) ? `<button type="submit" class="btn btn-premium-save w-100 mt-4"><i class="bi bi-cloud-arrow-up-fill me-2"></i>Save Team Details</button>` : ''}<div class="status-msg text-center mt-3 small fw-bold"></div></form>`;
+            }
+
+            if (!locked) {
+                html += isLeader
+                    ? `<button onclick="gfDisbandTeam('${tid}', ${team.id})" class="btn btn-outline-danger w-100 mt-4">Disband Team</button>`
+                    : `<button onclick="gfLeaveTeam('${tid}', ${team.id})" class="btn btn-outline-secondary w-100 mt-4">Leave Team</button>`;
+            }
+            html += `</div>`;
+            pane.innerHTML = html;
+
+            if (fields.length && !locked && isLeader) {
+                const gdForm = document.getElementById(`${tid}-gd-form`);
+                if (gdForm) gdForm.onsubmit = (e) => {
+                    e.preventDefault();
+                    const btn = gdForm.querySelector('button[type="submit"]');
+                    const status = gdForm.querySelector('.status-msg');
+                    const group_data = Object.fromEntries(new FormData(gdForm));
+                    fields.filter(f => f.type === 'checkbox').forEach(f => {
+                        group_data[f.data_key] = Array.from(gdForm.querySelectorAll(`input[name="${f.data_key}"]:checked`)).map(c => c.value).join(', ');
+                    });
+                    if (btn) btn.disabled = true;
+                    portalFetch('update_group_data', { team_id: team.id, leader_id: loggedInStudent.student_id, group_data }).then(res => {
+                        if (btn) btn.disabled = false;
+                        if (res && res.result === 'success') { if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-success'; status.textContent = 'Saved.'; } }
+                        else if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = (res && res.message) || 'Save failed.'; }
+                    }).catch(() => { if (btn) btn.disabled = false; if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = 'Network error.'; } });
+                };
+            }
+        }
+
+        function gfLookupTeammate(tid) {
+            const idInput = document.getElementById(`${tid}-invite-id`);
+            const preview = document.getElementById(`${tid}-invite-preview`);
+            const studentId = idInput ? idInput.value.trim() : '';
+            if (!studentId) return;
+            if (preview) preview.innerHTML = '<span class="text-muted small">Looking up…</span>';
+            portalFetch('lookup_student_by_id', { student_id: studentId }).then(res => {
+                if (!preview) return;
+                if (res && res.result === 'success') {
+                    preview.innerHTML = `<div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-white border">
+                        <span>${gfNameOf(res.data, studentId)}</span>
+                        <button onclick="gfInviteTeammate('${tid}', '${studentId}')" class="btn btn-sm btn-primary rounded-pill px-3">Send Invite</button>
+                    </div>`;
+                } else {
+                    preview.innerHTML = `<span class="text-danger small">${(res && res.message) || 'Not found.'}</span>`;
+                }
+            }).catch(() => { if (preview) preview.innerHTML = '<span class="text-danger small">Network error.</span>'; });
+        }
+
+        function gfInviteTeammate(tid, studentId) {
+            const pane = document.getElementById(`${tid}-content`);
+            if (!pane || !pane._gfTeam) return;
+            portalFetch('invite_to_group', { team_id: pane._gfTeam.id, leader_id: loggedInStudent.student_id, invited_student_id: studentId }).then(res => {
+                if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Invite sent', 'success'); renderGroupFormPane(tid, pane, pane._gfForm); }
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Could not send the invite.', 'error');
+                else alert((res && res.message) || 'Failed');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function gfCancelInvite(tid, inviteId) {
+            const pane = document.getElementById(`${tid}-content`);
+            portalFetch('cancel_invite', { invite_id: inviteId, leader_id: loggedInStudent.student_id }).then(res => {
+                if (res && res.result === 'success') { if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm); }
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function gfRemoveMember(tid, teamId, studentId) {
+            if (!confirm('Remove this member from the team?')) return;
+            const pane = document.getElementById(`${tid}-content`);
+            portalFetch('leave_group', { team_id: teamId, student_id: studentId, actor_id: loggedInStudent.student_id }).then(res => {
+                if (res && res.result === 'success') { if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm); }
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function gfLeaveTeam(tid, teamId) {
+            if (!confirm('Leave this team?\n\nYou can join or start another team for this form afterward.')) return;
+            const pane = document.getElementById(`${tid}-content`);
+            portalFetch('leave_group', { team_id: teamId, student_id: loggedInStudent.student_id, actor_id: loggedInStudent.student_id }).then(res => {
+                if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('You left the team', 'success'); if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm); }
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function gfDisbandTeam(tid, teamId) {
+            if (!confirm('Disband this team?\n\nEvery member is removed and this cannot be undone.')) return;
+            const pane = document.getElementById(`${tid}-content`);
+            portalFetch('disband_group', { team_id: teamId, leader_id: loggedInStudent.student_id }).then(res => {
+                if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Team disbanded', 'success'); if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm); }
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
         }
 
         function loadIncludeFields(selectedKeys = []) {
@@ -4793,6 +5115,282 @@
                     if (typeof showToast === 'function') showToast('Removed from profile', 'success');
                     loadAdminTabs();
                 } else if (typeof showToast === 'function') showToast('Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        // ── Admin: Group Forms (team sign-up, e.g. Science Fair) ────────────────────
+        // "Group Form" is the template built here; "Team" is the roster a student
+        // builds inside one. Reuses the SAME field-row builder as the ordinary Tab
+        // editor above (addTabRow / showIfBlockHtml / serializeFieldsFromContainer)
+        // by pointing _activeFieldsContainerId at #gf-fields-list instead of
+        // #fields-list — see that variable's own comment for why one shared
+        // pointer is enough instead of threading a container id everywhere.
+        let ALL_GROUP_FORMS = [];
+        let GF_CLASS_OPTIONS = [];
+
+        function loadAdminGroupForms() {
+            Promise.all([
+                portalFetch('get_group_forms', {}),
+                GF_CLASS_OPTIONS.length ? Promise.resolve(null) : portalFetch('get_class_house_options', {}),
+            ]).then(([forms, opts]) => {
+                ALL_GROUP_FORMS = Array.isArray(forms) ? forms : [];
+                if (opts && opts.result === 'success') GF_CLASS_OPTIONS = opts.classes || [];
+                renderAdminGroupFormsList();
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error loading Group Forms', 'error'); });
+        }
+
+        function renderAdminGroupFormsList() {
+            const list = document.getElementById('admin-group-forms-list');
+            if (!list) return;
+            if (!ALL_GROUP_FORMS.length) {
+                list.innerHTML = '<p class="text-muted small fst-italic">No Group Forms yet — fill in the form above and click Save.</p>';
+                return;
+            }
+            list.innerHTML = ALL_GROUP_FORMS.map((f, i) => `
+                <div class="col-md-6">
+                    <div class="card p-3 mb-0 shadow-sm border-0" style="${f.is_enabled ? '' : 'opacity:0.6'}">
+                        <div class="d-flex flex-row justify-content-between align-items-center">
+                            <div class="text-truncate">
+                                <strong><i class="bi ${f.icon_class||'bi-people-fill'} me-2 text-primary"></i>${f.title}</strong>
+                                ${f.is_enabled ? '' : ' <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:0.6rem">Hidden from students</span>'}
+                                ${f.accepting_new === false ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Closed to new teams</span>' : ''}
+                            </div>
+                        </div>
+                        <p class="small text-muted mb-2 mt-1" style="font-size:0.72rem">Up to ${f.max_team_size} per team${f.members_required ? ' · must be full to count as complete' : ''}${gfEligibilitySummary(f.eligibility_json)}</p>
+                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                            <button onclick="editGroupForm(${i})" class="btn btn-xs btn-primary rounded-pill px-3">Edit</button>
+                            <button onclick="openGroupRoster(${f.id})" class="btn btn-xs btn-outline-dark rounded-pill px-3">View Teams</button>
+                            <button onclick="deleteGroupFormConfig(${f.id})" class="btn btn-xs btn-danger rounded-pill px-3">Del</button>
+                            <div class="form-check form-switch mb-0 ms-auto" title="Active forms are visible to students; inactive forms are hidden without deleting their setup or data">
+                                <input class="form-check-input" type="checkbox" id="gf-active-${f.id}" ${f.is_enabled?'checked':''} onchange="toggleGroupFormFlag(${f.id},'is_enabled',this.checked)">
+                                <label class="form-check-label small fw-700" for="gf-active-${f.id}">${f.is_enabled?'Active':'Inactive'}</label>
+                            </div>
+                            <div class="form-check form-switch mb-0" title="Turn off to stop new teams from being created — teams already made keep working">
+                                <input class="form-check-input" type="checkbox" id="gf-open-${f.id}" ${f.accepting_new!==false?'checked':''} onchange="toggleGroupFormFlag(${f.id},'accepting_new',this.checked)">
+                                <label class="form-check-label small fw-700" for="gf-open-${f.id}">${f.accepting_new!==false?'Open':'Closed'}</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>`).join('');
+        }
+
+        // One-line summary of an eligibility_json for the admin's form card —
+        // matches checkGroupEligibility()'s own reading of the same shape.
+        function gfEligibilitySummary(json) {
+            let e = {}; try { e = JSON.parse(json || '{}') || {}; } catch (err) {}
+            const bits = [];
+            if (e.class_mode === 'exact') bits.push('same class as leader');
+            else if (e.class_mode === 'band') bits.push('same class group as leader');
+            if (e.same_section) bits.push('same section');
+            if (e.same_house) bits.push('same house');
+            return bits.length ? ' · members must share: ' + bits.join(', ') : '';
+        }
+
+        function gfOnClassModeChange() {
+            document.getElementById('gf-bands-wrap').classList.toggle('hidden', document.getElementById('gf-class-mode').value !== 'band');
+        }
+
+        function gfAddBand(selected = []) {
+            const list = document.getElementById('gf-bands-list');
+            if (!list) return;
+            const row = document.createElement('div');
+            row.className = 'd-flex align-items-center gap-2 gf-band-row';
+            row.innerHTML = `
+                <select multiple class="form-select form-select-sm gf-band-classes" style="min-height:90px">
+                    ${GF_CLASS_OPTIONS.map(c => `<option value="${c}" ${selected.includes(c) ? 'selected' : ''}>${c}</option>`).join('')}
+                </select>
+                <button type="button" onclick="this.closest('.gf-band-row').remove()" class="btn btn-sm btn-outline-danger rounded-pill px-2 flex-shrink-0">×</button>`;
+            list.appendChild(row);
+        }
+
+        // Reads every band row into eligibility_json's `bands` array — empty
+        // (nothing selected) rows are dropped so an admin who added then
+        // emptied a row doesn't end up with a stray band nothing can match.
+        function gfReadBands() {
+            return Array.from(document.querySelectorAll('#gf-bands-list .gf-band-classes'))
+                .map(sel => Array.from(sel.selectedOptions).map(o => o.value))
+                .filter(b => b.length);
+        }
+
+        function gfResetEligibilityForm() {
+            document.getElementById('gf-class-mode').value = 'none';
+            document.getElementById('gf-same-section').checked = false;
+            document.getElementById('gf-same-house').checked = false;
+            document.getElementById('gf-bands-list').innerHTML = '';
+            document.getElementById('gf-bands-wrap').classList.add('hidden');
+        }
+
+        function gfLoadEligibilityForm(json) {
+            let e = {}; try { e = JSON.parse(json || '{}') || {}; } catch (err) {}
+            document.getElementById('gf-class-mode').value = e.class_mode || 'none';
+            document.getElementById('gf-same-section').checked = !!e.same_section;
+            document.getElementById('gf-same-house').checked = !!e.same_house;
+            document.getElementById('gf-bands-list').innerHTML = '';
+            (Array.isArray(e.bands) ? e.bands : []).forEach(b => gfAddBand(b));
+            document.getElementById('gf-bands-wrap').classList.toggle('hidden', e.class_mode !== 'band');
+        }
+
+        function gfSerializeEligibility() {
+            return JSON.stringify({
+                class_mode: document.getElementById('gf-class-mode').value,
+                bands: gfReadBands(),
+                same_section: document.getElementById('gf-same-section').checked,
+                same_house: document.getElementById('gf-same-house').checked,
+            });
+        }
+
+        function toggleGroupFormFlag(id, key, value) {
+            portalFetch('save_group_form', { id, [key]: value }).then(res => {
+                if (res && res.result === 'success') loadAdminGroupForms();
+                else { if (typeof showToast === 'function') showToast((res && res.message) || 'Could not update', 'error'); loadAdminGroupForms(); }
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); loadAdminGroupForms(); });
+        }
+
+        function cancelGroupFormEdit() {
+            document.getElementById('gf-editing-id').value = '';
+            document.getElementById('gf-title').value = '';
+            document.getElementById('gf-icon').value = '';
+            document.getElementById('gf-max-size').value = '4';
+            document.getElementById('gf-members-required').checked = false;
+            document.getElementById('gf-description').value = '';
+            document.getElementById('gf-is-enabled').checked = true;
+            document.getElementById('gf-accepting-new').checked = true;
+            gfResetEligibilityForm();
+            _activeFieldsContainerId = 'gf-fields-list';
+            document.getElementById('gf-fields-list').innerHTML = '';
+        }
+
+        function editGroupForm(i) {
+            const f = ALL_GROUP_FORMS[i];
+            _activeFieldsContainerId = 'gf-fields-list';
+            document.getElementById('gf-editing-id').value = f.id;
+            document.getElementById('gf-title').value = f.title || '';
+            document.getElementById('gf-icon').value = f.icon_class || '';
+            document.getElementById('gf-max-size').value = f.max_team_size || 4;
+            document.getElementById('gf-members-required').checked = !!f.members_required;
+            document.getElementById('gf-description').value = f.description || '';
+            document.getElementById('gf-is-enabled').checked = f.is_enabled !== false;
+            document.getElementById('gf-accepting-new').checked = f.accepting_new !== false;
+            gfLoadEligibilityForm(f.eligibility_json);
+            document.getElementById('gf-fields-list').innerHTML = '';
+            let fields = [];
+            try { fields = JSON.parse(f.fields_json || '[]'); } catch (e) {}
+            fields.forEach(fld => addTabRow(fld.type === 'group_label' ? 'label' : 'field', fld));
+            refreshAllShowIfControllers();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function saveGroupForm() {
+            const id = document.getElementById('gf-editing-id').value.trim();
+            const title = document.getElementById('gf-title').value.trim();
+            if (!title) return alert('Title required');
+            const { fields, optionless } = serializeFieldsFromContainer('gf-fields-list');
+            if (optionless.length) {
+                if (!confirm(`These dropdown/checkbox fields have no options and will show as empty:\n\n• ${optionless.join('\n• ')}\n\nAdd comma-separated options in the "Options" box. Save anyway?`)) return;
+            }
+            const cfg = {
+                id: id || undefined,
+                title,
+                description: document.getElementById('gf-description').value.trim(),
+                icon_class: document.getElementById('gf-icon').value.trim() || 'bi-people-fill',
+                max_team_size: Number(document.getElementById('gf-max-size').value) || 4,
+                members_required: document.getElementById('gf-members-required').checked,
+                fields_json: JSON.stringify(fields),
+                eligibility_json: gfSerializeEligibility(),
+                is_enabled: document.getElementById('gf-is-enabled').checked,
+                accepting_new: document.getElementById('gf-accepting-new').checked,
+            };
+            const btn = document.querySelector('[onclick="saveGroupForm()"]');
+            const btnHtml = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving…'; }
+            portalFetch('save_group_form', cfg).then(res => {
+                if (res && res.result === 'success') {
+                    if (typeof showToast === 'function') showToast('Group Form saved', 'success'); else alert('Saved!');
+                    cancelGroupFormEdit();
+                    loadAdminGroupForms();
+                } else {
+                    if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+                    const msg = (res && res.message) || 'Save failed — please retry.';
+                    if (typeof showToast === 'function') showToast(msg, 'error'); else alert(msg);
+                }
+            }).catch(() => {
+                if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+                if (typeof showToast === 'function') showToast('Network error while saving — please retry.', 'error');
+            });
+        }
+
+        function deleteGroupFormConfig(id) {
+            if (!confirm('Delete this Group Form?\n\nEvery team, member and invite under it is deleted too. This cannot be undone.')) return;
+            portalFetch('delete_group_form', { id }).then(res => {
+                if (res && res.result === 'success') loadAdminGroupForms();
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Delete failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error while deleting', 'error'); });
+        }
+
+        // ── Admin: View every team under one Group Form ─────────────────────────
+        let _adminRosterFormId = null;
+        function openGroupRoster(groupFormId) {
+            _adminRosterFormId = groupFormId;
+            const form = ALL_GROUP_FORMS.find(f => f.id === groupFormId);
+            document.getElementById('admin-group-roster-title').textContent = 'Teams — ' + (form ? form.title : '');
+            document.getElementById('admin-group-roster').classList.remove('hidden');
+            document.getElementById('admin-group-roster-list').innerHTML = '<p class="text-muted small">Loading…</p>';
+            portalFetch('get_group_form_roster', { group_form_id: groupFormId }).then(res => {
+                if (!res || res.result !== 'success') { document.getElementById('admin-group-roster-list').innerHTML = `<p class="text-danger small">${(res && res.message) || 'Failed to load'}</p>`; return; }
+                renderAdminGroupRoster(res.teams || [], form);
+            }).catch(() => { document.getElementById('admin-group-roster-list').innerHTML = '<p class="text-danger small">Network error</p>'; });
+            document.getElementById('admin-group-roster').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function closeGroupRoster() {
+            document.getElementById('admin-group-roster').classList.add('hidden');
+            _adminRosterFormId = null;
+        }
+
+        function renderAdminGroupRoster(teams, form) {
+            const host = document.getElementById('admin-group-roster-list');
+            if (!teams.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams have been created for this form yet.</p>'; return; }
+            const maxSize = form ? form.max_team_size : null;
+            host.innerHTML = teams.map(t => {
+                const complete = maxSize ? t.members.length >= maxSize : true;
+                const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+                return `
+                <div class="card p-3 shadow-sm border-0 ${t.status === 'disbanded' ? 'opacity-50' : ''}">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <strong>${nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id}</strong>'s team
+                            ${t.status === 'disbanded' ? ' <span class="badge bg-secondary rounded-pill" style="font-size:0.6rem">Disbanded</span>' : ''}
+                            ${t.is_locked ? ' <span class="badge bg-dark rounded-pill" style="font-size:0.6rem">Locked</span>' : ''}
+                            ${!complete && form && form.members_required ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Incomplete</span>' : ''}
+                            <div class="small text-muted" style="font-size:0.72rem">${t.members.length}${maxSize ? '/' + maxSize : ''} members${t.pending_invites.length ? ' · ' + t.pending_invites.length + ' pending invite(s)' : ''}</div>
+                        </div>
+                        ${t.status !== 'disbanded' ? `
+                        <div class="d-flex gap-2">
+                            <button onclick="setTeamLockAdmin(${t.id}, ${!t.is_locked})" class="btn btn-xs ${t.is_locked ? 'btn-outline-dark' : 'btn-dark'} rounded-pill px-3">${t.is_locked ? 'Unlock' : 'Lock'}</button>
+                            <button onclick="disbandTeamAdmin(${t.id})" class="btn btn-xs btn-outline-danger rounded-pill px-3">Disband</button>
+                        </div>` : ''}
+                    </div>
+                    <div class="mt-2 d-flex flex-wrap gap-2">
+                        ${t.members.map(m => `<span class="badge bg-light text-dark border rounded-pill px-3 py-2">${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</span>`).join('')}
+                        ${t.pending_invites.map(inv => `<span class="badge bg-light text-muted border rounded-pill px-3 py-2 fst-italic">${nameOf(inv.profile) || inv.invited_student_id} (pending)</span>`).join('')}
+                    </div>
+                    ${Object.keys(t.group_data || {}).length ? `<div class="mt-2 small" style="font-size:0.75rem">${Object.entries(t.group_data).map(([k, v]) => `<div><span class="text-muted">${k.replace(/_/g,' ')}:</span> <strong>${v}</strong></div>`).join('')}</div>` : ''}
+                </div>`;
+            }).join('');
+        }
+
+        function setTeamLockAdmin(teamId, locked) {
+            portalFetch('set_team_lock', { team_id: teamId, locked }).then(res => {
+                if (res && res.result === 'success') openGroupRoster(_adminRosterFormId);
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        function disbandTeamAdmin(teamId) {
+            if (!confirm('Disband this team?\n\nEvery member is removed (freed to join another team) but the team stays on record for history.')) return;
+            portalFetch('admin_disband_team', { team_id: teamId }).then(res => {
+                if (res && res.result === 'success') openGroupRoster(_adminRosterFormId);
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
         }
 
@@ -5152,7 +5750,7 @@
             <button type="button" onclick="this.closest('.draggable-row').remove()" class="btn btn-outline-danger border-0" title="Delete"><i class="bi bi-trash3-fill"></i></button>`;
 
         function addTabRow(type, data = null) {
-            const container = document.getElementById('fields-list');
+            const container = document.getElementById(_activeFieldsContainerId);
             const row = document.createElement('div');
             row.className = 'row g-3 mb-3 p-4 border rounded-4 bg-white align-items-center draggable-row shadow-sm';
             row.id = `f-row-${container.children.length}`;
@@ -5209,8 +5807,15 @@
         // ── Select / Duplicate / Cut / Copy / Paste for the field builder ───────────
         let _activeFieldRow = null;
         let _fieldClipboard = null;
+        // Which #…-fields-list container the row builder (addTabRow and everything
+        // below that acts on ".draggable-row") is currently working in — the same
+        // builder is shared between the ordinary Tab editor (#fields-list) and the
+        // Group Form editor (#gf-fields-list); only one is ever open at a time, so
+        // one shared pointer is enough instead of threading a container id through
+        // every function.
+        let _activeFieldsContainerId = 'fields-list';
         function setActiveField(row) {
-            document.querySelectorAll('#fields-list .draggable-row').forEach(r => { r.style.outline = ''; r.style.background = ''; });
+            document.querySelectorAll(`#${_activeFieldsContainerId} .draggable-row`).forEach(r => { r.style.outline = ''; r.style.background = ''; });
             row.style.outline = '2px solid var(--primary)';
             row.style.background = '#f0fdf9';
             _activeFieldRow = row;
@@ -5284,7 +5889,7 @@
             if (key !== 'x' && key !== 'c' && key !== 'v') return;
             const activeTag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
             if (['input', 'textarea', 'select'].includes(activeTag)) return;
-            if (!document.getElementById('fields-list')) return; // only on the tab builder screen
+            if (!document.getElementById(_activeFieldsContainerId)) return; // only when a field builder is open
             if (key === 'v') { e.preventDefault(); _pasteAfter(_activeFieldRow); return; }
             if (!_activeFieldRow) return;
             e.preventDefault();
@@ -5302,7 +5907,7 @@
             const sz = (s) => s.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
             const out = [];
             let cl = '';
-            document.querySelectorAll('#fields-list .draggable-row').forEach(row => {
+            document.querySelectorAll(`#${_activeFieldsContainerId} .draggable-row`).forEach(row => {
                 const type = row.querySelector('.f-type')?.value;
                 if (type === 'group_label') { const l = row.querySelector('input[type="text"]')?.value.trim(); if (l) cl = sz(l); return; }
                 const label = row.querySelector('input[placeholder*="Label"]')?.value.trim();
@@ -5330,7 +5935,7 @@
 
         function refreshAllShowIfControllers() {
             const keys = getBuilderFieldKeys();
-            document.querySelectorAll('#fields-list .showif-field, #fields-list .showif-field2').forEach(sel => {
+            document.querySelectorAll(`#${_activeFieldsContainerId} .showif-field, #${_activeFieldsContainerId} .showif-field2`).forEach(sel => {
                 populateShowIfSelect(sel, sel.value, keys);
             });
         }
@@ -5354,18 +5959,17 @@
             if(rule) { row.querySelector('.rule-op').value = rule.operator; row.querySelector('.rule-val').value = rule.value; }
         }
 
-        function saveNewTab() {
-            const name = document.getElementById('new-tab-name').value.trim();
-            const icon = document.getElementById('new-tab-icon').value.trim() || 'bi-journal-text';
-            const edit = document.getElementById('new-tab-editable').checked;
-            if (!name) return alert("Title required");
+        // Reads every ".draggable-row" out of one field-builder container and turns
+        // it into a fields_json-shaped array — shared by the ordinary Tab builder
+        // (#fields-list, via saveNewTab) and the Group Form builder (#gf-fields-list,
+        // via saveGroupForm), so a field row means exactly the same thing to both.
+        function serializeFieldsFromContainer(containerId) {
             const fields = []; let cl = '';
             const sz = (s) => s.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
-            const readShowIf = _readRowShowIf;
             const optionless = [];
-            document.querySelectorAll('#fields-list .draggable-row').forEach(row => {
+            document.querySelectorAll(`#${containerId} .draggable-row`).forEach(row => {
                 const type = row.querySelector('.f-type').value;
-                const showIf = readShowIf(row);
+                const showIf = _readRowShowIf(row);
                 if (type === 'group_label') {
                     const l = row.querySelector('input[type="text"]').value.trim();
                     if(l) { const g = { type:'group_label', label:l }; if (showIf) g.show_if = showIf; fields.push(g); cl = sz(l); }
@@ -5384,6 +5988,15 @@
                     }
                 }
             });
+            return { fields, optionless };
+        }
+
+        function saveNewTab() {
+            const name = document.getElementById('new-tab-name').value.trim();
+            const icon = document.getElementById('new-tab-icon').value.trim() || 'bi-journal-text';
+            const edit = document.getElementById('new-tab-editable').checked;
+            if (!name) return alert("Title required");
+            const { fields, optionless } = serializeFieldsFromContainer('fields-list');
             if (optionless.length) {
                 if (!confirm(`These dropdown/checkbox fields have no options and will show as empty:\n\n• ${optionless.join('\n• ')}\n\nAdd comma-separated options in the "Options" box. Save anyway?`)) return;
             }
@@ -5420,6 +6033,7 @@
         }
 
         function editTab(i) {
+            _activeFieldsContainerId = 'fields-list'; // in case a Group Form edit left this pointed elsewhere
             const t = allTabs[i];
             document.getElementById('new-tab-name').value = t.tab_name;
             document.getElementById('new-tab-icon').value = t.icon_class || '';

@@ -416,6 +416,59 @@ async function evalRule(rule, profile, submissions) {
   }
 }
 
+// Group Forms' two RPCs (group_team_create / group_team_accept_invite) raise a
+// short, specific code as their exception message when a business rule blocks
+// the request — sb() only ever returns the raw response body text on error
+// (never a parsed object), so this pulls the Postgres message back out of that
+// text and turns a known code into something worth showing a student.
+const GROUP_RPC_ERRORS = {
+  ALREADY_IN_TEAM: 'You are already in a team for this form — leave it first if you want to join another.',
+  TEAM_FULL: 'This team is already full.',
+  TEAM_LOCKED: 'This team has been locked by the admin.',
+  TEAM_NOT_ACTIVE: 'This team no longer exists.',
+  INVITE_NOT_PENDING: 'This invite has already been answered.',
+  INVITE_NOT_FOUND: 'Invite not found.',
+  NOT_YOUR_INVITE: 'This is not your invite.',
+};
+function rpcErrorMessage(rawError) {
+  let msg = rawError;
+  try { msg = JSON.parse(rawError)?.message || rawError; } catch (_) {}
+  return GROUP_RPC_ERRORS[msg] || msg || 'Something went wrong.';
+}
+
+// A Group Form's eligibility_json says who a leader may invite, RELATIVE TO
+// THE LEADER — never an absolute list of allowed classes/houses, since the
+// rule is meant to travel with whoever leads (a class-6 student's team stays
+// within class 6, a class-9 student's team stays within class 9, with no
+// separate rule needed per class). Shape:
+//   { class_mode: 'none'|'exact'|'band', bands: [[cls,cls,…], …], same_section: bool, same_house: bool }
+// class_mode 'band' groups several classes into one eligible unit (e.g.
+// Six/Seven/Eight banded together) — the invited student's class only has to
+// fall in the SAME band as the leader's, not match it exactly; which band
+// applies is worked out automatically from where each class sits in the
+// admin's band list, never chosen by hand per invite.
+function checkGroupEligibility(eligibilityJson, leader, candidate) {
+  let elig = {};
+  try { elig = JSON.parse(eligibilityJson || '{}') || {}; } catch (_) {}
+  if (elig.class_mode === 'exact') {
+    if (String(leader.class || '') !== String(candidate.class || '')) {
+      return { ok: false, reason: 'must be in the same class as you' };
+    }
+  } else if (elig.class_mode === 'band') {
+    const bands = Array.isArray(elig.bands) ? elig.bands : [];
+    const bandIndexOf = cls => bands.findIndex(b => Array.isArray(b) && b.includes(cls));
+    const li = bandIndexOf(leader.class), ci = bandIndexOf(candidate.class);
+    if (li < 0 || li !== ci) return { ok: false, reason: "must be in your team's class group" };
+  }
+  if (elig.same_section && String(leader.section || '') !== String(candidate.section || '')) {
+    return { ok: false, reason: 'must be in the same section as you' };
+  }
+  if (elig.same_house && String(leader.house || '') !== String(candidate.house || '')) {
+    return { ok: false, reason: 'must be in the same house as you' };
+  }
+  return { ok: true };
+}
+
 // NOTE: set_gp_credentials saves {api_key, environment, channel} (see
 // get_tracking_config, which reads those same names back for display) --
 // this used to read gp_api_key/gp_env/gp_channel instead, a leftover from
@@ -978,6 +1031,18 @@ export async function POST(req) {
     return NextResponse.json(['student_id', 'student_name', 'class', 'section', 'roll']);
   }
 
+  // ── Distinct class/house values (admin's Group Form eligibility builder) ───
+  // Full table scan via sbAllRows, not a single ?limit=N page — a class or
+  // house that happens to sort past the first page must never silently be
+  // unpickable when building a band.
+  if (action === 'get_class_house_options') {
+    const rows = await sbAllRows('students_data?select=class,house');
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    const classes = [...new Set(rows.map(r => r.class).filter(Boolean))].sort();
+    const houses = [...new Set(rows.map(r => r.house).filter(Boolean))].sort();
+    return NextResponse.json({ result: 'success', classes, houses });
+  }
+
   // ── Bulk import: check which student_ids already exist (no writes) ─────────
   if (action === 'preview_bulk_import') {
     const ids = Array.isArray(payload.student_ids) ? [...new Set(payload.student_ids.map(String).filter(Boolean))] : [];
@@ -1195,6 +1260,368 @@ export async function POST(req) {
   // ── Delete Tab ────────────────────────────────────────────────────────────
   if (action === 'delete_tab') {
     const r = await sb(`portal_tabs?tab_name=eq.${encodeURIComponent(payload.tab_name)}`, 'DELETE');
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Group Forms — a form where several students submit ONE shared entry
+  // together as a team (e.g. Science Fair sign-up), instead of the ordinary
+  // portal_tabs one-student-alone form above. "Group Form" is the admin-built
+  // template (group_forms); "Team" is the student-built roster inside one
+  // (group_form_teams / group_form_team_members / group_form_team_invites).
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── Get Group Forms ──────────────────────────────────────────────────────
+  // Same double-duty shape as get_tabs above: no student_id (or 'admin') ->
+  // every form, enabled or not, for the admin list. A real student_id -> only
+  // enabled forms, each annotated with that student's own status for it
+  // (no_team / has_pending_invite / is_leader / is_member) so the client can
+  // add a nav entry per form and badge the ones needing a response, the same
+  // way get_tabs lets the student nav loop work off one call.
+  if (action === 'get_group_forms') {
+    const { student_id } = payload;
+    const rows = await sb('group_forms?order=sort_order.asc,id.asc');
+    if (rows?.error) return NextResponse.json([]);
+    const allForms = Array.isArray(rows) ? rows : [];
+    if (!student_id || student_id === 'admin') return NextResponse.json(allForms);
+
+    const enabled = allForms.filter(f => f.is_enabled);
+    if (!enabled.length) return NextResponse.json([]);
+    const [memberRows, inviteRows] = await Promise.all([
+      sb(`group_form_team_members?student_id=eq.${encodeURIComponent(student_id)}&select=group_form_id,role`),
+      sb(`group_form_team_invites?invited_student_id=eq.${encodeURIComponent(student_id)}&status=eq.pending&select=group_form_id`),
+    ]);
+    const memberByForm = {};
+    (Array.isArray(memberRows) ? memberRows : []).forEach(m => { memberByForm[m.group_form_id] = m; });
+    const invitedForms = new Set((Array.isArray(inviteRows) ? inviteRows : []).map(i => i.group_form_id));
+
+    const annotated = enabled.map(f => {
+      const mem = memberByForm[f.id];
+      const my_status = mem ? (mem.role === 'leader' ? 'is_leader' : 'is_member')
+        : (invitedForms.has(f.id) ? 'has_pending_invite' : 'no_team');
+      return { ...f, my_status };
+    });
+    return NextResponse.json(annotated);
+  }
+
+  // ── Save Group Form Config (admin) ──────────────────────────────────────
+  if (action === 'save_group_form') {
+    const { id, title, description, icon_class, max_team_size, members_required, fields_json, eligibility_json, is_enabled, accepting_new, sort_order } = payload;
+
+    if (id) {
+      // Partial update — only touches fields actually sent. The admin card's
+      // Active/Open switches call this with just {id, is_enabled} or
+      // {id, accepting_new}; building a full row with fallback defaults for
+      // everything else here would silently overwrite the title, icon and —
+      // worst of all — reset fields_json to '[]', wiping every field on a
+      // simple toggle click.
+      const rowData = { updated_at: new Date().toISOString() };
+      if (title !== undefined) {
+        if (!String(title).trim()) return NextResponse.json({ result: 'error', message: 'Title required.' });
+        rowData.title = String(title).trim();
+      }
+      if (description !== undefined) rowData.description = description || null;
+      if (icon_class !== undefined) rowData.icon_class = icon_class || 'bi-people-fill';
+      if (max_team_size !== undefined) rowData.max_team_size = Math.max(1, Number(max_team_size) || 4);
+      if (members_required !== undefined) rowData.members_required = !!members_required;
+      if (fields_json !== undefined) rowData.fields_json = fields_json || '[]';
+      if (eligibility_json !== undefined) rowData.eligibility_json = eligibility_json || '{}';
+      if (is_enabled !== undefined) rowData.is_enabled = !!is_enabled;
+      if (accepting_new !== undefined) rowData.accepting_new = !!accepting_new;
+      if (sort_order !== undefined) rowData.sort_order = sort_order;
+      const writeRes = await sb(`group_forms?id=eq.${encodeURIComponent(id)}`, 'PATCH', rowData);
+      if (writeRes?.error) return NextResponse.json({ result: 'error', message: 'Save failed: ' + writeRes.error });
+      return NextResponse.json({ result: 'success' });
+    }
+
+    // Create — every field gets a real default.
+    if (!title || !String(title).trim()) return NextResponse.json({ result: 'error', message: 'Title required.' });
+    const rowData = {
+      title: String(title).trim(),
+      description: description || null,
+      icon_class: icon_class || 'bi-people-fill',
+      max_team_size: Math.max(1, Number(max_team_size) || 4),
+      members_required: !!members_required,
+      fields_json: fields_json || '[]',
+      eligibility_json: eligibility_json || '{}',
+      is_enabled: is_enabled !== false,
+      accepting_new: accepting_new !== false,
+      sort_order: sort_order || 0,
+    };
+    const writeRes = await sb('group_forms', 'POST', rowData);
+    if (writeRes?.error) return NextResponse.json({ result: 'error', message: 'Save failed: ' + writeRes.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Delete Group Form (admin) ────────────────────────────────────────────
+  // Cascades to every team/member/invite under it, same as delete_tab
+  // cascading to portal_submissions above.
+  if (action === 'delete_group_form') {
+    const { id } = payload;
+    if (!id) return NextResponse.json({ result: 'error', message: 'id required.' });
+    await sb(`group_form_team_invites?group_form_id=eq.${encodeURIComponent(id)}`, 'DELETE');
+    await sb(`group_form_team_members?group_form_id=eq.${encodeURIComponent(id)}`, 'DELETE');
+    await sb(`group_form_teams?group_form_id=eq.${encodeURIComponent(id)}`, 'DELETE');
+    const r = await sb(`group_forms?id=eq.${encodeURIComponent(id)}`, 'DELETE');
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── View every team under one Group Form (admin) ─────────────────────────
+  if (action === 'get_group_form_roster') {
+    const { group_form_id } = payload;
+    if (!group_form_id) return NextResponse.json({ result: 'error', message: 'group_form_id required.' });
+    const [teams, members, invites] = await Promise.all([
+      sb(`group_form_teams?group_form_id=eq.${encodeURIComponent(group_form_id)}&order=created_at.asc`),
+      sb(`group_form_team_members?group_form_id=eq.${encodeURIComponent(group_form_id)}`),
+      sb(`group_form_team_invites?group_form_id=eq.${encodeURIComponent(group_form_id)}&status=eq.pending`),
+    ]);
+    if (teams?.error) return NextResponse.json({ result: 'error', message: teams.error });
+    const memberList = Array.isArray(members) ? members : [];
+    const inviteList = Array.isArray(invites) ? invites : [];
+    const ids = [...new Set([...memberList.map(m => m.student_id), ...inviteList.map(i => i.invited_student_id)])];
+    const nameById = {};
+    if (ids.length) {
+      const profRows = await sb(`students_data?student_id=in.(${ids.map(encodeURIComponent).join(',')})&select=student_id,student_name,class,section`);
+      (Array.isArray(profRows) ? profRows : []).forEach(p => { nameById[p.student_id] = p; });
+    }
+    const membersByTeam = {};
+    memberList.forEach(m => { (membersByTeam[m.team_id] = membersByTeam[m.team_id] || []).push({ ...m, profile: nameById[m.student_id] || null }); });
+    const invitesByTeam = {};
+    inviteList.forEach(i => { (invitesByTeam[i.team_id] = invitesByTeam[i.team_id] || []).push({ ...i, profile: nameById[i.invited_student_id] || null }); });
+    const teamRows = (Array.isArray(teams) ? teams : []).map(t => ({
+      ...t,
+      members: membersByTeam[t.id] || [],
+      pending_invites: invitesByTeam[t.id] || [],
+    }));
+    return NextResponse.json({ result: 'success', teams: teamRows });
+  }
+
+  // ── Lock / Unlock one team (admin) ───────────────────────────────────────
+  if (action === 'set_team_lock') {
+    const { team_id, locked } = payload;
+    if (!team_id) return NextResponse.json({ result: 'error', message: 'team_id required.' });
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { is_locked: !!locked, updated_at: new Date().toISOString() });
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Force-disband a team (admin escape hatch) ────────────────────────────
+  if (action === 'admin_disband_team') {
+    const { team_id } = payload;
+    if (!team_id) return NextResponse.json({ result: 'error', message: 'team_id required.' });
+    await sb(`group_form_team_invites?team_id=eq.${encodeURIComponent(team_id)}&status=eq.pending`, 'PATCH', { status: 'cancelled', responded_at: new Date().toISOString() });
+    await sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}`, 'DELETE');
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { status: 'disbanded', updated_at: new Date().toISOString() });
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Look up a student by ID (student-callable) ───────────────────────────
+  // Same narrow allowlist as get_public_profile above, for the same reason:
+  // a leader typing a teammate's ID should see enough to confirm it's the
+  // right person (name, class, section) and nothing more sensitive.
+  if (action === 'lookup_student_by_id') {
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    const fields = 'student_id,student_name,class,section,roll';
+    const rows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=${fields}`);
+    if (!rows?.error && rows.length) return NextResponse.json({ result: 'success', data: rows[0] });
+    return NextResponse.json({ result: 'error', message: 'No student found with that ID.' });
+  }
+
+  // ── Get my team (or my pending invite) for one Group Form ───────────────
+  if (action === 'get_my_team') {
+    const { student_id, group_form_id } = payload;
+    if (!student_id || !group_form_id) return NextResponse.json({ result: 'error', message: 'student_id and group_form_id required.' });
+
+    const memberRow = await sb(`group_form_team_members?group_form_id=eq.${encodeURIComponent(group_form_id)}&student_id=eq.${encodeURIComponent(student_id)}`);
+    if (memberRow?.error) return NextResponse.json({ result: 'error', message: memberRow.error });
+
+    if (memberRow.length) {
+      const teamId = memberRow[0].team_id;
+      const [teamRows, allMembers, pendingInvites] = await Promise.all([
+        sb(`group_form_teams?id=eq.${encodeURIComponent(teamId)}`),
+        sb(`group_form_team_members?team_id=eq.${encodeURIComponent(teamId)}`),
+        sb(`group_form_team_invites?team_id=eq.${encodeURIComponent(teamId)}&status=eq.pending`),
+      ]);
+      const team = (!teamRows?.error && teamRows[0]) ? teamRows[0] : null;
+      if (!team) return NextResponse.json({ result: 'success', team: null, invite: null });
+      const memberList = Array.isArray(allMembers) ? allMembers : [];
+      const inviteList = Array.isArray(pendingInvites) ? pendingInvites : [];
+      const ids = [...new Set([...memberList.map(m => m.student_id), ...inviteList.map(i => i.invited_student_id)])];
+      const nameById = {};
+      if (ids.length) {
+        const profRows = await sb(`students_data?student_id=in.(${ids.map(encodeURIComponent).join(',')})&select=student_id,student_name,class,section`);
+        (Array.isArray(profRows) ? profRows : []).forEach(p => { nameById[p.student_id] = p; });
+      }
+      return NextResponse.json({
+        result: 'success',
+        is_leader: team.leader_student_id === student_id,
+        team: {
+          ...team,
+          members: memberList.map(m => ({ ...m, profile: nameById[m.student_id] || null })),
+          pending_invites: inviteList.map(i => ({ ...i, profile: nameById[i.invited_student_id] || null })),
+        },
+        invite: null,
+      });
+    }
+
+    const inviteRows = await sb(`group_form_team_invites?group_form_id=eq.${encodeURIComponent(group_form_id)}&invited_student_id=eq.${encodeURIComponent(student_id)}&status=eq.pending&order=created_at.desc`);
+    if (!inviteRows?.error && inviteRows.length) {
+      const invite = inviteRows[0];
+      const leaderRows = await sb(`group_form_teams?id=eq.${encodeURIComponent(invite.team_id)}`);
+      const leaderId = (!leaderRows?.error && leaderRows[0]) ? leaderRows[0].leader_student_id : null;
+      let leaderProfile = null;
+      if (leaderId) {
+        const p = await sb(`students_data?student_id=eq.${encodeURIComponent(leaderId)}&select=student_id,student_name,class,section`);
+        leaderProfile = (!p?.error && p[0]) ? p[0] : null;
+      }
+      return NextResponse.json({ result: 'success', team: null, invite: { ...invite, leader_profile: leaderProfile } });
+    }
+
+    return NextResponse.json({ result: 'success', team: null, invite: null });
+  }
+
+  // ── Create a team (become its leader) ────────────────────────────────────
+  if (action === 'create_group') {
+    const { student_id, group_form_id, group_data } = payload;
+    if (!student_id || !group_form_id) return NextResponse.json({ result: 'error', message: 'student_id and group_form_id required.' });
+    const formRows = await sb(`group_forms?id=eq.${encodeURIComponent(group_form_id)}`);
+    const form = (!formRows?.error && formRows[0]) ? formRows[0] : null;
+    if (!form) return NextResponse.json({ result: 'error', message: 'Group form not found.' });
+    if (!form.is_enabled) return NextResponse.json({ result: 'error', message: 'This form is not available.' });
+    if (!form.accepting_new) return NextResponse.json({ result: 'error', message: 'Registration is closed for new teams.' });
+
+    const res = await sb('rpc/group_team_create', 'POST', { p_group_form_id: group_form_id, p_leader_id: student_id, p_group_data: group_data || {} });
+    if (res?.error) return NextResponse.json({ result: 'error', message: rpcErrorMessage(res.error) });
+    return NextResponse.json({ result: 'success', team_id: res });
+  }
+
+  // ── Invite a teammate (leader only) ──────────────────────────────────────
+  if (action === 'invite_to_group') {
+    const { team_id, leader_id, invited_student_id } = payload;
+    if (!team_id || !leader_id || !invited_student_id) return NextResponse.json({ result: 'error', message: 'team_id, leader_id and invited_student_id required.' });
+    if (invited_student_id === leader_id) return NextResponse.json({ result: 'error', message: "You can't invite yourself." });
+
+    const teamRows = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`);
+    const team = (!teamRows?.error && teamRows[0]) ? teamRows[0] : null;
+    if (!team) return NextResponse.json({ result: 'error', message: 'Team not found.' });
+    if (team.leader_student_id !== leader_id) return NextResponse.json({ result: 'error', message: 'Only the team leader can invite.' });
+    if (team.status !== 'active') return NextResponse.json({ result: 'error', message: 'This team no longer exists.' });
+    if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+
+    const [formRows, memberRows, existingMember, lookup, leaderRows] = await Promise.all([
+      sb(`group_forms?id=eq.${encodeURIComponent(team.group_form_id)}`),
+      sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}`),
+      sb(`group_form_team_members?group_form_id=eq.${encodeURIComponent(team.group_form_id)}&student_id=eq.${encodeURIComponent(invited_student_id)}`),
+      sb(`students_data?student_id=eq.${encodeURIComponent(invited_student_id)}&select=student_id,class,section,house`),
+      sb(`students_data?student_id=eq.${encodeURIComponent(leader_id)}&select=student_id,class,section,house`),
+    ]);
+    const form = (!formRows?.error && formRows[0]) ? formRows[0] : null;
+    if (!form) return NextResponse.json({ result: 'error', message: 'Group form not found.' });
+    const currentCount = Array.isArray(memberRows) ? memberRows.length : 0;
+    if (currentCount >= form.max_team_size) return NextResponse.json({ result: 'error', message: 'This team is already full.' });
+    if (!existingMember?.error && existingMember.length) return NextResponse.json({ result: 'error', message: 'This student is already in a team for this form.' });
+    if (lookup?.error || !lookup.length) return NextResponse.json({ result: 'error', message: 'No student found with that ID.' });
+
+    const leaderProfile = (!leaderRows?.error && leaderRows[0]) ? leaderRows[0] : {};
+    const eligibility = checkGroupEligibility(form.eligibility_json, leaderProfile, lookup[0]);
+    if (!eligibility.ok) return NextResponse.json({ result: 'error', message: `This student ${eligibility.reason} for this form.` });
+
+    const r = await sb(
+      'group_form_team_invites?on_conflict=team_id,invited_student_id', 'POST',
+      { group_form_id: team.group_form_id, team_id, invited_by: leader_id, invited_student_id, status: 'pending', responded_at: null },
+      { Prefer: 'resolution=merge-duplicates,return=representation' }
+    );
+    if (r?.error) return NextResponse.json({ result: 'error', message: 'Could not send the invite: ' + r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Cancel a pending invite (leader only) ────────────────────────────────
+  if (action === 'cancel_invite') {
+    const { invite_id, leader_id } = payload;
+    if (!invite_id || !leader_id) return NextResponse.json({ result: 'error', message: 'invite_id and leader_id required.' });
+    const rows = await sb(`group_form_team_invites?id=eq.${encodeURIComponent(invite_id)}`);
+    const invite = (!rows?.error && rows[0]) ? rows[0] : null;
+    if (!invite) return NextResponse.json({ result: 'error', message: 'Invite not found.' });
+    if (invite.invited_by !== leader_id) return NextResponse.json({ result: 'error', message: 'Only the inviting leader can cancel this.' });
+    if (invite.status !== 'pending') return NextResponse.json({ result: 'error', message: 'This invite has already been answered.' });
+    const r = await sb(`group_form_team_invites?id=eq.${encodeURIComponent(invite_id)}`, 'PATCH', { status: 'cancelled', responded_at: new Date().toISOString() });
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Accept or decline an invite ──────────────────────────────────────────
+  if (action === 'respond_to_invite') {
+    const { invite_id, student_id, accept } = payload;
+    if (!invite_id || !student_id) return NextResponse.json({ result: 'error', message: 'invite_id and student_id required.' });
+
+    if (!accept) {
+      const rows = await sb(`group_form_team_invites?id=eq.${encodeURIComponent(invite_id)}`);
+      const invite = (!rows?.error && rows[0]) ? rows[0] : null;
+      if (!invite) return NextResponse.json({ result: 'error', message: 'Invite not found.' });
+      if (invite.invited_student_id !== student_id) return NextResponse.json({ result: 'error', message: 'This is not your invite.' });
+      if (invite.status !== 'pending') return NextResponse.json({ result: 'error', message: 'This invite has already been answered.' });
+      const r = await sb(`group_form_team_invites?id=eq.${encodeURIComponent(invite_id)}`, 'PATCH', { status: 'declined', responded_at: new Date().toISOString() });
+      if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+      return NextResponse.json({ result: 'success' });
+    }
+
+    const res = await sb('rpc/group_team_accept_invite', 'POST', { p_invite_id: invite_id, p_student_id: student_id });
+    if (res?.error) return NextResponse.json({ result: 'error', message: rpcErrorMessage(res.error) });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Leave a team (self) or remove a member (leader) ──────────────────────
+  // One action serves both: actor_id must be either the member themselves or
+  // the team's leader. The leader can't leave this way — they disband instead
+  // (disband_group), since removing "themselves" would orphan the team.
+  if (action === 'leave_group') {
+    const { team_id, student_id, actor_id } = payload;
+    if (!team_id || !student_id || !actor_id) return NextResponse.json({ result: 'error', message: 'team_id, student_id and actor_id required.' });
+    const teamRows = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`);
+    const team = (!teamRows?.error && teamRows[0]) ? teamRows[0] : null;
+    if (!team) return NextResponse.json({ result: 'error', message: 'Team not found.' });
+    if (actor_id !== student_id && actor_id !== team.leader_student_id) return NextResponse.json({ result: 'error', message: 'Not allowed.' });
+    if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+    if (student_id === team.leader_student_id) return NextResponse.json({ result: 'error', message: 'The leader cannot leave — disband the team instead.' });
+
+    const r = await sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}&student_id=eq.${encodeURIComponent(student_id)}`, 'DELETE');
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Disband a team (leader only) ─────────────────────────────────────────
+  // Removes every member (freeing them to join elsewhere) but keeps the team
+  // row itself, marked 'disbanded', for history — never hard-deleted.
+  if (action === 'disband_group') {
+    const { team_id, leader_id } = payload;
+    if (!team_id || !leader_id) return NextResponse.json({ result: 'error', message: 'team_id and leader_id required.' });
+    const teamRows = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`);
+    const team = (!teamRows?.error && teamRows[0]) ? teamRows[0] : null;
+    if (!team) return NextResponse.json({ result: 'error', message: 'Team not found.' });
+    if (team.leader_student_id !== leader_id) return NextResponse.json({ result: 'error', message: 'Only the team leader can disband this team.' });
+    if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+
+    await sb(`group_form_team_invites?team_id=eq.${encodeURIComponent(team_id)}&status=eq.pending`, 'PATCH', { status: 'cancelled', responded_at: new Date().toISOString() });
+    await sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}`, 'DELETE');
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { status: 'disbanded', updated_at: new Date().toISOString() });
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Edit the team's own field answers (leader only) ──────────────────────
+  if (action === 'update_group_data') {
+    const { team_id, leader_id, group_data } = payload;
+    if (!team_id || !leader_id) return NextResponse.json({ result: 'error', message: 'team_id and leader_id required.' });
+    const teamRows = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`);
+    const team = (!teamRows?.error && teamRows[0]) ? teamRows[0] : null;
+    if (!team) return NextResponse.json({ result: 'error', message: 'Team not found.' });
+    if (team.leader_student_id !== leader_id) return NextResponse.json({ result: 'error', message: 'Only the team leader can edit these details.' });
+    if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { group_data: group_data || {}, updated_at: new Date().toISOString() });
     if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
     return NextResponse.json({ result: 'success' });
   }
