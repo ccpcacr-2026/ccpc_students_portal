@@ -4792,6 +4792,42 @@
         }
 
         // ── State: no team yet, no invite ────────────────────────────────────────
+        // One "teammate" row in the Create Team screen's member picker — a Student
+        // ID input, a "Look up" button that previews the name/class via
+        // lookup_student_by_id (server-side eligibility isn't checked until the
+        // actual invite goes out, right after team creation), and a remove button.
+        function _gfMemberRowHtml() {
+            return `<div class="gf-member-row">
+                <div class="d-flex gap-2 align-items-center">
+                    <input type="text" class="form-control gf-member-id" placeholder="Teammate's Student ID" oninput="this.closest('.gf-member-row').querySelector('.gf-member-preview').innerHTML=''">
+                    <button type="button" class="btn btn-outline-dark flex-shrink-0" onclick="_gfVerifyMemberRow(this)">Look up</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="this.closest('.gf-member-row').remove()" title="Remove"><i class="bi bi-x-lg"></i></button>
+                </div>
+                <div class="gf-member-preview small mt-1"></div>
+            </div>`;
+        }
+        function _gfAddMemberRow(tid, max) {
+            const list = document.getElementById(`${tid}-member-rows`);
+            if (!list || list.children.length >= max) return;
+            const wrap = document.createElement('div');
+            wrap.innerHTML = _gfMemberRowHtml();
+            list.appendChild(wrap.firstElementChild);
+            const addBtn = document.getElementById(`${tid}-add-member-btn`);
+            if (addBtn) addBtn.classList.toggle('hidden', list.children.length >= max);
+        }
+        function _gfVerifyMemberRow(btn) {
+            const row = btn.closest('.gf-member-row');
+            const input = row.querySelector('.gf-member-id');
+            const preview = row.querySelector('.gf-member-preview');
+            const studentId = input.value.trim();
+            if (!studentId) { preview.innerHTML = ''; return; }
+            preview.innerHTML = '<span class="text-muted">Looking up…</span>';
+            portalFetch('lookup_student_by_id', { student_id: studentId }).then(res => {
+                if (res && res.result === 'success') preview.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>${gfNameOf(res.data, studentId)}</span>`;
+                else preview.innerHTML = `<span class="text-danger">${(res && res.message) || 'Not found.'}</span>`;
+            }).catch(() => { preview.innerHTML = '<span class="text-danger">Network error.</span>'; });
+        }
+
         function renderCreateTeamView(tid, pane, form) {
             if (!form.accepting_new) {
                 pane.innerHTML = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>
@@ -4800,6 +4836,7 @@
             }
             let fields = [];
             try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
+            const maxTeammates = Math.max(0, (form.max_team_size || 1) - 1);
             let html = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>`;
             if (form.description) html += `<p class="text-muted small mb-4">${form.description}</p>`;
             html += `<div class="alert alert-info rounded-4 border-0 mb-4" style="font-size:0.8rem"><i class="bi bi-info-circle-fill me-2"></i>Create your team below (up to ${form.max_team_size} members including you). Teammates must log in and accept before they count.</div>`;
@@ -4814,9 +4851,20 @@
                 if (f.type === 'profile_picture') { html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
                 html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, '', false)}</div>`;
             });
-            html += `</div><button type="submit" class="btn btn-premium-save w-100 mt-5"><i class="bi bi-people-fill me-2"></i>Create Your Team</button>
+            html += `</div>`;
+            if (maxTeammates > 0) {
+                const eligNote = gfEligibilitySummary(form.eligibility_json);
+                html += `<div class="mt-4 p-3 rounded-4 border bg-light">
+                    <span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Team Members</span>
+                    <p class="small text-muted mt-1 mb-2" style="font-size:0.72rem">Add up to ${maxTeammates} teammate${maxTeammates===1?'':'s'} by Student ID — look them up to confirm, then create your team. They'll get an invite to accept once it's created${eligNote ? `. Eligible teammates${eligNote}` : ''}.</p>
+                    <div id="${tid}-member-rows" class="d-flex flex-column gap-2"></div>
+                    <button type="button" class="btn btn-sm btn-outline-dark rounded-pill px-3 mt-2" id="${tid}-add-member-btn" onclick="_gfAddMemberRow('${tid}', ${maxTeammates})"><i class="bi bi-plus"></i> Add teammate</button>
+                </div>`;
+            }
+            html += `<button type="submit" class="btn btn-premium-save w-100 mt-5"><i class="bi bi-people-fill me-2"></i>Create Your Team</button>
                 <div class="status-msg text-center mt-3 small fw-bold"></div></form></div>`;
             pane.innerHTML = html;
+            if (maxTeammates > 0) _gfAddMemberRow(tid, maxTeammates);
 
             const form_el = document.getElementById(`${tid}-form`);
             if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, form_el);
@@ -4832,14 +4880,30 @@
                 fields.filter(f => f.type === 'checkbox').forEach(f => {
                     group_data[f.data_key] = Array.from(form_el.querySelectorAll(`input[name="${f.data_key}"]:checked`)).map(c => c.value).join(', ');
                 });
+                const memberIds = Array.from(document.querySelectorAll(`#${tid}-member-rows .gf-member-id`))
+                    .map(inp => inp.value.trim()).filter(Boolean);
                 if (btn) btn.disabled = true;
                 if (status) status.textContent = 'Creating your team…';
                 portalFetch('create_group', { student_id: loggedInStudent.student_id, group_form_id: form.id, group_data }).then(res => {
-                    if (res && res.result === 'success') { renderGroupFormPane(tid, pane, form); if (typeof showToast === 'function') showToast('Team created', 'success'); }
-                    else {
+                    if (!res || res.result !== 'success') {
                         if (btn) btn.disabled = false;
                         if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = (res && res.message) || 'Could not create the team.'; }
+                        return;
                     }
+                    if (!memberIds.length) { renderGroupFormPane(tid, pane, form); if (typeof showToast === 'function') showToast('Team created', 'success'); return; }
+                    if (status) status.textContent = 'Team created — sending invites…';
+                    Promise.all(memberIds.map(sid =>
+                        portalFetch('invite_to_group', { team_id: res.team_id, leader_id: loggedInStudent.student_id, invited_student_id: sid })
+                            .then(r => ({ sid, ok: !!(r && r.result === 'success'), message: r && r.message }))
+                            .catch(() => ({ sid, ok: false, message: 'Network error' }))
+                    )).then(results => {
+                        const failed = results.filter(r => !r.ok);
+                        if (typeof showToast === 'function') {
+                            showToast(failed.length ? `Team created — ${failed.length} invite${failed.length===1?'':'s'} failed` : 'Team created and invites sent', failed.length ? 'error' : 'success');
+                            failed.forEach((f, i) => setTimeout(() => showToast(`${f.sid}: ${f.message || 'Could not invite'}`, 'error'), 400 * (i + 1)));
+                        }
+                        renderGroupFormPane(tid, pane, form);
+                    });
                 }).catch(() => { if (btn) btn.disabled = false; if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = 'Network error.'; } });
             };
         }
@@ -5835,50 +5899,68 @@
         // Turn a show_if.value into a display string for the editor
         function _showIfValStr(v) { return Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v)); }
 
-        // Normalise any stored show_if into up to 2 editor condition slots, plus
-        // the mode ('show'/'hide', from `negate`) and logic ('all'/'any') — both
-        // stashed as extra properties on the returned array so existing c[0]/c[1]
-        // callers keep working unchanged.
+        // Normalise any stored show_if into { conds, mode, logic } for the editor —
+        // conds is now an UNBOUNDED array (the underlying {all:[...]}/{any:[...]}
+        // shape always supported any number of conditions; only the old 2-slot UI
+        // capped it at 2). mode is 'show'/'hide' (from `negate`), logic is 'all'/'any'.
         function parseShowIfForEditor(showIf) {
-            const empty = [{ field: '', value: '' }, { field: '', value: '' }];
-            empty.mode = 'show'; empty.logic = 'all';
-            if (!showIf) return empty;
+            if (!showIf) return { conds: [], mode: 'show', logic: 'all' };
             const list = Array.isArray(showIf.all) ? showIf.all
                 : Array.isArray(showIf.any) ? showIf.any
                 : [{ field: showIf.field, value: showIf.value }];
-            const result = [
-                { field: list[0]?.field || '', value: _showIfValStr(list[0]?.value) },
-                { field: list[1]?.field || '', value: _showIfValStr(list[1]?.value) },
-            ];
-            result.mode = showIf.negate ? 'hide' : 'show';
-            result.logic = Array.isArray(showIf.any) ? 'any' : 'all';
-            return result;
+            return {
+                conds: list.map(c => ({ field: c?.field || '', value: _showIfValStr(c?.value) })),
+                mode: showIf.negate ? 'hide' : 'show',
+                logic: Array.isArray(showIf.any) ? 'any' : 'all',
+            };
+        }
+
+        // One condition row (field select + value input + remove button) inside a
+        // showif-block. The field select is left with just a placeholder here —
+        // populateShowIfSelect() fills in the real option list once the row is in
+        // the DOM (see addTabRow and _addShowIfCondRow).
+        function _showIfCondRowHtml(value) {
+            return `<div class="showif-cond d-flex align-items-center gap-2 flex-wrap" style="font-size:0.78rem">
+                <select class="form-select form-select-sm showif-field" style="max-width:200px"><option value="">(choose a field)</option></select>
+                <span class="text-muted fw-700">=</span>
+                <input type="text" class="form-control form-control-sm showif-value" placeholder="value" style="max-width:140px" value="${(value||'').replace(/"/g,'&quot;')}">
+                <button type="button" class="btn btn-sm btn-outline-danger border-0 showif-remove-cond" onclick="this.closest('.showif-cond').remove()" title="Remove condition"><i class="bi bi-x-lg"></i></button>
+            </div>`;
+        }
+        // "+ Add condition" button handler — appends one more blank condition row
+        // to an already-rendered showif-block, for building 3+-condition rules.
+        function _addShowIfCondRow(block) {
+            const list = block.querySelector('.showif-conditions');
+            const wrap = document.createElement('div');
+            wrap.innerHTML = _showIfCondRowHtml('');
+            const row = wrap.firstElementChild;
+            list.appendChild(row);
+            populateShowIfSelect(row.querySelector('.showif-field'), '');
         }
 
         // Build the "Show only if" line for a field/label row, pre-filled from data.show_if
         function showIfBlockHtml(data) {
             const c = parseShowIfForEditor(data?.show_if);
             const has = !!(data && data.show_if);
+            const conds = c.conds.length ? c.conds : [{ field: '', value: '' }];
+            const condsHtml = conds.map(cond => _showIfCondRowHtml(cond.value)).join('');
             return `
                 <div class="col-12 mt-2">
                     <div class="showif-block ${has ? '' : 'hidden'} p-2 rounded-3" style="background:#f1f5f9">
-                        <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:0.78rem">
+                        <div class="d-flex align-items-center gap-2 flex-wrap mb-2" style="font-size:0.78rem">
                             <i class="bi bi-diagram-3-fill text-muted"></i>
                             <select class="form-select form-select-sm showif-mode fw-800" style="max-width:100px">
                                 <option value="show" ${c.mode==='show'?'selected':''}>Show if</option>
                                 <option value="hide" ${c.mode==='hide'?'selected':''}>Hide if</option>
                             </select>
-                            <select class="form-select form-select-sm showif-field" style="max-width:200px"><option value="">(always visible)</option></select>
-                            <span class="text-muted fw-700">=</span>
-                            <input type="text" class="form-control form-control-sm showif-value" placeholder="value" style="max-width:140px" value="${(c[0].value||'').replace(/"/g,'&quot;')}">
-                            <select class="form-select form-select-sm showif-logic fw-800" style="max-width:80px">
-                                <option value="all" ${c.logic==='all'?'selected':''}>AND</option>
-                                <option value="any" ${c.logic==='any'?'selected':''}>OR</option>
+                            <select class="form-select form-select-sm showif-logic fw-800" style="max-width:75px">
+                                <option value="all" ${c.logic==='all'?'selected':''}>ALL</option>
+                                <option value="any" ${c.logic==='any'?'selected':''}>ANY</option>
                             </select>
-                            <select class="form-select form-select-sm showif-field2" style="max-width:200px"><option value="">(none)</option></select>
-                            <span class="text-muted fw-700">=</span>
-                            <input type="text" class="form-control form-control-sm showif-value2" placeholder="value" style="max-width:140px" value="${(c[1].value||'').replace(/"/g,'&quot;')}">
+                            <span class="text-muted small">of these match:</span>
                         </div>
+                        <div class="showif-conditions d-flex flex-column gap-2">${condsHtml}</div>
+                        <button type="button" class="btn btn-sm btn-outline-dark rounded-pill px-2 mt-2" style="font-size:0.7rem" onclick="_addShowIfCondRow(this.closest('.showif-block'))"><i class="bi bi-plus"></i> Add condition</button>
                     </div>
                     <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 mt-1 showif-toggle" style="font-size:0.72rem" onclick="const b=this.previousElementSibling; b.classList.toggle('hidden'); this.innerHTML = b.classList.contains('hidden') ? '<i class=\\'bi bi-plus-circle\\'></i> Add condition (dependable)' : '<i class=\\'bi bi-dash-circle\\'></i> Hide condition';">${has ? '<i class="bi bi-dash-circle"></i> Hide condition' : '<i class="bi bi-plus-circle"></i> Add condition (dependable)'}</button>
                 </div>`;
@@ -5990,13 +6072,12 @@
                     ${showIfBlockHtml(data)}`;
             }
             container.appendChild(row);
-            // Populate this row's own two controller dropdowns and pre-select stored values.
+            // Populate this row's own condition dropdowns and pre-select stored values.
             // (Do NOT cascade a full refresh of every other row here — for a large tab like
             // Guardian (60+ fields) that turns an O(N) load into O(N^3) and freezes the tab.
             // editTab() does one single refreshAllShowIfControllers() after the whole batch.)
             const cond = parseShowIfForEditor(data?.show_if);
-            populateShowIfSelect(row.querySelector('.showif-field'), cond[0].field);
-            populateShowIfSelect(row.querySelector('.showif-field2'), cond[1].field);
+            row.querySelectorAll('.showif-field').forEach((sel, i) => populateShowIfSelect(sel, cond.conds[i]?.field || ''));
             return row;
         }
 
@@ -6022,13 +6103,12 @@
         function _readRowShowIf(row) {
             const mode = row.querySelector('.showif-mode')?.value || 'show';
             const logic = row.querySelector('.showif-logic')?.value || 'all';
-            const f1 = row.querySelector('.showif-field')?.value.trim();
-            const v1 = row.querySelector('.showif-value')?.value.trim();
-            const f2 = row.querySelector('.showif-field2')?.value.trim();
-            const v2 = row.querySelector('.showif-value2')?.value.trim();
             const conds = [];
-            if (f1) conds.push({ field: f1, value: v1 });
-            if (f2) conds.push({ field: f2, value: v2 });
+            row.querySelectorAll('.showif-cond').forEach(condRow => {
+                const f = condRow.querySelector('.showif-field')?.value.trim();
+                const v = condRow.querySelector('.showif-value')?.value.trim();
+                if (f) conds.push({ field: f, value: v });
+            });
             if (conds.length === 0) return null;
             const result = conds.length === 1 ? { ...conds[0] } : { [logic]: conds };
             if (mode === 'hide') result.negate = true;
@@ -6122,9 +6202,8 @@
         // to compute the field list once for the whole batch instead of once per <select>.
         function populateShowIfSelect(sel, selectedKey, keys) {
             if (!sel) return;
-            const isSecond = sel.classList.contains('showif-field2');
             keys = keys || getBuilderFieldKeys();
-            sel.innerHTML = `<option value="">${isSecond ? '(none)' : '(always visible)'}</option>` +
+            sel.innerHTML = `<option value="">(choose a field)</option>` +
                 keys.map(k => `<option value="${k.key}" ${k.key===selectedKey?'selected':''}>${k.label}</option>`).join('');
             if (selectedKey && !keys.some(k => k.key === selectedKey)) {
                 // Preserve a reference to a field that may sit later in the list
@@ -6134,7 +6213,7 @@
 
         function refreshAllShowIfControllers() {
             const keys = getBuilderFieldKeys();
-            document.querySelectorAll(`#${_activeFieldsContainerId} .showif-field, #${_activeFieldsContainerId} .showif-field2`).forEach(sel => {
+            document.querySelectorAll(`#${_activeFieldsContainerId} .showif-field`).forEach(sel => {
                 populateShowIfSelect(sel, sel.value, keys);
             });
         }
