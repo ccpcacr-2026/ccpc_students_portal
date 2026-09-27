@@ -4742,6 +4742,7 @@
         // form (no_team / has_pending_invite / is_leader / is_member) in one call.
         function loadStudentGroupForms() {
             const gfEpoch = uiEpoch;
+            const content = document.getElementById('portal-content-wrapper');
             portalFetch('get_group_forms', { student_id: loggedInStudent.student_id }).then(forms => {
                 if (gfEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
                 if (!Array.isArray(forms)) return;
