@@ -4805,9 +4805,14 @@
             html += `<div class="alert alert-info rounded-4 border-0 mb-4" style="font-size:0.8rem"><i class="bi bi-info-circle-fill me-2"></i>Create your team below (up to ${form.max_team_size} members including you). Teammates must log in and accept before they count.</div>`;
             html += `<form id="${tid}-form"><div class="row g-4">`;
             fields.forEach(f => {
-                if (f.type === 'group_label') { html += `<div class="col-12 mt-4"><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
+                const showIfAttr = f.show_if ? ` data-show-if='${JSON.stringify(f.show_if).replace(/'/g, "&#39;")}'` : '';
+                // Nothing's been typed yet on a fresh create form, so every show_if
+                // starts evaluated against "" — evaluateConditionalFields() below
+                // (plus its change listener) keeps it in sync as the leader fills fields in.
+                const hideStyle = (f.show_if && !matchShowIfData(f.show_if, () => '')) ? ' style="display:none"' : '';
+                if (f.type === 'group_label') { html += `<div class="col-12 mt-4"${showIfAttr}${hideStyle}><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
                 if (f.type === 'profile_picture') { html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
-                html += `<div class="col-md-6">${renderField(f, '', false)}</div>`;
+                html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, '', false)}</div>`;
             });
             html += `</div><button type="submit" class="btn btn-premium-save w-100 mt-5"><i class="bi bi-people-fill me-2"></i>Create Your Team</button>
                 <div class="status-msg text-center mt-3 small fw-bold"></div></form></div>`;
@@ -4815,6 +4820,10 @@
 
             const form_el = document.getElementById(`${tid}-form`);
             if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, form_el);
+            if (form_el) {
+                evaluateConditionalFields(form_el);
+                form_el.addEventListener('change', () => evaluateConditionalFields(form_el));
+            }
             if (form_el) form_el.onsubmit = (e) => {
                 e.preventDefault();
                 const btn = form_el.querySelector('button[type="submit"]');
@@ -4899,12 +4908,15 @@
             if (fields.length) {
                 html += `<form id="${tid}-gd-form" class="mt-4"><span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Team details</span><div class="row g-4 mt-1">`;
                 fields.forEach(f => {
-                    if (f.type === 'group_label') { html += `<div class="col-12 mt-2"><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
+                    const gdLookup = (fld) => (team.group_data || {})[fld] || '';
+                    const showIfAttr = f.show_if ? ` data-show-if='${JSON.stringify(f.show_if).replace(/'/g, "&#39;")}'` : '';
+                    const hideStyle = (f.show_if && !matchShowIfData(f.show_if, gdLookup)) ? ' style="display:none"' : '';
+                    if (f.type === 'group_label') { html += `<div class="col-12 mt-2"${showIfAttr}${hideStyle}><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
                     // This is the leader's own field to fill — a non-leader viewing
                     // the (read-only) team details has nothing of theirs to upload here.
                     if (f.type === 'profile_picture') { if (isLeader) html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
-                    const val = (team.group_data || {})[f.data_key] || '';
-                    html += `<div class="col-md-6">${renderField(f, val, locked || !isLeader)}</div>`;
+                    const val = gdLookup(f.data_key);
+                    html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, locked || !isLeader)}</div>`;
                 });
                 html += `</div>${(!locked && isLeader) ? `<button type="submit" class="btn btn-premium-save w-100 mt-4"><i class="bi bi-cloud-arrow-up-fill me-2"></i>Save Team Details</button>` : ''}<div class="status-msg text-center mt-3 small fw-bold"></div></form>`;
             }
@@ -4917,6 +4929,13 @@
             html += `</div>`;
             pane.innerHTML = html;
 
+            if (fields.length) {
+                const _gdCondForm = document.getElementById(`${tid}-gd-form`);
+                if (_gdCondForm) {
+                    evaluateConditionalFields(_gdCondForm);
+                    _gdCondForm.addEventListener('change', () => evaluateConditionalFields(_gdCondForm));
+                }
+            }
             if (fields.length && !locked && isLeader) {
                 const gdForm = document.getElementById(`${tid}-gd-form`);
                 if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, gdForm);
