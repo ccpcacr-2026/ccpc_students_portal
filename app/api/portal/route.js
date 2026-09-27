@@ -1286,8 +1286,29 @@ export async function POST(req) {
     const allForms = Array.isArray(rows) ? rows : [];
     if (!student_id || student_id === 'admin') return NextResponse.json(allForms);
 
-    const enabled = allForms.filter(f => f.is_enabled);
+    let enabled = allForms.filter(f => f.is_enabled);
     if (!enabled.length) return NextResponse.json([]);
+
+    // Same tab-level "Logic Rules" gate portal_tabs uses (condition_json),
+    // reusing the exact same evalRule() evaluator get_tabs uses above — e.g.
+    // "class equals Ten" — so a Group Form can be restricted to a subset of
+    // students instead of showing to everyone once enabled.
+    const profileRows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=*`);
+    const profile = (profileRows && !profileRows.error && profileRows[0]) ? profileRows[0] : { student_id };
+    const subRows = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(student_id)}&select=tab_name`);
+    const submissions = subRows?.error ? [] : subRows;
+    const conditionVisible = [];
+    for (const f of enabled) {
+      let condObj = null;
+      try { condObj = JSON.parse(f.condition_json || '{}'); } catch {}
+      if (!condObj || !(condObj.rules?.length)) { conditionVisible.push(f); continue; }
+      const results = await Promise.all(condObj.rules.map(r => evalRule(r, profile, submissions)));
+      const pass = condObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
+      if (pass) conditionVisible.push(f);
+    }
+    enabled = conditionVisible;
+    if (!enabled.length) return NextResponse.json([]);
+
     const [memberRows, inviteRows] = await Promise.all([
       sb(`group_form_team_members?student_id=eq.${encodeURIComponent(student_id)}&select=group_form_id,role`),
       sb(`group_form_team_invites?invited_student_id=eq.${encodeURIComponent(student_id)}&status=eq.pending&select=group_form_id`),
@@ -1307,7 +1328,7 @@ export async function POST(req) {
 
   // ── Save Group Form Config (admin) ──────────────────────────────────────
   if (action === 'save_group_form') {
-    const { id, title, description, icon_class, max_team_size, members_required, fields_json, eligibility_json, is_enabled, accepting_new, sort_order } = payload;
+    const { id, title, description, icon_class, max_team_size, members_required, fields_json, eligibility_json, condition_json, is_enabled, accepting_new, sort_order } = payload;
 
     if (id) {
       // Partial update — only touches fields actually sent. The admin card's
@@ -1327,6 +1348,7 @@ export async function POST(req) {
       if (members_required !== undefined) rowData.members_required = !!members_required;
       if (fields_json !== undefined) rowData.fields_json = fields_json || '[]';
       if (eligibility_json !== undefined) rowData.eligibility_json = eligibility_json || '{}';
+      if (condition_json !== undefined) rowData.condition_json = condition_json || '{}';
       if (is_enabled !== undefined) rowData.is_enabled = !!is_enabled;
       if (accepting_new !== undefined) rowData.accepting_new = !!accepting_new;
       if (sort_order !== undefined) rowData.sort_order = sort_order;
@@ -1345,6 +1367,7 @@ export async function POST(req) {
       members_required: !!members_required,
       fields_json: fields_json || '[]',
       eligibility_json: eligibility_json || '{}',
+      condition_json: condition_json || '{}',
       is_enabled: is_enabled !== false,
       accepting_new: accepting_new !== false,
       sort_order: sort_order || 0,

@@ -1168,6 +1168,14 @@
                                             <div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="gf-accepting-new" checked><label class="form-check-label fw-800">Accepting new teams</label></div></div>
                                         </div>
                                         <div class="mt-4 p-4 bg-light rounded-4 border">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="small fw-800 text-muted uppercase">Logic Rules</span>
+                                                <button type="button" onclick="addConditionRow(null, 'gf-conditions-list')" class="btn btn-xs btn-dark rounded-pill px-3">+ Add Rule</button>
+                                            </div>
+                                            <p class="small text-muted mb-3" style="font-size:0.7rem">Show this form's nav entry only to students matching every rule below — e.g. CLASS EQUALS Ten. Leave empty to show it to every student (still gated by "Visible to students" above). This is separate from "Who can a leader invite?" below, which only affects an already-visible form's team roster.</p>
+                                            <div id="gf-conditions-list" class="d-flex flex-column gap-3"></div>
+                                        </div>
+                                        <div class="mt-4 p-4 bg-light rounded-4 border">
                                             <span class="small fw-800 text-muted text-uppercase" style="letter-spacing:0.06em">Who can a leader invite?</span>
                                             <p class="small text-muted mt-1 mb-3" style="font-size:0.7rem">Every rule is relative to the LEADER — e.g. "same class" means the same class AS WHOEVER LEADS that team, not one fixed class for everyone.</p>
                                             <div class="row g-3 align-items-center">
@@ -5352,6 +5360,7 @@
             document.getElementById('gf-description').value = '';
             document.getElementById('gf-is-enabled').checked = true;
             document.getElementById('gf-accepting-new').checked = true;
+            document.getElementById('gf-conditions-list').innerHTML = '';
             gfResetEligibilityForm();
             _activeFieldsContainerId = 'gf-fields-list';
             document.getElementById('gf-fields-list').innerHTML = '';
@@ -5369,6 +5378,8 @@
             document.getElementById('gf-description').value = f.description || '';
             document.getElementById('gf-is-enabled').checked = f.is_enabled !== false;
             document.getElementById('gf-accepting-new').checked = f.accepting_new !== false;
+            document.getElementById('gf-conditions-list').innerHTML = '';
+            try { const cl = JSON.parse(f.condition_json || '{}'); (cl.rules || []).forEach(r => addConditionRow(r, 'gf-conditions-list')); } catch (e) {}
             gfLoadEligibilityForm(f.eligibility_json);
             document.getElementById('gf-fields-list').innerHTML = '';
             let fields = [];
@@ -5395,6 +5406,7 @@
                 members_required: document.getElementById('gf-members-required').checked,
                 fields_json: JSON.stringify(fields),
                 eligibility_json: gfSerializeEligibility(),
+                condition_json: JSON.stringify({ logic: 'AND', rules: readConditionRules('gf-conditions-list') }),
                 is_enabled: document.getElementById('gf-is-enabled').checked,
                 accepting_new: document.getElementById('gf-accepting-new').checked,
             };
@@ -6107,8 +6119,11 @@
             });
         }
 
-        function addConditionRow(rule = null) {
-            const container = document.getElementById('conditions-list');
+        // Shared by the Tab builder's Logic Rules (#conditions-list) and the
+        // Group Form builder's own (#gf-conditions-list) — containerId picks
+        // which one a given "+ Add Rule" button targets.
+        function addConditionRow(rule = null, containerId = 'conditions-list') {
+            const container = document.getElementById(containerId);
             const row = document.createElement('div');
             row.className = 'row g-2 align-items-center bg-white p-3 rounded-4 border shadow-sm';
             row.innerHTML = `
@@ -6124,6 +6139,16 @@
                 headers.forEach(h => { const o = document.createElement('option'); o.value = h; o.textContent = h.toUpperCase().replace(/_/g,' '); if(rule?.column === h) o.selected=true; s.appendChild(o); });
             });
             if(rule) { row.querySelector('.rule-op').value = rule.operator; row.querySelector('.rule-val').value = rule.value; }
+        }
+        // Reads every rule row out of one Logic Rules container into a
+        // save-ready array — shared by saveNewTab() and saveGroupForm().
+        function readConditionRules(containerId) {
+            const rs = [];
+            document.querySelectorAll(`#${containerId} .row`).forEach(row => {
+                const col = row.querySelector('.rule-col').value;
+                if (col) rs.push({ column: col, operator: row.querySelector('.rule-op').value, value: row.querySelector('.rule-val').value.trim() });
+            });
+            return rs;
         }
 
         // Reads every ".draggable-row" out of one field-builder container and turns
@@ -6167,11 +6192,7 @@
             if (optionless.length) {
                 if (!confirm(`These dropdown/checkbox fields have no options and will show as empty:\n\n• ${optionless.join('\n• ')}\n\nAdd comma-separated options in the "Options" box. Save anyway?`)) return;
             }
-            const rs = [];
-            document.querySelectorAll('#conditions-list .row').forEach(row => {
-                const col = row.querySelector('.rule-col').value;
-                if(col) rs.push({ column: col, operator: row.querySelector('.rule-op').value, value: row.querySelector('.rule-val').value.trim() });
-            });
+            const rs = readConditionRules('conditions-list');
             const includeFields = Array.from(document.querySelectorAll('#include-fields-list input[type="checkbox"]:checked')).map(c => c.value);
             // Preserve the tab's current active/inactive state when re-saving; only brand-new tabs default to active
             const existingTab = (allTabs || []).find(t => t.tab_name === name);

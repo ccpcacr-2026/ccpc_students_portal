@@ -187,3 +187,10 @@ GRANT ALL ON student.group_forms, student.group_form_teams, student.group_form_t
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA student TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION student.group_team_create(bigint, text, jsonb) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION student.group_team_accept_invite(bigint, text) TO anon, authenticated, service_role;
+
+-- ── Tab-level visibility rules ("Logic Rules") ───────────────────────────────
+-- Group Forms had no equivalent of portal_tabs.condition_json — the nav entry
+-- was shown to EVERY student once is_enabled was on, with no way to restrict
+-- it to e.g. "class = Ten" the way an ordinary Tab can. Same shape, same
+-- evalRule() evaluator, reused as-is from route.js's get_tabs.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS condition_json text NOT NULL DEFAULT '{}';
