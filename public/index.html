@@ -928,14 +928,14 @@
                         <div class="p-4 d-flex justify-content-between align-items-center flex-wrap gap-2 text-white" style="background:linear-gradient(135deg,var(--sidebar-bg),#1a3d28)">
                             <h5 class="m-0 fw-800">Admin Control Console</h5>
                             <div class="nav nav-pills" role="tablist">
-                                <button class="btn btn-sm fw-800 active me-2" data-bs-toggle="tab" data-bs-target="#admin-manage" style="background:rgba(255,255,255,0.18);color:#fff;border-radius:10px;border:none">Setup</button>
+                                <button class="btn btn-sm fw-800 active me-2" data-bs-toggle="tab" data-bs-target="#admin-manage" onclick="_activeFieldsContainerId = 'fields-list';" style="background:rgba(255,255,255,0.18);color:#fff;border-radius:10px;border:none">Setup</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-reports" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Data</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-history" onclick="loadEditHistory()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">History</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-nfc" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">NFC</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-tracking" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Bus</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-notices" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Notices</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-import" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Import</button>
-                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-groups" onclick="loadAdminGroupForms()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Groups</button>
+                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-groups" onclick="_activeFieldsContainerId = 'gf-fields-list'; loadAdminGroupForms()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Groups</button>
                             </div>
                         </div>
                         <div class="p-4 bg-white">
