@@ -450,18 +450,24 @@ function rpcErrorMessage(rawError) {
 function checkGroupEligibility(eligibilityJson, leader, candidate) {
   let elig = {};
   try { elig = JSON.parse(eligibilityJson || '{}') || {}; } catch (_) {}
+  // Which students_data column "exact"/"band" match against — defaults to
+  // 'class' so eligibility_json saved before this existed keeps working
+  // unchanged. Admin picks this from the full header list (get_field_values),
+  // not just class/section/house.
+  const groupField = elig.group_field || 'class';
+  const fieldLabel = groupField.replace(/_/g, ' ');
   if (elig.class_mode === 'exact') {
-    if (String(leader.class || '') !== String(candidate.class || '')) {
-      return { ok: false, reason: 'must be in the same class as you' };
+    if (String(leader[groupField] || '') !== String(candidate[groupField] || '')) {
+      return { ok: false, reason: `must have the same ${fieldLabel} as you` };
     }
   } else if (elig.class_mode === 'band') {
     const bands = Array.isArray(elig.bands) ? elig.bands : [];
     // A band is either the current {name, classes} shape or a legacy bare
     // array of class names (eligibility_json saved before bands had names).
     const bandClasses = b => Array.isArray(b) ? b : (Array.isArray(b.classes) ? b.classes : []);
-    const bandIndexOf = cls => bands.findIndex(b => bandClasses(b).includes(cls));
-    const li = bandIndexOf(leader.class), ci = bandIndexOf(candidate.class);
-    if (li < 0 || li !== ci) return { ok: false, reason: "must be in your team's class group" };
+    const bandIndexOf = val => bands.findIndex(b => bandClasses(b).includes(val));
+    const li = bandIndexOf(leader[groupField]), ci = bandIndexOf(candidate[groupField]);
+    if (li < 0 || li !== ci) return { ok: false, reason: "must be in your team's group" };
   }
   if (elig.same_section && String(leader.section || '') !== String(candidate.section || '')) {
     return { ok: false, reason: 'must be in the same section as you' };
@@ -1058,6 +1064,23 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', classes, houses, sections, classSections });
   }
 
+  // ── Distinct values of an arbitrary students_data column (admin's Group
+  // Form eligibility builder's "Group by" field — any header, not just
+  // class) ─────────────────────────────────────────────────────────────────
+  // `field` becomes a raw column name in the PostgREST select — restricted to
+  // identifier-safe characters so it can only ever reference a real column
+  // (an unknown one just 400s from Postgres, not a security risk) rather than
+  // any kind of query injection.
+  if (action === 'get_field_values') {
+    const field = String(payload?.field || '').trim();
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(field)) return NextResponse.json({ result: 'error', message: 'Invalid field name.' });
+    const rows = await sbAllRows(`students_data?select=${field}`);
+    if (rows?.error) return NextResponse.json({ result: 'error', message: 'Could not read that column — ' + rows.error });
+    const values = [...new Set(rows.map(r => r[field]).filter(v => v !== null && v !== undefined && String(v).trim() !== ''))]
+      .map(String).sort();
+    return NextResponse.json({ result: 'success', values });
+  }
+
   // ── Bulk import: check which student_ids already exist (no writes) ─────────
   if (action === 'preview_bulk_import') {
     const ids = Array.isArray(payload.student_ids) ? [...new Set(payload.student_ids.map(String).filter(Boolean))] : [];
@@ -1455,7 +1478,7 @@ export async function POST(req) {
     const ids = [...new Set([...memberList.map(m => m.student_id), ...inviteList.map(i => i.invited_student_id)])];
     const nameById = {};
     if (ids.length) {
-      const profRows = await sb(`students_data?student_id=in.(${ids.map(encodeURIComponent).join(',')})&select=student_id,student_name,class,section`);
+      const profRows = await sb(`students_data?student_id=in.(${ids.map(encodeURIComponent).join(',')})&select=student_id,student_name,class,section,house,session`);
       (Array.isArray(profRows) ? profRows : []).forEach(p => { nameById[p.student_id] = p; });
     }
     const membersByTeam = {};
@@ -1507,11 +1530,13 @@ export async function POST(req) {
   // picker) — same minimal field set and or=(...ilike...) pattern
   // search_edit_history already uses, just against students_data instead.
   if (action === 'search_students') {
-    // house included (not just class/section/roll) so the teammate picker can
-    // reject an ineligible pick client-side via gfClientCheckEligibility,
-    // without a second round trip — same safe field set get_public_profile
-    // already exposes.
-    const fields = 'student_id,student_name,class,section,roll,house';
+    // house/session included (not just class/section/roll) so the teammate
+    // picker can reject an ineligible pick client-side via
+    // gfClientCheckEligibility, without a second round trip — same safe
+    // field set get_public_profile already exposes. An eligibility rule
+    // grouped by some OTHER column (admin can now pick any header) just
+    // can't be previewed client-side and defers to the server's own check.
+    const fields = 'student_id,student_name,class,section,roll,house,session';
     const { class: klass, section, name, roll } = payload || {};
     const structured = [klass, section, name, roll].some(v => String(v || '').trim());
 
@@ -1559,7 +1584,7 @@ export async function POST(req) {
       const ids = [...new Set([...memberList.map(m => m.student_id), ...inviteList.map(i => i.invited_student_id)])];
       const nameById = {};
       if (ids.length) {
-        const profRows = await sb(`students_data?student_id=in.(${ids.map(encodeURIComponent).join(',')})&select=student_id,student_name,class,section`);
+        const profRows = await sb(`students_data?student_id=in.(${ids.map(encodeURIComponent).join(',')})&select=student_id,student_name,class,section,house,session`);
         (Array.isArray(profRows) ? profRows : []).forEach(p => { nameById[p.student_id] = p; });
       }
       return NextResponse.json({
@@ -1581,7 +1606,7 @@ export async function POST(req) {
       const leaderId = (!leaderRows?.error && leaderRows[0]) ? leaderRows[0].leader_student_id : null;
       let leaderProfile = null;
       if (leaderId) {
-        const p = await sb(`students_data?student_id=eq.${encodeURIComponent(leaderId)}&select=student_id,student_name,class,section`);
+        const p = await sb(`students_data?student_id=eq.${encodeURIComponent(leaderId)}&select=student_id,student_name,class,section,house,session`);
         leaderProfile = (!p?.error && p[0]) ? p[0] : null;
       }
       return NextResponse.json({ result: 'success', team: null, invite: { ...invite, leader_profile: leaderProfile } });
@@ -1622,8 +1647,11 @@ export async function POST(req) {
       sb(`group_forms?id=eq.${encodeURIComponent(team.group_form_id)}`),
       sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}`),
       sb(`group_form_team_members?group_form_id=eq.${encodeURIComponent(team.group_form_id)}&student_id=eq.${encodeURIComponent(invited_student_id)}`),
-      sb(`students_data?student_id=eq.${encodeURIComponent(invited_student_id)}&select=student_id,class,section,house`),
-      sb(`students_data?student_id=eq.${encodeURIComponent(leader_id)}&select=student_id,class,section,house`),
+      // Full row (server-only — never sent to the client verbatim, only fed
+      // into checkGroupEligibility's ok/reason result) since eligibility_json
+      // can now group by ANY students_data column, not just class/section/house.
+      sb(`students_data?student_id=eq.${encodeURIComponent(invited_student_id)}&select=*`),
+      sb(`students_data?student_id=eq.${encodeURIComponent(leader_id)}&select=*`),
     ]);
     const form = (!formRows?.error && formRows[0]) ? formRows[0] : null;
     if (!form) return NextResponse.json({ result: 'error', message: 'Group form not found.' });

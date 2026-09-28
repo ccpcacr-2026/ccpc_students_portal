@@ -1201,20 +1201,25 @@
                                             <span class="small fw-800 text-muted text-uppercase" style="letter-spacing:0.06em">Who can a leader invite?</span>
                                             <p class="small text-muted mt-1 mb-3" style="font-size:0.7rem">Every rule is relative to the LEADER — e.g. "same class" means the same class AS WHOEVER LEADS that team, not one fixed class for everyone.</p>
                                             <div class="row g-3 align-items-center">
-                                                <div class="col-md-5">
+                                                <div class="col-md-4">
                                                     <select id="gf-class-mode" onchange="gfOnClassModeChange()" class="form-select form-select-sm">
-                                                        <option value="none">No class restriction</option>
-                                                        <option value="exact">Must be the exact same class as the leader</option>
-                                                        <option value="band">Must be in the same class group as the leader</option>
+                                                        <option value="none">No restriction</option>
+                                                        <option value="exact">Must have the exact same value as the leader</option>
+                                                        <option value="band">Must be grouped with the leader (named bands)</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-same-section"><label class="form-check-label small fw-700" for="gf-same-section">Same section too</label></div></div>
-                                                <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-same-house"><label class="form-check-label small fw-700" for="gf-same-house">Same house too</label></div></div>
+                                                <div class="col-md-3 hidden" id="gf-group-field-wrap">
+                                                    <select id="gf-group-field" onchange="gfOnGroupFieldChange()" class="form-select form-select-sm">
+                                                        <option value="class">Class</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-2"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-same-section"><label class="form-check-label small fw-700" for="gf-same-section">Same section too</label></div></div>
+                                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-same-house"><label class="form-check-label small fw-700" for="gf-same-house">Same house too</label></div></div>
                                             </div>
                                             <div id="gf-bands-wrap" class="mt-3 hidden">
-                                                <p class="small text-muted mb-2" style="font-size:0.7rem">Group classes into named bands — e.g. "Group A" for Six/Seven/Eight, "Group B" for Nine/Ten. A leader in Seven may then invite anyone from Six, Seven or Eight, but not Nine. The name shows automatically as "Your Group" on the fill-up page — no separate dropdown field needed for it.</p>
+                                                <p class="small text-muted mb-2" style="font-size:0.7rem">Group values into named bands — e.g. "Group A" for Six/Seven/Eight, "Group B" for Nine/Ten (when grouping by Class). A leader in Seven may then invite anyone from Six, Seven or Eight, but not Nine. The name shows automatically as "Your Group" on the fill-up page — no separate dropdown field needed for it.</p>
                                                 <div id="gf-bands-list" class="d-flex flex-column gap-2"></div>
-                                                <button type="button" onclick="gfAddBand()" class="btn btn-sm btn-outline-dark rounded-pill px-3 mt-2">+ Add Class Group</button>
+                                                <button type="button" onclick="gfAddBand()" class="btn btn-sm btn-outline-dark rounded-pill px-3 mt-2">+ Add Group</button>
                                             </div>
                                         </div>
                                         <div class="row g-2 mt-4">
@@ -5064,7 +5069,7 @@
                 const hideStyle = (f.show_if && !matchShowIfData(f.show_if, () => '')) ? ' style="display:none"' : '';
                 if (f.type === 'group_label') { html += `<div class="col-12 mt-4"${showIfAttr}${hideStyle}><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
                 if (f.type === 'profile_picture') { html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
-                if (f.type === 'class_group') { html += _gfClassGroupFieldHtml(f, loggedInStudent && loggedInStudent.class, form.eligibility_json); return; }
+                if (f.type === 'class_group') { html += _gfClassGroupFieldHtml(f, loggedInStudent && loggedInStudent[gfGetGroupField(form.eligibility_json)], form.eligibility_json); return; }
                 html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, '', false)}</div>`;
             });
             html += `</div>`;
@@ -5192,7 +5197,7 @@
                     // This is the leader's own field to fill — a non-leader viewing
                     // the (read-only) team details has nothing of theirs to upload here.
                     if (f.type === 'profile_picture') { if (isLeader) html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
-                    if (f.type === 'class_group') { html += _gfClassGroupFieldHtml(f, (team.members.find(m => m.role === 'leader') || {}).profile?.class, form.eligibility_json); return; }
+                    if (f.type === 'class_group') { html += _gfClassGroupFieldHtml(f, ((team.members.find(m => m.role === 'leader') || {}).profile || {})[gfGetGroupField(form.eligibility_json)], form.eligibility_json); return; }
                     const val = gdLookup(f.data_key);
                     html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, locked || !isLeader)}</div>`;
                 });
@@ -5529,9 +5534,48 @@
             if (GF_CLASS_OPTIONS.length) return Promise.resolve();
             if (_gfClassOptionsPromise) return _gfClassOptionsPromise;
             _gfClassOptionsPromise = portalFetch('get_class_house_options', {}).then(opts => {
-                if (opts && opts.result === 'success') { GF_CLASS_OPTIONS = opts.classes || []; GF_CLASS_SECTIONS = opts.classSections || {}; }
+                if (opts && opts.result === 'success') {
+                    GF_CLASS_OPTIONS = opts.classes || [];
+                    GF_CLASS_SECTIONS = opts.classSections || {};
+                    GF_GROUP_FIELD_VALUES.class = GF_CLASS_OPTIONS;
+                }
             }).catch(() => {}).finally(() => { _gfClassOptionsPromise = null; });
             return _gfClassOptionsPromise;
+        }
+
+        // ── "Group by" (eligibility bands can now group by ANY students_data
+        // column, not just class) ────────────────────────────────────────────
+        let GF_ALL_HEADERS = [];
+        let _gfHeadersPromise = null;
+        let GF_GROUP_FIELD_VALUES = {}; // {fieldName: [distinct value, ...]}
+        let _gfFieldValuesPromises = {};
+        // Lazily loads (and caches) every students_data column name, to
+        // populate the "Group by" dropdown.
+        function _gfEnsureAllHeaders() {
+            if (GF_ALL_HEADERS.length) return Promise.resolve();
+            if (_gfHeadersPromise) return _gfHeadersPromise;
+            _gfHeadersPromise = portalFetch('get_student_data_headers', {}).then(headers => {
+                GF_ALL_HEADERS = Array.isArray(headers) ? headers : [];
+                const sel = document.getElementById('gf-group-field');
+                if (sel) {
+                    const current = sel.value || 'class';
+                    sel.innerHTML = GF_ALL_HEADERS.map(h => `<option value="${h}">${h.replace(/_/g,' ')}</option>`).join('') || '<option value="class">class</option>';
+                    sel.value = current;
+                }
+            }).catch(() => {}).finally(() => { _gfHeadersPromise = null; });
+            return _gfHeadersPromise;
+        }
+        // Lazily loads (and caches) the distinct values of one column — 'class'
+        // reuses _gfEnsureClassOptions instead of a fresh query, since that
+        // list is already fetched school-wide for the teammate search too.
+        function _gfEnsureGroupFieldValues(field) {
+            if (field === 'class') return _gfEnsureClassOptions();
+            if (GF_GROUP_FIELD_VALUES[field]) return Promise.resolve();
+            if (_gfFieldValuesPromises[field]) return _gfFieldValuesPromises[field];
+            _gfFieldValuesPromises[field] = portalFetch('get_field_values', { field }).then(res => {
+                if (res && res.result === 'success') GF_GROUP_FIELD_VALUES[field] = res.values || [];
+            }).catch(() => {}).finally(() => { delete _gfFieldValuesPromises[field]; });
+            return _gfFieldValuesPromises[field];
         }
 
         function loadAdminGroupForms() {
@@ -5590,24 +5634,50 @@
         function gfClientCheckEligibility(eligibilityJson, leader, candidate) {
             let elig = {};
             try { elig = JSON.parse(eligibilityJson || '{}') || {}; } catch (e) {}
+            // Which students_data column "exact"/"band" match against —
+            // defaults to 'class' so eligibility_json saved before this
+            // existed keeps working unchanged. Mirrors checkGroupEligibility()
+            // in route.js exactly (including its legacy bare-array band
+            // shape support) — this is only a client-side UX shortcut, the
+            // server re-checks the real rule at invite time regardless.
+            const groupField = elig.group_field || 'class';
+            // The teammate search only fetches a fixed safe field set
+            // (student_id/name/class/section/roll/house/session) — if the
+            // admin picked some OTHER column to group by, a candidate row
+            // from search_students won't have it, so there's nothing to
+            // check here; defer to the server's own (always-correct) check
+            // rather than falsely rejecting.
+            if ((elig.class_mode === 'exact' || elig.class_mode === 'band') && candidate[groupField] === undefined) {
+                return { ok: true };
+            }
             if (elig.class_mode === 'exact') {
-                if (String(leader.class || '') !== String(candidate.class || '')) return { ok: false, reason: 'must be in the same class as you' };
+                if (String(leader[groupField] || '') !== String(candidate[groupField] || '')) return { ok: false, reason: `must have the same ${groupField.replace(/_/g,' ')} as you` };
             } else if (elig.class_mode === 'band') {
                 const bands = Array.isArray(elig.bands) ? elig.bands : [];
-                const bandIndexOf = cls => bands.findIndex(b => Array.isArray(b) && b.includes(cls));
-                const li = bandIndexOf(leader.class), ci = bandIndexOf(candidate.class);
-                if (li < 0 || li !== ci) return { ok: false, reason: "must be in your team's class group" };
+                const bandClasses = b => Array.isArray(b) ? b : (Array.isArray(b.classes) ? b.classes : []);
+                const bandIndexOf = val => bands.findIndex(b => bandClasses(b).includes(val));
+                const li = bandIndexOf(leader[groupField]), ci = bandIndexOf(candidate[groupField]);
+                if (li < 0 || li !== ci) return { ok: false, reason: "must be in your team's group" };
             }
             if (elig.same_section && String(leader.section || '') !== String(candidate.section || '')) return { ok: false, reason: 'must be in the same section as you' };
             if (elig.same_house && String(leader.house || '') !== String(candidate.house || '')) return { ok: false, reason: 'must be in the same house as you' };
             return { ok: true };
         }
 
+        // Which students_data column eligibility's "exact"/"band" match — any
+        // header the admin picked in "Group by" (defaults to 'class' for
+        // forms saved before that selector existed).
+        function gfGetGroupField(eligibilityJson) {
+            let e = {}; try { e = JSON.parse(eligibilityJson || '{}') || {}; } catch (err) {}
+            return e.group_field || 'class';
+        }
+
         function gfEligibilitySummary(json) {
             let e = {}; try { e = JSON.parse(json || '{}') || {}; } catch (err) {}
             const bits = [];
-            if (e.class_mode === 'exact') bits.push('same class as leader');
-            else if (e.class_mode === 'band') bits.push('same class group as leader');
+            const fieldLabel = (e.group_field || 'class').replace(/_/g, ' ');
+            if (e.class_mode === 'exact') bits.push(`same ${fieldLabel} as leader`);
+            else if (e.class_mode === 'band') bits.push(`same ${fieldLabel} group as leader`);
             if (e.same_section) bits.push('same section');
             if (e.same_house) bits.push('same house');
             return bits.length ? ' · members must share: ' + bits.join(', ') : '';
@@ -5634,8 +5704,8 @@
         // instead of a dropdown, plus a hidden input carrying the same value
         // under the field's own data_key so it's captured in group_data exactly
         // like a real answer (show_if elsewhere can still reference it).
-        function _gfClassGroupFieldHtml(f, leaderClass, eligibilityJson) {
-            const groupName = gfMyBandName(eligibilityJson, leaderClass);
+        function _gfClassGroupFieldHtml(f, leaderGroupValue, eligibilityJson) {
+            const groupName = gfMyBandName(eligibilityJson, leaderGroupValue);
             return `<div class="col-md-6"><div class="premium-form-group" style="padding:10px 0">
                 <div class="small fw-800 text-muted text-uppercase" style="font-size:0.65rem">${f.name || 'Your Group'}</div>
                 <div class="fw-800" style="font-size:1.05rem">${groupName || '—'}</div>
@@ -5644,7 +5714,23 @@
         }
 
         function gfOnClassModeChange() {
-            document.getElementById('gf-bands-wrap').classList.toggle('hidden', document.getElementById('gf-class-mode').value !== 'band');
+            const mode = document.getElementById('gf-class-mode').value;
+            document.getElementById('gf-group-field-wrap').classList.toggle('hidden', mode === 'none');
+            document.getElementById('gf-bands-wrap').classList.toggle('hidden', mode !== 'band');
+            if (mode !== 'none') _gfEnsureAllHeaders();
+        }
+        // "Group by" field changed — refetch that column's distinct values and
+        // refresh every existing band row to offer them (any prior class/value
+        // selections don't carry over across different fields, so they're
+        // cleared; the band's own name is left as-is).
+        function gfOnGroupFieldChange() {
+            const field = document.getElementById('gf-group-field').value || 'class';
+            _gfEnsureGroupFieldValues(field).then(() => {
+                const values = GF_GROUP_FIELD_VALUES[field] || [];
+                document.querySelectorAll('#gf-bands-list .gf-band-classes').forEach(sel => {
+                    sel.innerHTML = values.map(v => `<option value="${v}">${v}</option>`).join('');
+                });
+            });
         }
 
         // `band` accepts either the current {name, classes} shape or a legacy
@@ -5655,12 +5741,14 @@
             if (!list) return;
             const classes = Array.isArray(band) ? band : (band.classes || []);
             const name = Array.isArray(band) ? '' : (band.name || '');
+            const field = document.getElementById('gf-group-field')?.value || 'class';
+            const values = GF_GROUP_FIELD_VALUES[field] || [];
             const row = document.createElement('div');
             row.className = 'd-flex align-items-start gap-2 gf-band-row';
             row.innerHTML = `
                 <input type="text" class="form-control form-control-sm gf-band-name" placeholder="Group name (e.g. Group A)" style="max-width:170px" value="${name.replace(/"/g,'&quot;')}">
                 <select multiple class="form-select form-select-sm gf-band-classes" style="min-height:90px">
-                    ${GF_CLASS_OPTIONS.map(c => `<option value="${c}" ${classes.includes(c) ? 'selected' : ''}>${c}</option>`).join('')}
+                    ${values.map(c => `<option value="${c}" ${classes.includes(c) ? 'selected' : ''}>${c}</option>`).join('')}
                 </select>
                 <button type="button" onclick="this.closest('.gf-band-row').remove()" class="btn btn-sm btn-outline-danger rounded-pill px-2 flex-shrink-0">×</button>`;
             list.appendChild(row);
@@ -5683,6 +5771,8 @@
 
         function gfResetEligibilityForm() {
             document.getElementById('gf-class-mode').value = 'none';
+            document.getElementById('gf-group-field').value = 'class';
+            document.getElementById('gf-group-field-wrap').classList.add('hidden');
             document.getElementById('gf-same-section').checked = false;
             document.getElementById('gf-same-house').checked = false;
             document.getElementById('gf-bands-list').innerHTML = '';
@@ -5691,17 +5781,28 @@
 
         function gfLoadEligibilityForm(json) {
             let e = {}; try { e = JSON.parse(json || '{}') || {}; } catch (err) {}
-            document.getElementById('gf-class-mode').value = e.class_mode || 'none';
+            const mode = e.class_mode || 'none';
+            const field = e.group_field || 'class';
+            document.getElementById('gf-class-mode').value = mode;
+            document.getElementById('gf-group-field-wrap').classList.toggle('hidden', mode === 'none');
             document.getElementById('gf-same-section').checked = !!e.same_section;
             document.getElementById('gf-same-house').checked = !!e.same_house;
             document.getElementById('gf-bands-list').innerHTML = '';
-            (Array.isArray(e.bands) ? e.bands : []).forEach(b => gfAddBand(b));
-            document.getElementById('gf-bands-wrap').classList.toggle('hidden', e.class_mode !== 'band');
+            // Headers + this field's values must both be loaded before the
+            // band rows are built, or gfAddBand() has nothing to list. Callers
+            // that need the bands actually in the DOM (editGroupForm, building
+            // fields right after) chain off the returned promise.
+            return Promise.all([_gfEnsureAllHeaders(), _gfEnsureGroupFieldValues(field)]).then(() => {
+                document.getElementById('gf-group-field').value = field;
+                (Array.isArray(e.bands) ? e.bands : []).forEach(b => gfAddBand(b));
+                document.getElementById('gf-bands-wrap').classList.toggle('hidden', mode !== 'band');
+            });
         }
 
         function gfSerializeEligibility() {
             return JSON.stringify({
                 class_mode: document.getElementById('gf-class-mode').value,
+                group_field: document.getElementById('gf-group-field').value || 'class',
                 bands: gfReadBands(),
                 same_section: document.getElementById('gf-same-section').checked,
                 same_house: document.getElementById('gf-same-house').checked,
@@ -5755,12 +5856,17 @@
             document.getElementById('gf-accepting-new').checked = f.accepting_new !== false;
             document.getElementById('gf-conditions-list').innerHTML = '';
             try { const cl = JSON.parse(f.condition_json || '{}'); (cl.rules || []).forEach(r => addConditionRow(r, 'gf-conditions-list')); } catch (e) {}
-            gfLoadEligibilityForm(f.eligibility_json);
             document.getElementById('gf-fields-list').innerHTML = '';
-            let fields = [];
-            try { fields = JSON.parse(f.fields_json || '[]'); } catch (e) {}
-            fields.forEach(fld => addTabRow(fld.type === 'group_label' ? 'label' : 'field', fld));
-            refreshAllShowIfControllers();
+            // Bands must be rendered before the fields loop — a show_if
+            // condition referencing a class_group field looks up its value
+            // options (band names) from the live band editor DOM right as
+            // each field row is built (_syncShowIfValueControl).
+            gfLoadEligibilityForm(f.eligibility_json).then(() => {
+                let fields = [];
+                try { fields = JSON.parse(f.fields_json || '[]'); } catch (e) {}
+                fields.forEach(fld => addTabRow(fld.type === 'group_label' ? 'label' : 'field', fld));
+                refreshAllShowIfControllers();
+            });
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
