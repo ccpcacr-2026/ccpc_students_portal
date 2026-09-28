@@ -1212,7 +1212,7 @@
                                                 <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="gf-same-house"><label class="form-check-label small fw-700" for="gf-same-house">Same house too</label></div></div>
                                             </div>
                                             <div id="gf-bands-wrap" class="mt-3 hidden">
-                                                <p class="small text-muted mb-2" style="font-size:0.7rem">Group classes into bands — e.g. Six/Seven/Eight in one band, Nine/Ten in another. A leader in Seven may then invite anyone from Six, Seven or Eight, but not Nine.</p>
+                                                <p class="small text-muted mb-2" style="font-size:0.7rem">Group classes into named bands — e.g. "Group A" for Six/Seven/Eight, "Group B" for Nine/Ten. A leader in Seven may then invite anyone from Six, Seven or Eight, but not Nine. The name shows automatically as "Your Group" on the fill-up page — no separate dropdown field needed for it.</p>
                                                 <div id="gf-bands-list" class="d-flex flex-column gap-2"></div>
                                                 <button type="button" onclick="gfAddBand()" class="btn btn-sm btn-outline-dark rounded-pill px-3 mt-2">+ Add Class Group</button>
                                             </div>
@@ -4686,6 +4686,10 @@
                                          // Not per-submission data (see renderProfilePictureFieldHtml) — an
                                          // unconditional gate, so show_if is deliberately not applied here.
                                          else if(f.type === 'profile_picture') html += renderProfilePictureFieldHtml(`${tid}-photo`);
+                                         // class_group only makes sense on a Group Form (it reads
+                                         // eligibility_json's named bands) — an ordinary Tab has neither,
+                                         // so there's nothing sensible to render if one ends up here.
+                                         else if(f.type === 'class_group') { /* no-op */ }
                                          else {
                                              const val = findInBoth(data, loggedInStudent, f.data_key || f.name);
                                              html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, readOnly)}</div>`;
@@ -5060,6 +5064,7 @@
                 const hideStyle = (f.show_if && !matchShowIfData(f.show_if, () => '')) ? ' style="display:none"' : '';
                 if (f.type === 'group_label') { html += `<div class="col-12 mt-4"${showIfAttr}${hideStyle}><h6 class="profile-group-label" style="color:var(--secondary)">${f.label}</h6></div>`; return; }
                 if (f.type === 'profile_picture') { html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
+                if (f.type === 'class_group') { html += _gfClassGroupFieldHtml(f, loggedInStudent && loggedInStudent.class, form.eligibility_json); return; }
                 html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, '', false)}</div>`;
             });
             html += `</div>`;
@@ -5187,6 +5192,7 @@
                     // This is the leader's own field to fill — a non-leader viewing
                     // the (read-only) team details has nothing of theirs to upload here.
                     if (f.type === 'profile_picture') { if (isLeader) html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
+                    if (f.type === 'class_group') { html += _gfClassGroupFieldHtml(f, (team.members.find(m => m.role === 'leader') || {}).profile?.class, form.eligibility_json); return; }
                     const val = gdLookup(f.data_key);
                     html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, locked || !isLeader)}</div>`;
                 });
@@ -5607,18 +5613,54 @@
             return bits.length ? ' · members must share: ' + bits.join(', ') : '';
         }
 
+        // Named-band lookup — given a Group Form's eligibility_json and a
+        // student's class, finds which named class-band (see gfAddBand/
+        // gfReadBands, "Who can a leader invite?") that class falls into and
+        // returns its name. Backs the auto "Your Group" display (class_group
+        // field type) so students never have to pick their own group manually.
+        // Returns null when class_mode isn't 'band', no bands are configured,
+        // or the class matches none of them.
+        function gfMyBandName(eligibilityJson, studentClass) {
+            let elig = {};
+            try { elig = JSON.parse(eligibilityJson || '{}') || {}; } catch (e) {}
+            if (elig.class_mode !== 'band' || !Array.isArray(elig.bands) || !studentClass) return null;
+            const bandClasses = b => Array.isArray(b) ? b : (Array.isArray(b.classes) ? b.classes : []);
+            const band = elig.bands.find(b => bandClasses(b).includes(studentClass));
+            if (!band) return null;
+            const name = Array.isArray(band) ? '' : String(band.name || '').trim();
+            return name || bandClasses(band).join('/');
+        }
+        // Renders the "class_group" field type — a read-only "Your Group" badge
+        // instead of a dropdown, plus a hidden input carrying the same value
+        // under the field's own data_key so it's captured in group_data exactly
+        // like a real answer (show_if elsewhere can still reference it).
+        function _gfClassGroupFieldHtml(f, leaderClass, eligibilityJson) {
+            const groupName = gfMyBandName(eligibilityJson, leaderClass);
+            return `<div class="col-md-6"><div class="premium-form-group" style="padding:10px 0">
+                <div class="small fw-800 text-muted text-uppercase" style="font-size:0.65rem">${f.name || 'Your Group'}</div>
+                <div class="fw-800" style="font-size:1.05rem">${groupName || '—'}</div>
+                <input type="hidden" name="${f.data_key}" value="${(groupName || '').replace(/"/g,'&quot;')}">
+            </div></div>`;
+        }
+
         function gfOnClassModeChange() {
             document.getElementById('gf-bands-wrap').classList.toggle('hidden', document.getElementById('gf-class-mode').value !== 'band');
         }
 
-        function gfAddBand(selected = []) {
+        // `band` accepts either the current {name, classes} shape or a legacy
+        // bare array of class names (pre-naming eligibility_json saved before
+        // bands had names) — either way it renders the same editable row.
+        function gfAddBand(band = { name: '', classes: [] }) {
             const list = document.getElementById('gf-bands-list');
             if (!list) return;
+            const classes = Array.isArray(band) ? band : (band.classes || []);
+            const name = Array.isArray(band) ? '' : (band.name || '');
             const row = document.createElement('div');
-            row.className = 'd-flex align-items-center gap-2 gf-band-row';
+            row.className = 'd-flex align-items-start gap-2 gf-band-row';
             row.innerHTML = `
+                <input type="text" class="form-control form-control-sm gf-band-name" placeholder="Group name (e.g. Group A)" style="max-width:170px" value="${name.replace(/"/g,'&quot;')}">
                 <select multiple class="form-select form-select-sm gf-band-classes" style="min-height:90px">
-                    ${GF_CLASS_OPTIONS.map(c => `<option value="${c}" ${selected.includes(c) ? 'selected' : ''}>${c}</option>`).join('')}
+                    ${GF_CLASS_OPTIONS.map(c => `<option value="${c}" ${classes.includes(c) ? 'selected' : ''}>${c}</option>`).join('')}
                 </select>
                 <button type="button" onclick="this.closest('.gf-band-row').remove()" class="btn btn-sm btn-outline-danger rounded-pill px-2 flex-shrink-0">×</button>`;
             list.appendChild(row);
@@ -5627,10 +5669,16 @@
         // Reads every band row into eligibility_json's `bands` array — empty
         // (nothing selected) rows are dropped so an admin who added then
         // emptied a row doesn't end up with a stray band nothing can match.
+        // Each band is now {name, classes} — name is what a student's own
+        // "Your Group" badge shows (see gfMyBandName), falling back to the
+        // class list itself when left blank.
         function gfReadBands() {
-            return Array.from(document.querySelectorAll('#gf-bands-list .gf-band-classes'))
-                .map(sel => Array.from(sel.selectedOptions).map(o => o.value))
-                .filter(b => b.length);
+            return Array.from(document.querySelectorAll('#gf-bands-list .gf-band-row'))
+                .map(row => ({
+                    name: row.querySelector('.gf-band-name')?.value.trim() || '',
+                    classes: Array.from(row.querySelector('.gf-band-classes').selectedOptions).map(o => o.value),
+                }))
+                .filter(b => b.classes.length);
         }
 
         function gfResetEligibilityForm() {
@@ -6327,6 +6375,7 @@
                             <option value="checkbox" ${data?.type==='checkbox'?'selected':''}>Checkbox</option>
                             <option value="choose" ${data?.type==='choose'?'selected':''}>Dropdown</option>
                             <option value="profile_picture" ${data?.type==='profile_picture'?'selected':''}>Profile Picture</option>
+                            <option value="class_group" ${data?.type==='class_group'?'selected':''}>Class Group (auto — Group Forms only)</option>
                         </select>
                     </div>
                     <div class="col-md-4"><input type="text" placeholder="Options (comma separated)" class="form-control f-options ${['checkbox','choose'].includes(data?.type)?'':'hidden'}" value="${(data?.options||[]).join(',')}"></div>

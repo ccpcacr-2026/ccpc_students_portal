@@ -456,7 +456,10 @@ function checkGroupEligibility(eligibilityJson, leader, candidate) {
     }
   } else if (elig.class_mode === 'band') {
     const bands = Array.isArray(elig.bands) ? elig.bands : [];
-    const bandIndexOf = cls => bands.findIndex(b => Array.isArray(b) && b.includes(cls));
+    // A band is either the current {name, classes} shape or a legacy bare
+    // array of class names (eligibility_json saved before bands had names).
+    const bandClasses = b => Array.isArray(b) ? b : (Array.isArray(b.classes) ? b.classes : []);
+    const bandIndexOf = cls => bands.findIndex(b => bandClasses(b).includes(cls));
     const li = bandIndexOf(leader.class), ci = bandIndexOf(candidate.class);
     if (li < 0 || li !== ci) return { ok: false, reason: "must be in your team's class group" };
   }
