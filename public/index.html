@@ -4929,8 +4929,10 @@
         }
         // Wires one .gf-search box's input/clear/results behavior. onChange(student|null)
         // fires whenever the selection is made or cleared — callers use it to e.g.
-        // show/hide a "Send Invite" button.
-        function _gfWireSearchBox(box, onChange) {
+        // show/hide a "Send Invite" button. eligibilityJson, when passed, rejects
+        // an ineligible candidate right in the results list (greyed out,
+        // unclickable, with the reason as a tooltip) — see gfClientCheckEligibility.
+        function _gfWireSearchBox(box, onChange, eligibilityJson) {
             const input = box.querySelector('.gf-search-input');
             const hidden = box.querySelector('.gf-search-id');
             const results = box.querySelector('.gf-search-results');
@@ -4951,13 +4953,22 @@
                     results.classList.remove('hidden');
                     return;
                 }
-                results.innerHTML = currentList.map((s, i) => `<button type="button" class="list-group-item list-group-item-action small" data-idx="${i}">${s.student_name} <span class="text-muted">· ${s.class||''}${s.section?'-'+s.section:''}${s.roll?' · Roll '+s.roll:''} · ${s.student_id}</span></button>`).join('');
+                results.innerHTML = currentList.map((s, i) => {
+                    const elig = eligibilityJson ? gfClientCheckEligibility(eligibilityJson, loggedInStudent || {}, s) : { ok: true };
+                    return `<button type="button" class="list-group-item list-group-item-action small" data-idx="${i}" ${elig.ok ? '' : `disabled title="Not eligible — ${elig.reason}"`}>${s.student_name} <span class="text-muted">· ${s.class||''}${s.section?'-'+s.section:''}${s.roll?' · Roll '+s.roll:''} · ${s.student_id}</span>${elig.ok ? '' : ` <span class="badge bg-danger-subtle text-danger-emphasis rounded-pill ms-1" style="font-size:0.6rem">Not eligible</span>`}</button>`;
+                }).join('');
                 results.classList.remove('hidden');
-                results.querySelectorAll('button[data-idx]').forEach(btn => {
+                results.querySelectorAll('button[data-idx]:not([disabled])').forEach(btn => {
                     btn.onclick = () => select(currentList[Number(btn.dataset.idx)]);
                 });
             };
             const select = (s) => {
+                // Defensive re-check — showResults() already disables ineligible
+                // rows, this just guards against acting on stale currentList data.
+                if (eligibilityJson) {
+                    const elig = gfClientCheckEligibility(eligibilityJson, loggedInStudent || {}, s);
+                    if (!elig.ok) { if (typeof showToast === 'function') showToast(`Selection rejected — this student ${elig.reason}.`, 'error'); return; }
+                }
                 hidden.value = s.student_id;
                 input.value = gfNameOf(s, s.student_id);
                 input.readOnly = true;
@@ -5022,7 +5033,9 @@
             wrap.innerHTML = _gfMemberRowHtml();
             const row = wrap.firstElementChild;
             list.appendChild(row);
-            _gfWireSearchBox(row.querySelector('.gf-search'));
+            const pane = document.getElementById(`${tid}-content`);
+            const eligibilityJson = pane && pane._gfForm ? pane._gfForm.eligibility_json : null;
+            _gfWireSearchBox(row.querySelector('.gf-search'), null, eligibilityJson);
             const addBtn = document.getElementById(`${tid}-add-member-btn`);
             if (addBtn) addBtn.classList.toggle('hidden', list.children.length >= max);
         }
@@ -5191,7 +5204,7 @@
             if (canInviteMore) {
                 const searchBox = document.querySelector(`#${tid}-invite-search .gf-search`);
                 const sendBtn = document.getElementById(`${tid}-invite-send-btn`);
-                if (searchBox) _gfWireSearchBox(searchBox, (s) => { if (sendBtn) sendBtn.classList.toggle('hidden', !s); });
+                if (searchBox) _gfWireSearchBox(searchBox, (s) => { if (sendBtn) sendBtn.classList.toggle('hidden', !s); }, form.eligibility_json);
             }
 
             if (fields.length) {
@@ -5562,6 +5575,28 @@
 
         // One-line summary of an eligibility_json for the admin's form card —
         // matches checkGroupEligibility()'s own reading of the same shape.
+        // Client-side mirror of checkGroupEligibility() in route.js — lets the
+        // teammate search box reject an ineligible pick immediately (greyed out,
+        // unclickable in the results list) instead of only failing after the
+        // leader selects them and hits Send/Create. The server re-checks this
+        // exact same rule at invite time regardless — this is a UX shortcut,
+        // not the actual enforcement.
+        function gfClientCheckEligibility(eligibilityJson, leader, candidate) {
+            let elig = {};
+            try { elig = JSON.parse(eligibilityJson || '{}') || {}; } catch (e) {}
+            if (elig.class_mode === 'exact') {
+                if (String(leader.class || '') !== String(candidate.class || '')) return { ok: false, reason: 'must be in the same class as you' };
+            } else if (elig.class_mode === 'band') {
+                const bands = Array.isArray(elig.bands) ? elig.bands : [];
+                const bandIndexOf = cls => bands.findIndex(b => Array.isArray(b) && b.includes(cls));
+                const li = bandIndexOf(leader.class), ci = bandIndexOf(candidate.class);
+                if (li < 0 || li !== ci) return { ok: false, reason: "must be in your team's class group" };
+            }
+            if (elig.same_section && String(leader.section || '') !== String(candidate.section || '')) return { ok: false, reason: 'must be in the same section as you' };
+            if (elig.same_house && String(leader.house || '') !== String(candidate.house || '')) return { ok: false, reason: 'must be in the same house as you' };
+            return { ok: true };
+        }
+
         function gfEligibilitySummary(json) {
             let e = {}; try { e = JSON.parse(json || '{}') || {}; } catch (err) {}
             const bits = [];

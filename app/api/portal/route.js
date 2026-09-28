@@ -1504,7 +1504,11 @@ export async function POST(req) {
   // picker) — same minimal field set and or=(...ilike...) pattern
   // search_edit_history already uses, just against students_data instead.
   if (action === 'search_students') {
-    const fields = 'student_id,student_name,class,section,roll';
+    // house included (not just class/section/roll) so the teammate picker can
+    // reject an ineligible pick client-side via gfClientCheckEligibility,
+    // without a second round trip — same safe field set get_public_profile
+    // already exposes.
+    const fields = 'student_id,student_name,class,section,roll,house';
     const { class: klass, section, name, roll } = payload || {};
     const structured = [klass, section, name, roll].some(v => String(v || '').trim());
 
