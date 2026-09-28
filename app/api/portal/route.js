@@ -1454,6 +1454,20 @@ export async function POST(req) {
     return NextResponse.json({ result: 'error', message: 'No student found with that ID.' });
   }
 
+  // ── Search students by name/class/section/roll/ID (Group Forms teammate
+  // picker) — same minimal field set and or=(...ilike...) pattern
+  // search_edit_history already uses, just against students_data instead.
+  if (action === 'search_students') {
+    const q = String(payload?.query || payload?.q || '').trim();
+    if (q.length < 2) return NextResponse.json({ result: 'success', data: [] });
+    const esc = encodeURIComponent(q);
+    const fields = 'student_id,student_name,class,section,roll';
+    const path = `students_data?select=${fields}&or=(student_id.ilike.*${esc}*,student_name.ilike.*${esc}*,class.ilike.*${esc}*,section.ilike.*${esc}*,roll.ilike.*${esc}*)&order=student_name.asc&limit=15`;
+    const rows = await sb(path);
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    return NextResponse.json({ result: 'success', data: Array.isArray(rows) ? rows : [] });
+  }
+
   // ── Get my team (or my pending invite) for one Group Form ───────────────
   if (action === 'get_my_team') {
     const { student_id, group_form_id } = payload;

@@ -4792,18 +4792,78 @@
         }
 
         // ── State: no team yet, no invite ────────────────────────────────────────
-        // One "teammate" row in the Create Team screen's member picker — a Student
-        // ID input, a "Look up" button that previews the name/class via
-        // lookup_student_by_id (server-side eligibility isn't checked until the
-        // actual invite goes out, right after team creation), and a remove button.
-        function _gfMemberRowHtml() {
-            return `<div class="gf-member-row">
-                <div class="d-flex gap-2 align-items-center">
-                    <input type="text" class="form-control gf-member-id" placeholder="Teammate's Student ID" oninput="this.closest('.gf-member-row').querySelector('.gf-member-preview').innerHTML=''">
-                    <button type="button" class="btn btn-outline-dark flex-shrink-0" onclick="_gfVerifyMemberRow(this)">Look up</button>
-                    <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="this.closest('.gf-member-row').remove()" title="Remove"><i class="bi bi-x-lg"></i></button>
+        // ── Reusable student search-and-pick box ─────────────────────────────────
+        // Used both by the Create Team screen's teammate rows and the roster's
+        // "Invite a teammate" box. Typing 2+ characters searches name/ID/class/
+        // section/roll server-side (search_students) and lists up to 15 matches;
+        // clicking one locks the input to show the pick and stores student_id in
+        // a hidden input (.gf-search-id) for the caller to read at submit time.
+        function _gfSearchBoxHtml() {
+            return `<div class="gf-search position-relative">
+                <input type="hidden" class="gf-search-id">
+                <div class="input-group">
+                    <input type="text" class="form-control gf-search-input" placeholder="Search by name, class, section or roll" autocomplete="off">
+                    <button type="button" class="btn btn-outline-secondary gf-search-clear hidden" title="Clear"><i class="bi bi-x-lg"></i></button>
                 </div>
-                <div class="gf-member-preview small mt-1"></div>
+                <div class="list-group gf-search-results position-absolute w-100 shadow hidden" style="z-index:20;max-height:240px;overflow-y:auto;top:100%"></div>
+            </div>`;
+        }
+        // Wires one .gf-search box's input/clear/results behavior. onChange(student|null)
+        // fires whenever the selection is made or cleared — callers use it to e.g.
+        // show/hide a "Send Invite" button.
+        function _gfWireSearchBox(box, onChange) {
+            const input = box.querySelector('.gf-search-input');
+            const hidden = box.querySelector('.gf-search-id');
+            const results = box.querySelector('.gf-search-results');
+            const clearBtn = box.querySelector('.gf-search-clear');
+            let debounceTimer, currentList = [];
+            const close = () => { results.classList.add('hidden'); results.innerHTML = ''; };
+            const select = (s) => {
+                hidden.value = s.student_id;
+                input.value = gfNameOf(s, s.student_id);
+                input.readOnly = true;
+                clearBtn.classList.remove('hidden');
+                close();
+                if (onChange) onChange(s);
+            };
+            input.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                const q = input.value.trim();
+                if (q.length < 2) { close(); return; }
+                debounceTimer = setTimeout(() => {
+                    portalFetch('search_students', { q }).then(res => {
+                        currentList = (res && res.result === 'success') ? res.data : [];
+                        if (!currentList.length) {
+                            results.innerHTML = '<div class="list-group-item small text-muted">No matches</div>';
+                            results.classList.remove('hidden');
+                            return;
+                        }
+                        results.innerHTML = currentList.map((s, i) => `<button type="button" class="list-group-item list-group-item-action small" data-idx="${i}">${s.student_name} <span class="text-muted">· ${s.class||''}${s.section?'-'+s.section:''}${s.roll?' · Roll '+s.roll:''} · ${s.student_id}</span></button>`).join('');
+                        results.classList.remove('hidden');
+                        results.querySelectorAll('button[data-idx]').forEach(btn => {
+                            btn.onclick = () => select(currentList[Number(btn.dataset.idx)]);
+                        });
+                    }).catch(close);
+                }, 300);
+            });
+            clearBtn.addEventListener('click', () => {
+                hidden.value = '';
+                input.value = '';
+                input.readOnly = false;
+                clearBtn.classList.add('hidden');
+                input.focus();
+                if (onChange) onChange(null);
+            });
+            document.addEventListener('click', (e) => { if (!box.contains(e.target)) close(); });
+        }
+
+        // One "teammate" row in the Create Team screen's member picker — a search
+        // box (server-side eligibility isn't checked until the actual invite goes
+        // out, right after team creation) plus a remove button.
+        function _gfMemberRowHtml() {
+            return `<div class="gf-member-row d-flex gap-2 align-items-start">
+                <div class="flex-grow-1">${_gfSearchBoxHtml()}</div>
+                <button type="button" class="btn btn-sm btn-outline-danger border-0 mt-1" onclick="this.closest('.gf-member-row').remove()" title="Remove"><i class="bi bi-x-lg"></i></button>
             </div>`;
         }
         function _gfAddMemberRow(tid, max) {
@@ -4811,21 +4871,11 @@
             if (!list || list.children.length >= max) return;
             const wrap = document.createElement('div');
             wrap.innerHTML = _gfMemberRowHtml();
-            list.appendChild(wrap.firstElementChild);
+            const row = wrap.firstElementChild;
+            list.appendChild(row);
+            _gfWireSearchBox(row.querySelector('.gf-search'));
             const addBtn = document.getElementById(`${tid}-add-member-btn`);
             if (addBtn) addBtn.classList.toggle('hidden', list.children.length >= max);
-        }
-        function _gfVerifyMemberRow(btn) {
-            const row = btn.closest('.gf-member-row');
-            const input = row.querySelector('.gf-member-id');
-            const preview = row.querySelector('.gf-member-preview');
-            const studentId = input.value.trim();
-            if (!studentId) { preview.innerHTML = ''; return; }
-            preview.innerHTML = '<span class="text-muted">Looking up…</span>';
-            portalFetch('lookup_student_by_id', { student_id: studentId }).then(res => {
-                if (res && res.result === 'success') preview.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>${gfNameOf(res.data, studentId)}</span>`;
-                else preview.innerHTML = `<span class="text-danger">${(res && res.message) || 'Not found.'}</span>`;
-            }).catch(() => { preview.innerHTML = '<span class="text-danger">Network error.</span>'; });
         }
 
         function renderCreateTeamView(tid, pane, form) {
@@ -4880,7 +4930,7 @@
                 fields.filter(f => f.type === 'checkbox').forEach(f => {
                     group_data[f.data_key] = Array.from(form_el.querySelectorAll(`input[name="${f.data_key}"]:checked`)).map(c => c.value).join(', ');
                 });
-                const memberIds = Array.from(document.querySelectorAll(`#${tid}-member-rows .gf-member-id`))
+                const memberIds = Array.from(document.querySelectorAll(`#${tid}-member-rows .gf-search-id`))
                     .map(inp => inp.value.trim()).filter(Boolean);
                 if (btn) btn.disabled = true;
                 if (status) status.textContent = 'Creating your team…';
@@ -4961,11 +5011,8 @@
                 html += `<div class="mt-4 p-3 rounded-4 border bg-light">
                     <span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Invite a teammate</span>
                     ${eligNote ? `<p class="small text-muted mb-2 mt-1" style="font-size:0.72rem"><i class="bi bi-info-circle me-1"></i>Eligible teammates${eligNote}.</p>` : ''}
-                    <div class="d-flex gap-2 mt-2">
-                        <input type="text" id="${tid}-invite-id" class="form-control" placeholder="Teammate's Student ID">
-                        <button onclick="gfLookupTeammate('${tid}')" class="btn btn-outline-dark flex-shrink-0">Look up</button>
-                    </div>
-                    <div id="${tid}-invite-preview" class="mt-2"></div>
+                    <div id="${tid}-invite-search" class="mt-2">${_gfSearchBoxHtml()}</div>
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 mt-2 hidden" id="${tid}-invite-send-btn" onclick="gfInviteTeammate('${tid}')">Send Invite</button>
                 </div>`;
             }
 
@@ -4992,6 +5039,12 @@
             }
             html += `</div>`;
             pane.innerHTML = html;
+
+            if (canInviteMore) {
+                const searchBox = document.querySelector(`#${tid}-invite-search .gf-search`);
+                const sendBtn = document.getElementById(`${tid}-invite-send-btn`);
+                if (searchBox) _gfWireSearchBox(searchBox, (s) => { if (sendBtn) sendBtn.classList.toggle('hidden', !s); });
+            }
 
             if (fields.length) {
                 const _gdCondForm = document.getElementById(`${tid}-gd-form`);
@@ -5021,28 +5074,12 @@
             }
         }
 
-        function gfLookupTeammate(tid) {
-            const idInput = document.getElementById(`${tid}-invite-id`);
-            const preview = document.getElementById(`${tid}-invite-preview`);
-            const studentId = idInput ? idInput.value.trim() : '';
-            if (!studentId) return;
-            if (preview) preview.innerHTML = '<span class="text-muted small">Looking up…</span>';
-            portalFetch('lookup_student_by_id', { student_id: studentId }).then(res => {
-                if (!preview) return;
-                if (res && res.result === 'success') {
-                    preview.innerHTML = `<div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-white border">
-                        <span>${gfNameOf(res.data, studentId)}</span>
-                        <button onclick="gfInviteTeammate('${tid}', '${studentId}')" class="btn btn-sm btn-primary rounded-pill px-3">Send Invite</button>
-                    </div>`;
-                } else {
-                    preview.innerHTML = `<span class="text-danger small">${(res && res.message) || 'Not found.'}</span>`;
-                }
-            }).catch(() => { if (preview) preview.innerHTML = '<span class="text-danger small">Network error.</span>'; });
-        }
-
-        function gfInviteTeammate(tid, studentId) {
+        function gfInviteTeammate(tid) {
             const pane = document.getElementById(`${tid}-content`);
             if (!pane || !pane._gfTeam) return;
+            const hidden = document.querySelector(`#${tid}-invite-search .gf-search-id`);
+            const studentId = hidden ? hidden.value.trim() : '';
+            if (!studentId) return;
             portalFetch('invite_to_group', { team_id: pane._gfTeam.id, leader_id: loggedInStudent.student_id, invited_student_id: studentId }).then(res => {
                 if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Invite sent', 'success'); renderGroupFormPane(tid, pane, pane._gfForm); }
                 else if (typeof showToast === 'function') showToast((res && res.message) || 'Could not send the invite.', 'error');
