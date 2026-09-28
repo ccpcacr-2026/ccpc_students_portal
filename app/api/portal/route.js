@@ -1328,7 +1328,7 @@ export async function POST(req) {
 
   // ── Save Group Form Config (admin) ──────────────────────────────────────
   if (action === 'save_group_form') {
-    const { id, title, description, icon_class, max_team_size, members_required, fields_json, eligibility_json, condition_json, is_enabled, accepting_new, sort_order } = payload;
+    const { id, title, header, sub_header, description, icon_class, cover_photo_url, max_team_size, members_required, fields_json, eligibility_json, condition_json, is_enabled, accepting_new, sort_order } = payload;
 
     if (id) {
       // Partial update — only touches fields actually sent. The admin card's
@@ -1342,8 +1342,11 @@ export async function POST(req) {
         if (!String(title).trim()) return NextResponse.json({ result: 'error', message: 'Title required.' });
         rowData.title = String(title).trim();
       }
+      if (header !== undefined) rowData.header = header || null;
+      if (sub_header !== undefined) rowData.sub_header = sub_header || null;
       if (description !== undefined) rowData.description = description || null;
       if (icon_class !== undefined) rowData.icon_class = icon_class || 'bi-people-fill';
+      if (cover_photo_url !== undefined) rowData.cover_photo_url = cover_photo_url || null;
       if (max_team_size !== undefined) rowData.max_team_size = Math.max(1, Number(max_team_size) || 4);
       if (members_required !== undefined) rowData.members_required = !!members_required;
       if (fields_json !== undefined) rowData.fields_json = fields_json || '[]';
@@ -1361,8 +1364,11 @@ export async function POST(req) {
     if (!title || !String(title).trim()) return NextResponse.json({ result: 'error', message: 'Title required.' });
     const rowData = {
       title: String(title).trim(),
+      header: header || null,
+      sub_header: sub_header || null,
       description: description || null,
       icon_class: icon_class || 'bi-people-fill',
+      cover_photo_url: cover_photo_url || null,
       max_team_size: Math.max(1, Number(max_team_size) || 4),
       members_required: !!members_required,
       fields_json: fields_json || '[]',
@@ -1375,6 +1381,34 @@ export async function POST(req) {
     const writeRes = await sb('group_forms', 'POST', rowData);
     if (writeRes?.error) return NextResponse.json({ result: 'error', message: 'Save failed: ' + writeRes.error });
     return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Upload a Group Form's cover photo (admin) ────────────────────────────
+  // Returns a public URL for the admin to attach via save_group_form's
+  // cover_photo_url — deliberately doesn't touch group_forms itself, so it
+  // works the same whether editing an existing form or still filling in a
+  // brand-new one that has no id yet. Same "students" storage bucket (and
+  // its 130KB file-size limit) the profile-photo uploader already uses,
+  // just a differently-prefixed, uniquely-named file — no new bucket needed.
+  if (action === 'upload_group_form_cover') {
+    const { photo_base64 } = payload;
+    if (!photo_base64) return NextResponse.json({ result: 'error', message: 'Photo required.' });
+    const raw = String(photo_base64).replace(/^data:[^;]+;base64,/, '');
+    const binary = atob(raw);
+    const buf = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+    const contentType = (String(photo_base64).match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+    const key = `group_form_cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+
+    const uploadRes = await fetch(`${SB_URL}/storage/v1/object/students/${key}`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': contentType, 'x-upsert': 'true' },
+      body: buf,
+    });
+    if (!uploadRes.ok) return NextResponse.json({ result: 'error', message: 'Upload failed: ' + (await uploadRes.text()).slice(0, 200) });
+
+    const publicUrl = `${SB_URL}/storage/v1/object/public/students/${key}`;
+    return NextResponse.json({ result: 'success', url: publicUrl });
   }
 
   // ── Delete Group Form (admin) ────────────────────────────────────────────

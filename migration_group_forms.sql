@@ -194,3 +194,17 @@ GRANT EXECUTE ON FUNCTION student.group_team_accept_invite(bigint, text) TO anon
 -- it to e.g. "class = Ten" the way an ordinary Tab can. Same shape, same
 -- evalRule() evaluator, reused as-is from route.js's get_tabs.
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS condition_json text NOT NULL DEFAULT '{}';
+
+-- ── Rich fill-up page content ────────────────────────────────────────────────
+-- `title` stays the short name used in nav/admin lists; these are the
+-- separate, optional banner content shown at the TOP of the fill-up page
+-- itself (header defaults to title client-side when blank). `description`
+-- is reused as-is for the instructions/details block — no new column
+-- needed there, just a relabeled UI. cover_photo_url is set by uploading
+-- through the new upload_group_form_cover action (both apps), which
+-- returns a public URL to store here — same "students" storage bucket
+-- the profile-photo uploader already uses, just a differently-prefixed
+-- filename, so no new bucket to create.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS header text;
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS sub_header text;
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS cover_photo_url text;

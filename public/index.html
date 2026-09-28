@@ -1161,11 +1161,33 @@
                                                 </div>
                                                 <div id="gf-icon-grid" data-input-id="gf-icon" data-preview-id="gf-icon-preview" class="d-flex flex-wrap gap-1 mt-2"></div>
                                             </div>
-                                            <div class="col-12"><label class="small fw-800 text-muted">DESCRIPTION (shown to students)</label><textarea id="gf-description" class="form-control" rows="2" placeholder="What is this sign-up for?"></textarea></div>
                                         </div>
                                         <div class="row g-3 align-items-end mt-1">
                                             <div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="gf-is-enabled" checked><label class="form-check-label fw-800">Visible to students</label></div></div>
                                             <div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="gf-accepting-new" checked><label class="form-check-label fw-800">Accepting new teams</label></div></div>
+                                        </div>
+                                        <div class="mt-4 p-4 bg-light rounded-4 border">
+                                            <span class="small fw-800 text-muted text-uppercase" style="letter-spacing:0.06em">Fill-up Page Content</span>
+                                            <p class="small text-muted mt-1 mb-3" style="font-size:0.7rem">Shown at the top of the page a student sees when filling this out. All optional — Header falls back to the Form Title above when left blank.</p>
+                                            <div class="row g-3">
+                                                <div class="col-md-6"><label class="small fw-800 text-muted">HEADER</label><input type="text" id="gf-header" class="form-control" placeholder="e.g. CCPC Science Fair 2026"></div>
+                                                <div class="col-md-6"><label class="small fw-800 text-muted">SUB-HEADER</label><input type="text" id="gf-sub-header" class="form-control" placeholder="e.g. Team Registration"></div>
+                                                <div class="col-12"><label class="small fw-800 text-muted">INSTRUCTIONS / DETAILS</label><textarea id="gf-description" class="form-control" rows="3" placeholder="What is this sign-up for? Any rules, deadlines or notes for students."></textarea></div>
+                                                <div class="col-12">
+                                                    <label class="small fw-800 text-muted">COVER PHOTO</label>
+                                                    <div class="d-flex align-items-center gap-3 mt-1 flex-wrap">
+                                                        <div id="gf-cover-preview-wrap" class="hidden">
+                                                            <img id="gf-cover-preview" src="" class="rounded-3 border" style="width:220px;aspect-ratio:16/6;object-fit:cover">
+                                                        </div>
+                                                        <div>
+                                                            <input type="file" accept="image/*" id="gf-cover-input" class="form-control form-control-sm" style="max-width:280px" onchange="_gfHandleCoverSelect(event)">
+                                                            <div id="gf-cover-status" class="small text-muted mt-1"></div>
+                                                        </div>
+                                                        <button type="button" id="gf-cover-remove-btn" class="btn btn-sm btn-outline-danger rounded-pill px-3 hidden" onclick="_gfRemoveCoverPhoto()">Remove photo</button>
+                                                    </div>
+                                                    <input type="hidden" id="gf-cover-url" value="">
+                                                </div>
+                                            </div>
                                         </div>
                                         <div class="mt-4 p-4 bg-light rounded-4 border">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
@@ -3720,6 +3742,81 @@
             });
         }
 
+        // ── Group Form cover photo (admin) ───────────────────────────────────────
+        // Resizes (no crop — full aspect ratio kept, capped at 1200px on the
+        // longer side) + compresses under the "students" bucket's 130KB limit,
+        // then uploads via upload_group_form_cover. Same quality-ladder approach
+        // as cropCompressAndUploadPhoto above, minus the square crop (this is a
+        // banner, not an avatar) and not tied to any one student.
+        function compressAndUploadCoverPhoto(file, { onStatus, onDone } = {}) {
+            if (!file) return;
+            if (file.size > 8 * 1024 * 1024) { if (onStatus) onStatus('Photo must be under 8 MB.', true); return; }
+            if (onStatus) onStatus('Processing...');
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const maxSide = 1200;
+                    const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+                    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+                    const TARGET = 130 * 1024;
+                    let base64 = '';
+                    for (const q of [0.85, 0.70, 0.55, 0.40, 0.28, 0.18]) {
+                        base64 = canvas.toDataURL('image/jpeg', q);
+                        const approxBytes = Math.ceil((base64.length - base64.indexOf(',') - 1) * 0.75);
+                        if (approxBytes <= TARGET) break;
+                    }
+                    const finalBytes = Math.ceil((base64.length - base64.indexOf(',') - 1) * 0.75);
+                    if (finalBytes > TARGET) { if (onStatus) onStatus('Could not compress under 130KB — try a smaller or simpler image.', true); return; }
+
+                    if (onStatus) onStatus('Uploading...');
+                    portalFetch('upload_group_form_cover', { photo_base64: base64 }).then(res => {
+                        if (res && res.result === 'success') { if (onStatus) onStatus('Photo uploaded!'); if (onDone) onDone(res.url); }
+                        else if (onStatus) onStatus((res && res.message) || 'Upload failed.', true);
+                    }).catch(() => { if (onStatus) onStatus('Network error.', true); });
+                };
+                img.onerror = function() { if (onStatus) onStatus('Could not read image file.', true); };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        function _gfSetCoverPreview(url) {
+            const wrap = document.getElementById('gf-cover-preview-wrap');
+            const img = document.getElementById('gf-cover-preview');
+            const removeBtn = document.getElementById('gf-cover-remove-btn');
+            const hidden = document.getElementById('gf-cover-url');
+            if (hidden) hidden.value = url || '';
+            if (url) {
+                if (img) img.src = url;
+                if (wrap) wrap.classList.remove('hidden');
+                if (removeBtn) removeBtn.classList.remove('hidden');
+            } else {
+                if (img) img.src = '';
+                if (wrap) wrap.classList.add('hidden');
+                if (removeBtn) removeBtn.classList.add('hidden');
+            }
+        }
+        function _gfHandleCoverSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const status = document.getElementById('gf-cover-status');
+            compressAndUploadCoverPhoto(file, {
+                onStatus: (msg, isError) => { if (status) { status.textContent = msg; status.className = 'small mt-1 ' + (isError ? 'text-danger' : 'text-muted'); } },
+                onDone: (url) => { _gfSetCoverPreview(url); if (status) status.textContent = ''; },
+            });
+        }
+        function _gfRemoveCoverPhoto() {
+            _gfSetCoverPreview('');
+            const input = document.getElementById('gf-cover-input');
+            if (input) input.value = '';
+            const status = document.getElementById('gf-cover-status');
+            if (status) status.textContent = '';
+        }
+
         // ── Profile Picture as a form field ──────────────────────────────────────
         // A field type any dynamic form (Group Form or ordinary Tab) can add:
         // shows the student's photo if students_data.photo is already set, or —
@@ -4791,6 +4888,18 @@
             return `${p.student_name}${p.class ? ' · ' + p.class + (p.section ? '-' + p.section : '') : ''}`;
         }
 
+        // Cover photo + Header/Sub-header/Instructions block shared by every
+        // Group Form student-side screen (create/invite/roster) — Header falls
+        // back to the admin-facing Title when left blank.
+        function _gfHeaderHtml(form) {
+            let html = '';
+            if (form.cover_photo_url) html += `<img src="${form.cover_photo_url}" class="w-100 rounded-4 mb-3" style="max-height:220px;object-fit:cover">`;
+            html += `<h2 class="h4 section-title mb-0">${form.header || form.title}</h2>`;
+            if (form.sub_header) html += `<p class="text-muted fw-700 mb-2" style="font-size:0.85rem">${form.sub_header}</p>`;
+            if (form.description) html += `<p class="text-muted small mb-4" style="white-space:pre-wrap">${form.description}</p>`;
+            return html;
+        }
+
         // ── State: no team yet, no invite ────────────────────────────────────────
         // ── Reusable student search-and-pick box ─────────────────────────────────
         // Used both by the Create Team screen's teammate rows and the roster's
@@ -4880,15 +4989,14 @@
 
         function renderCreateTeamView(tid, pane, form) {
             if (!form.accepting_new) {
-                pane.innerHTML = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>
+                pane.innerHTML = `<div class="card shadow-lg">${_gfHeaderHtml(form)}
                     <div class="alert alert-warning mt-3 rounded-4 border-0"><i class="bi bi-lock-fill me-2"></i>Registration is closed for new teams.</div></div>`;
                 return;
             }
             let fields = [];
             try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
             const maxTeammates = Math.max(0, (form.max_team_size || 1) - 1);
-            let html = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>`;
-            if (form.description) html += `<p class="text-muted small mb-4">${form.description}</p>`;
+            let html = `<div class="card shadow-lg">${_gfHeaderHtml(form)}`;
             html += `<div class="alert alert-info rounded-4 border-0 mb-4" style="font-size:0.8rem"><i class="bi bi-info-circle-fill me-2"></i>Create your team below (up to ${form.max_team_size} members including you). Teammates must log in and accept before they count.</div>`;
             html += `<form id="${tid}-form"><div class="row g-4">`;
             fields.forEach(f => {
@@ -4960,7 +5068,7 @@
 
         // ── State: a pending invite, no team yet ─────────────────────────────────
         function renderInviteView(tid, pane, form, invite) {
-            pane.innerHTML = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>
+            pane.innerHTML = `<div class="card shadow-lg">${_gfHeaderHtml(form)}
                 <div class="alert alert-primary rounded-4 border-0 mt-3">
                     <i class="bi bi-envelope-heart-fill me-2"></i>You've been invited to join <strong>${gfNameOf(invite.leader_profile, invite.invited_by)}</strong>'s team.
                 </div>
@@ -5001,7 +5109,7 @@
                     </div>`).join('')}</div>` : '';
             const canInviteMore = isLeader && !locked && team.members.length < form.max_team_size;
 
-            let html = `<div class="card shadow-lg"><h2 class="h4 section-title">${form.title}</h2>`;
+            let html = `<div class="card shadow-lg">${_gfHeaderHtml(form)}`;
             if (locked) html += `<div class="alert alert-info py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-shield-check-fill me-2 fs-5"></i>Verified & Locked</div>`;
             html += `<p class="small text-muted mb-2">${team.members.length} of ${form.max_team_size} members${form.members_required && team.members.length < form.max_team_size ? ' — team must be full to count as complete' : ''}</p>`;
             html += `<div class="rounded-4 border overflow-hidden mb-3">${rosterHtml}</div>${pendingHtml}`;
@@ -5478,7 +5586,12 @@
             _syncIconPicker('gf-icon-grid');
             document.getElementById('gf-max-size').value = '4';
             document.getElementById('gf-members-required').checked = false;
+            document.getElementById('gf-header').value = '';
+            document.getElementById('gf-sub-header').value = '';
             document.getElementById('gf-description').value = '';
+            _gfSetCoverPreview('');
+            document.getElementById('gf-cover-input').value = '';
+            document.getElementById('gf-cover-status').textContent = '';
             document.getElementById('gf-is-enabled').checked = true;
             document.getElementById('gf-accepting-new').checked = true;
             document.getElementById('gf-conditions-list').innerHTML = '';
@@ -5496,7 +5609,12 @@
             _syncIconPicker('gf-icon-grid');
             document.getElementById('gf-max-size').value = f.max_team_size || 4;
             document.getElementById('gf-members-required').checked = !!f.members_required;
+            document.getElementById('gf-header').value = f.header || '';
+            document.getElementById('gf-sub-header').value = f.sub_header || '';
             document.getElementById('gf-description').value = f.description || '';
+            _gfSetCoverPreview(f.cover_photo_url || '');
+            document.getElementById('gf-cover-input').value = '';
+            document.getElementById('gf-cover-status').textContent = '';
             document.getElementById('gf-is-enabled').checked = f.is_enabled !== false;
             document.getElementById('gf-accepting-new').checked = f.accepting_new !== false;
             document.getElementById('gf-conditions-list').innerHTML = '';
@@ -5521,8 +5639,11 @@
             const cfg = {
                 id: id || undefined,
                 title,
+                header: document.getElementById('gf-header').value.trim(),
+                sub_header: document.getElementById('gf-sub-header').value.trim(),
                 description: document.getElementById('gf-description').value.trim(),
                 icon_class: document.getElementById('gf-icon').value.trim() || 'bi-people-fill',
+                cover_photo_url: document.getElementById('gf-cover-url').value.trim(),
                 max_team_size: Number(document.getElementById('gf-max-size').value) || 4,
                 members_required: document.getElementById('gf-members-required').checked,
                 fields_json: JSON.stringify(fields),
@@ -5578,6 +5699,22 @@
             _adminRosterFormId = null;
         }
 
+        // Turns one team's raw group_data ({data_key: value}) into an ordered,
+        // properly-labeled list — a "preview of the filled-up form" using the
+        // field's actual name from fields_json instead of a raw data_key dump.
+        function _gfFormatGroupData(groupData, fieldsJsonStr) {
+            let fields = [];
+            try { fields = JSON.parse(fieldsJsonStr || '[]'); } catch (e) {}
+            const rows = [];
+            fields.forEach(f => {
+                if (f.type === 'group_label' || f.type === 'profile_picture') return;
+                const val = (groupData || {})[f.data_key];
+                if (val === undefined || val === null || val === '') return;
+                rows.push({ label: f.name || f.data_key, value: val });
+            });
+            return rows;
+        }
+
         function renderAdminGroupRoster(teams, form) {
             const host = document.getElementById('admin-group-roster-list');
             if (!teams.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams have been created for this form yet.</p>'; return; }
@@ -5585,6 +5722,7 @@
             host.innerHTML = teams.map(t => {
                 const complete = maxSize ? t.members.length >= maxSize : true;
                 const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+                const answerRows = _gfFormatGroupData(t.group_data, form && form.fields_json);
                 return `
                 <div class="card p-3 shadow-sm border-0 ${t.status === 'disbanded' ? 'opacity-50' : ''}">
                     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
@@ -5605,7 +5743,7 @@
                         ${t.members.map(m => `<span class="badge bg-light text-dark border rounded-pill px-3 py-2">${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</span>`).join('')}
                         ${t.pending_invites.map(inv => `<span class="badge bg-light text-muted border rounded-pill px-3 py-2 fst-italic">${nameOf(inv.profile) || inv.invited_student_id} (pending)</span>`).join('')}
                     </div>
-                    ${Object.keys(t.group_data || {}).length ? `<div class="mt-2 small" style="font-size:0.75rem">${Object.entries(t.group_data).map(([k, v]) => `<div><span class="text-muted">${k.replace(/_/g,' ')}:</span> <strong>${v}</strong></div>`).join('')}</div>` : ''}
+                    ${answerRows.length ? `<div class="mt-2 p-2 rounded-3 bg-light small" style="font-size:0.75rem"><div class="fw-800 text-muted text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Submitted Answers</div>${answerRows.map(r => `<div class="mb-1"><span class="text-muted">${r.label}:</span> <strong>${r.value}</strong></div>`).join('')}</div>` : ''}
                 </div>`;
             }).join('');
         }
