@@ -1036,11 +1036,23 @@ export async function POST(req) {
   // house that happens to sort past the first page must never silently be
   // unpickable when building a band.
   if (action === 'get_class_house_options') {
-    const rows = await sbAllRows('students_data?select=class,house');
+    const rows = await sbAllRows('students_data?select=class,section,house');
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
     const classes = [...new Set(rows.map(r => r.class).filter(Boolean))].sort();
     const houses = [...new Set(rows.map(r => r.house).filter(Boolean))].sort();
-    return NextResponse.json({ result: 'success', classes, houses });
+    const sections = [...new Set(rows.map(r => r.section).filter(Boolean))].sort();
+    // Per-class section list — the same section code (e.g. "B") can mean a
+    // different room across classes, so the Group Form teammate search's
+    // Section dropdown cascades off the chosen Class instead of listing
+    // every section school-wide.
+    const classSectionSets = {};
+    rows.forEach(r => {
+      if (!r.class || !r.section) return;
+      (classSectionSets[r.class] = classSectionSets[r.class] || new Set()).add(r.section);
+    });
+    const classSections = {};
+    Object.keys(classSectionSets).forEach(k => { classSections[k] = [...classSectionSets[k]].sort(); });
+    return NextResponse.json({ result: 'success', classes, houses, sections, classSections });
   }
 
   // ── Bulk import: check which student_ids already exist (no writes) ─────────
@@ -1492,11 +1504,27 @@ export async function POST(req) {
   // picker) — same minimal field set and or=(...ilike...) pattern
   // search_edit_history already uses, just against students_data instead.
   if (action === 'search_students') {
-    const q = String(payload?.query || payload?.q || '').trim();
-    if (q.length < 2) return NextResponse.json({ result: 'success', data: [] });
-    const esc = encodeURIComponent(q);
     const fields = 'student_id,student_name,class,section,roll';
-    const path = `students_data?select=${fields}&or=(student_id.ilike.*${esc}*,student_name.ilike.*${esc}*,class.ilike.*${esc}*,section.ilike.*${esc}*,roll.ilike.*${esc}*)&order=student_name.asc&limit=15`;
+    const { class: klass, section, name, roll } = payload || {};
+    const structured = [klass, section, name, roll].some(v => String(v || '').trim());
+
+    let path;
+    if (structured) {
+      // Advanced filter panel — every provided field is AND-ed together
+      // (plain query params, not or=()), unlike the free-text q below.
+      const parts = [`select=${fields}`];
+      if (klass) parts.push(`class=eq.${encodeURIComponent(String(klass).trim())}`);
+      if (section) parts.push(`section=eq.${encodeURIComponent(String(section).trim())}`);
+      if (name) parts.push(`student_name=ilike.*${encodeURIComponent(String(name).trim())}*`);
+      if (roll) parts.push(`roll=ilike.*${encodeURIComponent(String(roll).trim())}*`);
+      parts.push('order=student_name.asc', 'limit=30');
+      path = `students_data?${parts.join('&')}`;
+    } else {
+      const q = String(payload?.query || payload?.q || '').trim();
+      if (q.length < 2) return NextResponse.json({ result: 'success', data: [] });
+      const esc = encodeURIComponent(q);
+      path = `students_data?select=${fields}&or=(student_id.ilike.*${esc}*,student_name.ilike.*${esc}*,class.ilike.*${esc}*,section.ilike.*${esc}*,roll.ilike.*${esc}*)&order=student_name.asc&limit=15`;
+    }
     const rows = await sb(path);
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
     return NextResponse.json({ result: 'success', data: Array.isArray(rows) ? rows : [] });

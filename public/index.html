@@ -4913,6 +4913,16 @@
                 <div class="input-group">
                     <input type="text" class="form-control gf-search-input" placeholder="Search by name, class, section or roll" autocomplete="off">
                     <button type="button" class="btn btn-outline-secondary gf-search-clear hidden" title="Clear"><i class="bi bi-x-lg"></i></button>
+                    <button type="button" class="btn btn-outline-secondary gf-search-adv-toggle" title="Advanced search"><i class="bi bi-sliders"></i></button>
+                </div>
+                <div class="gf-search-adv-panel hidden mt-2 p-2 rounded-3 border bg-light">
+                    <div class="row g-2">
+                        <div class="col-6"><select class="form-select form-select-sm gf-adv-class"><option value="">Class…</option></select></div>
+                        <div class="col-6"><select class="form-select form-select-sm gf-adv-section"><option value="">Section…</option></select></div>
+                        <div class="col-6"><input type="text" class="form-control form-control-sm gf-adv-name" placeholder="Name"></div>
+                        <div class="col-6"><input type="text" class="form-control form-control-sm gf-adv-roll" placeholder="Roll" inputmode="numeric"></div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-dark rounded-pill px-3 mt-2 gf-adv-search-btn">Search</button>
                 </div>
                 <div class="list-group gf-search-results position-absolute w-100 shadow hidden" style="z-index:20;max-height:240px;overflow-y:auto;top:100%"></div>
             </div>`;
@@ -4925,14 +4935,35 @@
             const hidden = box.querySelector('.gf-search-id');
             const results = box.querySelector('.gf-search-results');
             const clearBtn = box.querySelector('.gf-search-clear');
+            const advToggle = box.querySelector('.gf-search-adv-toggle');
+            const advPanel = box.querySelector('.gf-search-adv-panel');
+            const advClass = box.querySelector('.gf-adv-class');
+            const advSection = box.querySelector('.gf-adv-section');
+            const advName = box.querySelector('.gf-adv-name');
+            const advRoll = box.querySelector('.gf-adv-roll');
+            const advSearchBtn = box.querySelector('.gf-adv-search-btn');
             let debounceTimer, currentList = [];
             const close = () => { results.classList.add('hidden'); results.innerHTML = ''; };
+            const showResults = (list) => {
+                currentList = list;
+                if (!currentList.length) {
+                    results.innerHTML = '<div class="list-group-item small text-muted">No matches</div>';
+                    results.classList.remove('hidden');
+                    return;
+                }
+                results.innerHTML = currentList.map((s, i) => `<button type="button" class="list-group-item list-group-item-action small" data-idx="${i}">${s.student_name} <span class="text-muted">· ${s.class||''}${s.section?'-'+s.section:''}${s.roll?' · Roll '+s.roll:''} · ${s.student_id}</span></button>`).join('');
+                results.classList.remove('hidden');
+                results.querySelectorAll('button[data-idx]').forEach(btn => {
+                    btn.onclick = () => select(currentList[Number(btn.dataset.idx)]);
+                });
+            };
             const select = (s) => {
                 hidden.value = s.student_id;
                 input.value = gfNameOf(s, s.student_id);
                 input.readOnly = true;
                 clearBtn.classList.remove('hidden');
                 close();
+                advPanel.classList.add('hidden');
                 if (onChange) onChange(s);
             };
             input.addEventListener('input', () => {
@@ -4940,19 +4971,7 @@
                 const q = input.value.trim();
                 if (q.length < 2) { close(); return; }
                 debounceTimer = setTimeout(() => {
-                    portalFetch('search_students', { q }).then(res => {
-                        currentList = (res && res.result === 'success') ? res.data : [];
-                        if (!currentList.length) {
-                            results.innerHTML = '<div class="list-group-item small text-muted">No matches</div>';
-                            results.classList.remove('hidden');
-                            return;
-                        }
-                        results.innerHTML = currentList.map((s, i) => `<button type="button" class="list-group-item list-group-item-action small" data-idx="${i}">${s.student_name} <span class="text-muted">· ${s.class||''}${s.section?'-'+s.section:''}${s.roll?' · Roll '+s.roll:''} · ${s.student_id}</span></button>`).join('');
-                        results.classList.remove('hidden');
-                        results.querySelectorAll('button[data-idx]').forEach(btn => {
-                            btn.onclick = () => select(currentList[Number(btn.dataset.idx)]);
-                        });
-                    }).catch(close);
+                    portalFetch('search_students', { q }).then(res => showResults((res && res.result === 'success') ? res.data : [])).catch(close);
                 }, 300);
             });
             clearBtn.addEventListener('click', () => {
@@ -4963,7 +4982,28 @@
                 input.focus();
                 if (onChange) onChange(null);
             });
-            document.addEventListener('click', (e) => { if (!box.contains(e.target)) close(); });
+            // ── Advanced filter panel: Class dropdown (cascades Section), Name, Roll ──
+            advToggle.addEventListener('click', () => {
+                const opening = advPanel.classList.contains('hidden');
+                advPanel.classList.toggle('hidden');
+                if (opening && advClass.options.length <= 1) {
+                    _gfEnsureClassOptions().then(() => {
+                        advClass.innerHTML = `<option value="">Class…</option>` + GF_CLASS_OPTIONS.map(c => `<option value="${c}">${c}</option>`).join('');
+                    });
+                }
+            });
+            advClass.addEventListener('change', () => {
+                const secs = GF_CLASS_SECTIONS[advClass.value] || [];
+                advSection.innerHTML = `<option value="">Section…</option>` + secs.map(s => `<option value="${s}">${s}</option>`).join('');
+            });
+            const runAdvSearch = () => {
+                const filters = { class: advClass.value, section: advSection.value, name: advName.value.trim(), roll: advRoll.value.trim() };
+                if (!filters.class && !filters.section && !filters.name && !filters.roll) return;
+                portalFetch('search_students', filters).then(res => showResults((res && res.result === 'success') ? res.data : [])).catch(close);
+            };
+            advSearchBtn.addEventListener('click', runAdvSearch);
+            [advName, advRoll].forEach(el => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runAdvSearch(); } }));
+            document.addEventListener('click', (e) => { if (!box.contains(e.target)) { close(); advPanel.classList.add('hidden'); } });
         }
 
         // One "teammate" row in the Create Team screen's member picker — a search
@@ -5460,14 +5500,27 @@
         // pointer is enough instead of threading a container id everywhere.
         let ALL_GROUP_FORMS = [];
         let GF_CLASS_OPTIONS = [];
+        let GF_CLASS_SECTIONS = {}; // {class: [section, ...]} — for the teammate search's cascading Section dropdown
+        let _gfClassOptionsPromise = null;
+        // Lazily loads (and caches) GF_CLASS_OPTIONS/GF_CLASS_SECTIONS — shared by
+        // the admin eligibility-band editor (loadAdminGroupForms, below) AND the
+        // student-side teammate search's advanced filter panel, whichever asks
+        // first. Concurrent callers share one in-flight request.
+        function _gfEnsureClassOptions() {
+            if (GF_CLASS_OPTIONS.length) return Promise.resolve();
+            if (_gfClassOptionsPromise) return _gfClassOptionsPromise;
+            _gfClassOptionsPromise = portalFetch('get_class_house_options', {}).then(opts => {
+                if (opts && opts.result === 'success') { GF_CLASS_OPTIONS = opts.classes || []; GF_CLASS_SECTIONS = opts.classSections || {}; }
+            }).catch(() => {}).finally(() => { _gfClassOptionsPromise = null; });
+            return _gfClassOptionsPromise;
+        }
 
         function loadAdminGroupForms() {
             Promise.all([
                 portalFetch('get_group_forms', {}),
-                GF_CLASS_OPTIONS.length ? Promise.resolve(null) : portalFetch('get_class_house_options', {}),
-            ]).then(([forms, opts]) => {
+                _gfEnsureClassOptions(),
+            ]).then(([forms]) => {
                 ALL_GROUP_FORMS = Array.isArray(forms) ? forms : [];
-                if (opts && opts.result === 'success') GF_CLASS_OPTIONS = opts.classes || [];
                 renderAdminGroupFormsList();
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error loading Group Forms', 'error'); });
         }
