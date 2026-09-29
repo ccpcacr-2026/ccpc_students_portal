@@ -447,6 +447,17 @@ function rpcErrorMessage(rawError) {
 // fall in the SAME band as the leader's, not match it exactly; which band
 // applies is worked out automatically from where each class sits in the
 // admin's band list, never chosen by hand per invite.
+// Every Group Form participant — the leader creating a team, and any
+// teammate accepting an invite into one — must have a profile picture on
+// file first, so a team is never made up of unidentifiable students. This
+// is a hard rule enforced here (create_group / respond_to_invite), not an
+// opt-in the admin has to remember to add via a "Profile Picture" field.
+async function hasProfilePhoto(studentId) {
+  const rows = await sb(`students_data?student_id=eq.${encodeURIComponent(studentId)}&select=photo`);
+  const photo = (!rows?.error && rows[0]) ? rows[0].photo : null;
+  return !!(photo && String(photo).trim());
+}
+
 function checkGroupEligibility(eligibilityJson, leader, candidate) {
   let elig = {};
   try { elig = JSON.parse(eligibilityJson || '{}') || {}; } catch (_) {}
@@ -1624,6 +1635,9 @@ export async function POST(req) {
     if (!form) return NextResponse.json({ result: 'error', message: 'Group form not found.' });
     if (!form.is_enabled) return NextResponse.json({ result: 'error', message: 'This form is not available.' });
     if (!form.accepting_new) return NextResponse.json({ result: 'error', message: 'Registration is closed for new teams.' });
+    if (!(await hasProfilePhoto(student_id))) {
+      return NextResponse.json({ result: 'error', code: 'PHOTO_REQUIRED', message: 'Please upload a profile picture before creating a team.' });
+    }
 
     const res = await sb('rpc/group_team_create', 'POST', { p_group_form_id: group_form_id, p_leader_id: student_id, p_group_data: group_data || {} });
     if (res?.error) return NextResponse.json({ result: 'error', message: rpcErrorMessage(res.error) });
@@ -1703,6 +1717,9 @@ export async function POST(req) {
       return NextResponse.json({ result: 'success' });
     }
 
+    if (!(await hasProfilePhoto(student_id))) {
+      return NextResponse.json({ result: 'error', code: 'PHOTO_REQUIRED', message: 'Please upload a profile picture before accepting this invite.' });
+    }
     const res = await sb('rpc/group_team_accept_invite', 'POST', { p_invite_id: invite_id, p_student_id: student_id });
     if (res?.error) return NextResponse.json({ result: 'error', message: rpcErrorMessage(res.error) });
     return NextResponse.json({ result: 'success' });

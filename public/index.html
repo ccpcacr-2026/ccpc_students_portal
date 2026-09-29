@@ -3859,7 +3859,11 @@
         // the DOM. No-op when the student already has a photo (nothing was
         // rendered to wire in that case). Disables the surrounding form's own
         // submit button until the upload succeeds — that's the "force" part.
-        function wireProfilePictureField(fieldUid, formEl) {
+        // onDone is an extra hook fired after a successful upload, alongside
+        // the built-in "re-enable this form's submit button" behavior —
+        // renderInviteView uses it to enable a bare Accept button that isn't
+        // inside a <form> at all.
+        function wireProfilePictureField(fieldUid, formEl, onDone) {
             const input = document.getElementById(`${fieldUid}-input`);
             if (!input) return;
             const submitBtn = formEl ? formEl.querySelector('button[type="submit"]') : null;
@@ -3874,6 +3878,7 @@
                         const wrap = document.getElementById(`${fieldUid}-wrap`);
                         if (wrap) { wrap.className = 'alert alert-success rounded-4 border-0'; wrap.innerHTML = `<div class="fw-800 small"><i class="bi bi-check-circle-fill me-1"></i>Profile picture uploaded</div>`; }
                         if (submitBtn) submitBtn.disabled = false;
+                        if (onDone) onDone();
                     },
                 });
             };
@@ -5066,10 +5071,16 @@
             }
             let fields = [];
             try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
+            // Every Group Form requires a profile picture to create a team —
+            // enforced server-side (create_group) regardless, but shown up
+            // front here so the leader isn't surprised by a rejected submit.
+            // Only injected when the admin hasn't already added one explicitly.
+            const hasPhotoField = fields.some(f => f.type === 'profile_picture');
             const maxTeammates = Math.max(0, (form.max_team_size || 1) - 1);
             let html = `<div class="card shadow-lg">${_gfHeaderHtml(form)}`;
             html += `<div class="alert alert-info rounded-4 border-0 mb-4" style="font-size:0.8rem"><i class="bi bi-info-circle-fill me-2"></i>Create your team below (up to ${form.max_team_size} members including you). Teammates must log in and accept before they count.</div>`;
             html += `<form id="${tid}-form"><div class="row g-4">`;
+            if (!hasPhotoField) html += renderProfilePictureFieldHtml(`${tid}-photo`);
             fields.forEach(f => {
                 const showIfAttr = f.show_if ? ` data-show-if='${JSON.stringify(f.show_if).replace(/'/g, "&#39;")}'` : '';
                 // Nothing's been typed yet on a fresh create form, so every show_if
@@ -5097,7 +5108,7 @@
             if (maxTeammates > 0) _gfAddMemberRow(tid, maxTeammates);
 
             const form_el = document.getElementById(`${tid}-form`);
-            if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, form_el);
+            wireProfilePictureField(`${tid}-photo`, form_el);
             if (form_el) {
                 evaluateConditionalFields(form_el);
                 form_el.addEventListener('change', () => evaluateConditionalFields(form_el));
@@ -5140,15 +5151,30 @@
 
         // ── State: a pending invite, no team yet ─────────────────────────────────
         function renderInviteView(tid, pane, form, invite) {
-            pane.innerHTML = `<div class="card shadow-lg">${_gfHeaderHtml(form)}
+            // Accepting requires a profile picture on file — enforced
+            // server-side (respond_to_invite) regardless, but gated here too
+            // so declining still works freely and Accept just re-enables the
+            // moment the upload succeeds, no re-render needed.
+            const hasPhoto = !!(loggedInStudent && loggedInStudent.photo);
+            let html = `<div class="card shadow-lg">${_gfHeaderHtml(form)}
                 <div class="alert alert-primary rounded-4 border-0 mt-3">
                     <i class="bi bi-envelope-heart-fill me-2"></i>You've been invited to join <strong>${gfNameOf(invite.leader_profile, invite.invited_by)}</strong>'s team.
-                </div>
-                <div class="d-flex gap-2">
-                    <button onclick="gfRespondInvite('${tid}', ${invite.id}, true)" class="btn btn-premium-save flex-fill"><i class="bi bi-check-lg me-1"></i>Accept</button>
-                    <button onclick="gfRespondInvite('${tid}', ${invite.id}, false)" class="btn btn-outline-secondary flex-fill">Decline</button>
+                </div>`;
+            if (!hasPhoto) {
+                html += `<p class="small text-muted mb-2" style="font-size:0.78rem"><i class="bi bi-info-circle me-1"></i>Upload a profile picture before you can accept.</p>${renderProfilePictureFieldHtml(`${tid}-invite-photo`)}`;
+            }
+            html += `<div class="d-flex gap-2 mt-3">
+                    <button type="button" id="${tid}-accept-btn" onclick="gfRespondInvite('${tid}', ${invite.id}, true)" class="btn btn-premium-save flex-fill" ${hasPhoto ? '' : 'disabled'}><i class="bi bi-check-lg me-1"></i>Accept</button>
+                    <button type="button" onclick="gfRespondInvite('${tid}', ${invite.id}, false)" class="btn btn-outline-secondary flex-fill">Decline</button>
                 </div>
                 <div class="status-msg text-center mt-3 small fw-bold"></div></div>`;
+            pane.innerHTML = html;
+            if (!hasPhoto) {
+                wireProfilePictureField(`${tid}-invite-photo`, null, () => {
+                    const btn = document.getElementById(`${tid}-accept-btn`);
+                    if (btn) btn.disabled = false;
+                });
+            }
         }
 
         function gfRespondInvite(tid, inviteId, accept) {
