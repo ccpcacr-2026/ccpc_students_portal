@@ -4682,7 +4682,6 @@
                             const tid = `tab-${i}`;
                             addNav(tid, t.tab_name, t.icon_class || 'bi-journal-bookmark-fill', false, t.tab_name);
                             _refreshHomeGridIfVisible();
-                            _tryRestorePendingTab();
                             const _sbar = document.getElementById('sidebar-items');
                             const _bnav = document.getElementById('bottom-nav-container');
                             if(_sbar?.lastElementChild) _sbar.lastElementChild.classList.add('nav-dynamic');
@@ -4691,6 +4690,11 @@
                             pane.className = 'tab-pane'; pane.id = `${tid}-content`;
                             pane.innerHTML = `<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>`;
                             if(content) content.appendChild(pane);
+                            // Must come after the pane above is actually in the DOM —
+                            // switchTab() looks up "${id}-content" and silently no-ops
+                            // (while still marking ccpc_last_tab as if it worked) when
+                            // that element doesn't exist yet.
+                            _tryRestorePendingTab();
 
                             portalFetch('get_student_tab_data', { student_id: loggedInStudent.student_id, tab_name: t.tab_name }).then(data => {
                                 console.log(`Data for tab ${t.tab_name} received`, data);
@@ -4906,7 +4910,6 @@
                         const tid = `gf-${f.id}`;
                         addNav(tid, f.title, f.icon_class || 'bi-people-fill');
                         _refreshHomeGridIfVisible();
-                        _tryRestorePendingTab();
                         const _sbar = document.getElementById('sidebar-items');
                         const _bnav = document.getElementById('bottom-nav-container');
                         if (_sbar?.lastElementChild) _sbar.lastElementChild.classList.add('nav-dynamic');
@@ -4922,6 +4925,9 @@
                         pane.className = 'tab-pane'; pane.id = `${tid}-content`;
                         pane.innerHTML = `<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>`;
                         if (content) content.appendChild(pane);
+                        // Must come after the pane above is actually in the DOM — see
+                        // the identical note on the get_tabs loop above.
+                        _tryRestorePendingTab();
                         renderGroupFormPane(tid, pane, f);
                     } catch (e) { console.error("Error in group forms loop", e); }
                 });
