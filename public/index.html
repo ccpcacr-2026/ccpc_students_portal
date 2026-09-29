@@ -1243,9 +1243,20 @@
                                     <div id="admin-group-forms-list" class="row g-4"></div>
 
                                     <div id="admin-group-roster" class="hidden mt-4">
-                                        <div class="d-flex justify-content-between align-items-center mb-3 gf-roster-toolbar">
+                                        <div class="d-flex justify-content-between align-items-center mb-3 gf-roster-toolbar flex-wrap gap-2">
                                             <h5 class="fw-800 m-0" id="admin-group-roster-title">Teams</h5>
-                                            <div class="d-flex align-items-center gap-2">
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <select id="gf-roster-filter" onchange="renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm)" class="form-select form-select-sm" style="max-width:170px">
+                                                    <option value="all">All teams</option>
+                                                    <option value="submitted">Submitted only</option>
+                                                    <option value="saved">Saved (not submitted)</option>
+                                                </select>
+                                                <select id="gf-roster-sort" onchange="renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm)" class="form-select form-select-sm" style="max-width:180px">
+                                                    <option value="newest">Newest first</option>
+                                                    <option value="oldest">Oldest first</option>
+                                                    <option value="leader">Leader name (A–Z)</option>
+                                                    <option value="submitted_at">Submission time</option>
+                                                </select>
                                                 <button onclick="exportGroupFormRoster()" class="btn btn-sm btn-outline-dark rounded-pill px-3"><i class="bi bi-download me-1"></i>Download CSV</button>
                                                 <button onclick="printGroupFormRoster()" class="btn btn-sm btn-outline-dark rounded-pill px-3"><i class="bi bi-printer me-1"></i>Print</button>
                                                 <button onclick="closeGroupRoster()" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Close</button>
@@ -5191,24 +5202,33 @@
         // ── State: already a member (leader or not) ──────────────────────────────
         function renderTeamView(tid, pane, form, team, isLeader) {
             const locked = team.is_locked;
+            const submitted = team.is_submitted;
+            // Frozen either because the admin locked it or the leader already
+            // submitted it — both mean no more inviting/leaving/editing.
+            const readOnly = locked || submitted;
             let fields = [];
             try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
             const rosterHtml = team.members.map(m => `
                 <div class="d-flex align-items-center justify-content-between p-2 border-bottom">
                     <span>${gfNameOf(m.profile, m.student_id)}${m.role === 'leader' ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1">Leader</span>' : ''}</span>
-                    ${(!locked && isLeader && m.role !== 'leader') ? `<button onclick="gfRemoveMember('${tid}', ${team.id}, '${m.student_id}')" class="btn btn-xs btn-outline-danger rounded-pill px-2" title="Remove from team">×</button>` : ''}
+                    ${(!readOnly && isLeader && m.role !== 'leader') ? `<button onclick="gfRemoveMember('${tid}', ${team.id}, '${m.student_id}')" class="btn btn-xs btn-outline-danger rounded-pill px-2" title="Remove from team">×</button>` : ''}
                 </div>`).join('');
             const pendingHtml = (isLeader && team.pending_invites.length) ? `
                 <div class="mt-3"><span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Pending invites</span>
                 ${team.pending_invites.map(inv => `
                     <div class="d-flex align-items-center justify-content-between p-2 border-bottom">
                         <span class="text-muted fst-italic">${gfNameOf(inv.profile, inv.invited_student_id)}</span>
-                        <button onclick="gfCancelInvite('${tid}', ${inv.id})" class="btn btn-xs btn-outline-secondary rounded-pill px-2">Cancel</button>
+                        ${!readOnly ? `<button onclick="gfCancelInvite('${tid}', ${inv.id})" class="btn btn-xs btn-outline-secondary rounded-pill px-2">Cancel</button>` : ''}
                     </div>`).join('')}</div>` : '';
-            const canInviteMore = isLeader && !locked && team.members.length < form.max_team_size;
+            const canInviteMore = isLeader && !readOnly && team.members.length < form.max_team_size;
+            // Submit is only reachable once nothing's left pending and (if the
+            // form requires it) the roster is full — matches submit_group_team's
+            // own server-side check exactly, so this is never a false "ready".
+            const canSubmit = isLeader && !readOnly && !team.pending_invites.length && (!form.members_required || team.members.length >= form.max_team_size);
 
             let html = `<div class="card shadow-lg">${_gfHeaderHtml(form)}`;
             if (locked) html += `<div class="alert alert-info py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-shield-check-fill me-2 fs-5"></i>Verified & Locked</div>`;
+            else if (submitted) html += `<div class="alert alert-success py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-check-circle-fill me-2 fs-5"></i>Submitted${team.submitted_at ? ' — ' + new Date(team.submitted_at).toLocaleString() : ''}</div>`;
             html += `<p class="small text-muted mb-2">${team.members.length} of ${form.max_team_size} members${form.members_required && team.members.length < form.max_team_size ? ' — team must be full to count as complete' : ''}</p>`;
             html += `<div class="rounded-4 border overflow-hidden mb-3">${rosterHtml}</div>${pendingHtml}`;
 
@@ -5234,15 +5254,21 @@
                     if (f.type === 'profile_picture') { if (isLeader) html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
                     if (f.type === 'class_group') { html += _gfClassGroupFieldHtml(f, ((team.members.find(m => m.role === 'leader') || {}).profile || {})[gfGetGroupField(form.eligibility_json)], form.eligibility_json); return; }
                     const val = gdLookup(f.data_key);
-                    html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, locked || !isLeader)}</div>`;
+                    html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, readOnly || !isLeader)}</div>`;
                 });
-                html += `</div>${(!locked && isLeader) ? `<button type="submit" class="btn btn-premium-save w-100 mt-4"><i class="bi bi-cloud-arrow-up-fill me-2"></i>Save Team Details</button>` : ''}<div class="status-msg text-center mt-3 small fw-bold"></div></form>`;
+                html += `</div>${(!readOnly && isLeader) ? `<button type="submit" class="btn btn-premium-save w-100 mt-4"><i class="bi bi-cloud-arrow-up-fill me-2"></i>Save Team Details</button>` : ''}<div class="status-msg text-center mt-3 small fw-bold"></div></form>`;
             }
 
-            if (!locked) {
+            if (isLeader && !readOnly) {
+                html += `<div class="mt-4">
+                    ${!canSubmit ? `<p class="small text-muted text-center mb-2" style="font-size:0.75rem"><i class="bi bi-info-circle me-1"></i>${team.pending_invites.length ? `Waiting on ${team.pending_invites.length} pending invite${team.pending_invites.length === 1 ? '' : 's'} before you can submit.` : 'Team must be full before you can submit.'}</p>` : ''}
+                    <button type="button" onclick="gfSubmitTeam('${tid}', ${team.id})" class="btn btn-success w-100" ${canSubmit ? '' : 'disabled'}><i class="bi bi-send-check-fill me-1"></i>Submit</button>
+                </div>`;
+            }
+            if (!readOnly) {
                 html += isLeader
-                    ? `<button onclick="gfDisbandTeam('${tid}', ${team.id})" class="btn btn-outline-danger w-100 mt-4">Disband Team</button>`
-                    : `<button onclick="gfLeaveTeam('${tid}', ${team.id})" class="btn btn-outline-secondary w-100 mt-4">Leave Team</button>`;
+                    ? `<button onclick="gfDisbandTeam('${tid}', ${team.id})" class="btn btn-outline-danger w-100 mt-2">Disband Team</button>`
+                    : `<button onclick="gfLeaveTeam('${tid}', ${team.id})" class="btn btn-outline-secondary w-100 mt-2">Leave Team</button>`;
             }
             html += `</div>`;
             pane.innerHTML = html;
@@ -5260,7 +5286,7 @@
                     _gdCondForm.addEventListener('change', () => evaluateConditionalFields(_gdCondForm));
                 }
             }
-            if (fields.length && !locked && isLeader) {
+            if (fields.length && !readOnly && isLeader) {
                 const gdForm = document.getElementById(`${tid}-gd-form`);
                 if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, gdForm);
                 if (gdForm) gdForm.onsubmit = (e) => {
@@ -5326,6 +5352,18 @@
             portalFetch('disband_group', { team_id: teamId, leader_id: loggedInStudent.student_id }).then(res => {
                 if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Team disbanded', 'success'); if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm); }
                 else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        // Finalizes a saved team — the server re-validates everything (no
+        // pending invites, full if required, every member has a photo) since
+        // the client-side canSubmit check here is only a UX shortcut.
+        function gfSubmitTeam(tid, teamId) {
+            if (!confirm('Submit this team?\n\nOnce submitted, the team and its details can no longer be changed.')) return;
+            const pane = document.getElementById(`${tid}-content`);
+            portalFetch('submit_group_team', { team_id: teamId, leader_id: loggedInStudent.student_id }).then(res => {
+                if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Team submitted', 'success'); if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm); }
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Could not submit', 'error');
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
         }
 
@@ -5985,13 +6023,13 @@
             try { fields = JSON.parse(_gfRosterForm?.fields_json || '[]'); } catch (e) {}
             const answerFields = fields.filter(f => f.type !== 'group_label' && f.type !== 'profile_picture');
             const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
-            const headers = ['Team ID', 'Leader', 'Leader Student ID', 'Status', 'Locked', 'Members (excl. leader)', 'Pending Invites', ...answerFields.map(f => f.name || f.data_key)];
+            const headers = ['Team ID', 'Leader', 'Leader Student ID', 'Status', 'Submitted', 'Submitted At', 'Locked', 'Members (excl. leader)', 'Pending Invites', ...answerFields.map(f => f.name || f.data_key)];
             const rows = _gfRosterTeams.map(t => {
                 const leader = t.members.find(m => m.role === 'leader');
                 const others = t.members.filter(m => m.role !== 'leader').map(m => `${nameOf(m.profile)} [${m.student_id}]`).join('; ');
                 const pending = t.pending_invites.map(inv => `${nameOf(inv.profile)} [${inv.invited_student_id}]`).join('; ');
                 const answers = answerFields.map(f => (t.group_data || {})[f.data_key] ?? '');
-                return [t.id, leader ? nameOf(leader.profile) : t.leader_student_id, t.leader_student_id, t.status, t.is_locked ? 'Yes' : 'No', others, pending, ...answers];
+                return [t.id, leader ? nameOf(leader.profile) : t.leader_student_id, t.leader_student_id, t.status, t.is_submitted ? 'Yes' : 'No', t.submitted_at ? new Date(t.submitted_at).toLocaleString() : '', t.is_locked ? 'Yes' : 'No', others, pending, ...answers];
             });
             const csv = [headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
             const a = document.createElement('a');
@@ -6035,19 +6073,33 @@
             const host = document.getElementById('admin-group-roster-list');
             if (!teams.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams have been created for this form yet.</p>'; return; }
             const maxSize = form ? form.max_team_size : null;
-            host.innerHTML = teams.map(t => {
+            const filter = document.getElementById('gf-roster-filter')?.value || 'all';
+            const sort = document.getElementById('gf-roster-sort')?.value || 'newest';
+            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+            const leaderNameOf = t => nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id;
+
+            let shown = teams.filter(t => filter === 'submitted' ? t.is_submitted : filter === 'saved' ? !t.is_submitted : true);
+            shown = shown.slice().sort((a, b) => {
+                if (sort === 'leader') return leaderNameOf(a).localeCompare(leaderNameOf(b));
+                if (sort === 'submitted_at') return new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0);
+                const cmp = new Date(a.created_at || 0) - new Date(b.created_at || 0);
+                return sort === 'oldest' ? cmp : -cmp;
+            });
+            if (!shown.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams match this filter.</p>'; return; }
+
+            host.innerHTML = shown.map(t => {
                 const complete = maxSize ? t.members.length >= maxSize : true;
-                const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
                 const answerRows = _gfFormatGroupData(t.group_data, form && form.fields_json);
                 return `
                 <div class="card p-3 shadow-sm border-0 ${t.status === 'disbanded' ? 'opacity-50' : ''}">
                     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                         <div>
-                            <strong>${nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id}</strong>'s team
+                            <strong>${leaderNameOf(t)}</strong>'s team
                             ${t.status === 'disbanded' ? ' <span class="badge bg-secondary rounded-pill" style="font-size:0.6rem">Disbanded</span>' : ''}
+                            ${t.is_submitted ? ' <span class="badge bg-success rounded-pill" style="font-size:0.6rem">Submitted</span>' : ' <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:0.6rem">Saved</span>'}
                             ${t.is_locked ? ' <span class="badge bg-dark rounded-pill" style="font-size:0.6rem">Locked</span>' : ''}
                             ${!complete && form && form.members_required ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Incomplete</span>' : ''}
-                            <div class="small text-muted" style="font-size:0.72rem">${t.members.length}${maxSize ? '/' + maxSize : ''} members${t.pending_invites.length ? ' · ' + t.pending_invites.length + ' pending invite(s)' : ''}</div>
+                            <div class="small text-muted" style="font-size:0.72rem">${t.members.length}${maxSize ? '/' + maxSize : ''} members${t.pending_invites.length ? ' · ' + t.pending_invites.length + ' pending invite(s)' : ''}${t.submitted_at ? ' · submitted ' + new Date(t.submitted_at).toLocaleString() : ''}</div>
                         </div>
                         ${t.status !== 'disbanded' ? `
                         <div class="d-flex gap-2">
@@ -6059,7 +6111,7 @@
                         ${t.members.map(m => `<span class="badge bg-light text-dark border rounded-pill px-3 py-2">${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</span>`).join('')}
                         ${t.pending_invites.map(inv => `<span class="badge bg-light text-muted border rounded-pill px-3 py-2 fst-italic">${nameOf(inv.profile) || inv.invited_student_id} (pending)</span>`).join('')}
                     </div>
-                    ${answerRows.length ? `<div class="mt-2 p-2 rounded-3 bg-light small" style="font-size:0.75rem"><div class="fw-800 text-muted text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Submitted Answers</div>${answerRows.map(r => `<div class="mb-1"><span class="text-muted">${r.label}:</span> <strong>${r.value}</strong></div>`).join('')}</div>` : ''}
+                    ${answerRows.length ? `<div class="mt-2 p-2 rounded-3 bg-light small" style="font-size:0.75rem"><div class="fw-800 text-muted text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Answers</div>${answerRows.map(r => `<div class="mb-1"><span class="text-muted">${r.label}:</span> <strong>${r.value}</strong></div>`).join('')}</div>` : ''}
                 </div>`;
             }).join('');
         }

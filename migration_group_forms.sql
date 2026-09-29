@@ -208,3 +208,17 @@ ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS condition_json text NOT
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS header text;
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS sub_header text;
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS cover_photo_url text;
+
+-- ── Save vs. Submit ──────────────────────────────────────────────────────────
+-- A team's group_data was always live/editable with no final state — the
+-- leader could keep "saving" team details indefinitely with no equivalent of
+-- an ordinary form's one-time Submit. is_submitted marks that a leader has
+-- explicitly finalized the team (submit_group_team, route.js) once every
+-- invite has been answered (no pending ones left), the team is full if the
+-- form requires it, and every member has a profile picture on file. Once
+-- set, the team is frozen the same way admin-set is_locked already freezes
+-- one — no more inviting, leaving, disbanding or editing group_data — so
+-- the admin's roster can tell a finished submission apart from a
+-- still-being-assembled draft.
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS is_submitted boolean NOT NULL DEFAULT false;
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS submitted_at timestamptz;

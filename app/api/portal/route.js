@@ -1656,6 +1656,7 @@ export async function POST(req) {
     if (team.leader_student_id !== leader_id) return NextResponse.json({ result: 'error', message: 'Only the team leader can invite.' });
     if (team.status !== 'active') return NextResponse.json({ result: 'error', message: 'This team no longer exists.' });
     if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+    if (team.is_submitted) return NextResponse.json({ result: 'error', message: 'This team has already been submitted and can no longer be changed.' });
 
     const [formRows, memberRows, existingMember, lookup, leaderRows] = await Promise.all([
       sb(`group_forms?id=eq.${encodeURIComponent(team.group_form_id)}`),
@@ -1737,6 +1738,7 @@ export async function POST(req) {
     if (!team) return NextResponse.json({ result: 'error', message: 'Team not found.' });
     if (actor_id !== student_id && actor_id !== team.leader_student_id) return NextResponse.json({ result: 'error', message: 'Not allowed.' });
     if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+    if (team.is_submitted) return NextResponse.json({ result: 'error', message: 'This team has already been submitted and can no longer be changed.' });
     if (student_id === team.leader_student_id) return NextResponse.json({ result: 'error', message: 'The leader cannot leave — disband the team instead.' });
 
     const r = await sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}&student_id=eq.${encodeURIComponent(student_id)}`, 'DELETE');
@@ -1755,6 +1757,7 @@ export async function POST(req) {
     if (!team) return NextResponse.json({ result: 'error', message: 'Team not found.' });
     if (team.leader_student_id !== leader_id) return NextResponse.json({ result: 'error', message: 'Only the team leader can disband this team.' });
     if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+    if (team.is_submitted) return NextResponse.json({ result: 'error', message: 'This team has already been submitted — contact the admin if it needs to be withdrawn.' });
 
     await sb(`group_form_team_invites?team_id=eq.${encodeURIComponent(team_id)}&status=eq.pending`, 'PATCH', { status: 'cancelled', responded_at: new Date().toISOString() });
     await sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}`, 'DELETE');
@@ -1772,7 +1775,53 @@ export async function POST(req) {
     if (!team) return NextResponse.json({ result: 'error', message: 'Team not found.' });
     if (team.leader_student_id !== leader_id) return NextResponse.json({ result: 'error', message: 'Only the team leader can edit these details.' });
     if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+    if (team.is_submitted) return NextResponse.json({ result: 'error', message: 'This team has already been submitted and can no longer be changed.' });
     const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { group_data: group_data || {}, updated_at: new Date().toISOString() });
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
+  // ── Submit a team (leader only) — the final step after "saving" details ───
+  // Requires: no pending invites left unanswered, the team full if the form
+  // marks members_required, and every current member (leader included) has a
+  // profile picture on file. Once set, is_submitted freezes the team exactly
+  // like admin-set is_locked already does (see the checks added above), so
+  // the admin's roster can tell a finished submission apart from a draft.
+  if (action === 'submit_group_team') {
+    const { team_id, leader_id } = payload;
+    if (!team_id || !leader_id) return NextResponse.json({ result: 'error', message: 'team_id and leader_id required.' });
+    const teamRows = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`);
+    const team = (!teamRows?.error && teamRows[0]) ? teamRows[0] : null;
+    if (!team) return NextResponse.json({ result: 'error', message: 'Team not found.' });
+    if (team.leader_student_id !== leader_id) return NextResponse.json({ result: 'error', message: 'Only the team leader can submit this team.' });
+    if (team.status !== 'active') return NextResponse.json({ result: 'error', message: 'This team no longer exists.' });
+    if (team.is_locked) return NextResponse.json({ result: 'error', message: 'This team is locked by the admin.' });
+    if (team.is_submitted) return NextResponse.json({ result: 'error', message: 'This team has already been submitted.' });
+
+    const [formRows, memberRows, pendingRows] = await Promise.all([
+      sb(`group_forms?id=eq.${encodeURIComponent(team.group_form_id)}`),
+      sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}`),
+      sb(`group_form_team_invites?team_id=eq.${encodeURIComponent(team_id)}&status=eq.pending`),
+    ]);
+    const form = (!formRows?.error && formRows[0]) ? formRows[0] : null;
+    if (!form) return NextResponse.json({ result: 'error', message: 'Group form not found.' });
+    const members = Array.isArray(memberRows) ? memberRows : [];
+    const pending = Array.isArray(pendingRows) ? pendingRows : [];
+
+    if (pending.length) {
+      return NextResponse.json({ result: 'error', message: `You still have ${pending.length} pending invite${pending.length === 1 ? '' : 's'} — wait for everyone to respond before submitting.` });
+    }
+    if (form.members_required && members.length < form.max_team_size) {
+      return NextResponse.json({ result: 'error', message: `This form requires a full team of ${form.max_team_size} before you can submit.` });
+    }
+
+    const photoChecks = await Promise.all(members.map(m => hasProfilePhoto(m.student_id)));
+    const missingCount = photoChecks.filter(ok => !ok).length;
+    if (missingCount) {
+      return NextResponse.json({ result: 'error', code: 'PHOTO_REQUIRED', message: `${missingCount === 1 ? 'One teammate still needs' : missingCount + ' teammates still need'} to upload a profile picture before you can submit.` });
+    }
+
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { is_submitted: true, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() });
     if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
     return NextResponse.json({ result: 'success' });
   }
