@@ -222,3 +222,33 @@ ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS cover_photo_url text;
 -- still-being-assembled draft.
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS is_submitted boolean NOT NULL DEFAULT false;
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS submitted_at timestamptz;
+
+-- ── Reviewer routing rules (ccpc-teachers only) ──────────────────────────────
+-- Lets the admin route each Group Form's submissions to specific teachers for
+-- review, WITHOUT giving them the full admin CRUD — and lets different slices
+-- of one form's submissions go to different reviewers (e.g. each class's
+-- teams reviewed by that class's own class teacher). One row = one routing
+-- rule: "teams where <dimension> = <value>" are visible to either whoever is
+-- currently the class teacher of that class (assign_mode='class_teacher',
+-- resolved live against student.class_teacher_assignments — stays correct if
+-- that assignment changes later) or one specific teacher account
+-- (assign_mode='user', teacher_user_id = that account's app_users.user_id).
+-- `dimension` is 'class' | 'house' | 'group' (the eligibility band name) |
+-- 'answer:<data_key>' (one of this form's own fields_json answers, e.g. a
+-- Category dropdown) — resolved against the team's leader profile for the
+-- first three, or team.group_data for the last.
+CREATE TABLE IF NOT EXISTS student.group_form_reviewer_rules (
+  id                bigserial PRIMARY KEY,
+  group_form_id     bigint      NOT NULL,
+  dimension         text        NOT NULL,
+  value             text        NOT NULL,
+  assign_mode       text        NOT NULL DEFAULT 'user', -- 'class_teacher' | 'user'
+  teacher_user_id   text,                                -- set when assign_mode = 'user'
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS group_form_reviewer_rules_form_idx ON student.group_form_reviewer_rules (group_form_id);
+CREATE INDEX IF NOT EXISTS group_form_reviewer_rules_teacher_idx ON student.group_form_reviewer_rules (teacher_user_id);
+ALTER TABLE student.group_form_reviewer_rules ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_form_reviewer_rules_all" ON student.group_form_reviewer_rules;
+CREATE POLICY "group_form_reviewer_rules_all" ON student.group_form_reviewer_rules FOR ALL USING (true);
+GRANT ALL ON student.group_form_reviewer_rules TO anon, authenticated, service_role;
