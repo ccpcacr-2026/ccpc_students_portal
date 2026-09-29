@@ -137,15 +137,11 @@ export async function GET(req) {
       if (!ins?.error) logged++;
     }
 
-    // Retention: this table is written every ~30s per moving bus with no
-    // other cleanup, so left alone it grows forever. Deleting anything
-    // older than 3 days here (piggybacked on the same cron tick rather
-    // than a separate job) keeps just enough history for the admin route-
-    // history viewer (ccpc-teachers, get_bus_route_history) without an
-    // unbounded table.
-    const cutoff = new Date(Date.now() - 3 * 24 * 3600 * 1000);
-    const cutoffStr = cutoff.toISOString().slice(0, 19).replace('T', ' ');
-    await sb(`bus_location_history?location_time=lt.${encodeURIComponent(cutoffStr)}`, 'DELETE');
+    // Retention for this table is handled by the standing pg_cron job
+    // "purge-bus-history" (student.bus_location_history, daily) — NOT here.
+    // This used to run its own DELETE on every single tick, which at a
+    // 4-30s polling interval meant a full retention sweep 2,880-21,600
+    // times a day for zero benefit over doing it once daily.
 
     return NextResponse.json({ ok: true, buses: items.length, logged });
   } catch (e) {
