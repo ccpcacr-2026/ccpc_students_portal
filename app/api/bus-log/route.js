@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
-// Background bus-location logger, pinged by pg_cron every 30 seconds.
+// Background bus-location logger, pinged by pg_cron every 15 seconds
+// (GP's own feed refreshes every ~10s — 15s stays close to that without
+// polling faster than GP actually has new data).
 // Runs here (not in Postgres) because GP's API accepts connections from
 // Vercel but resets TLS from the Supabase DB host. Reuses the GP token via
 // the portal_settings gp_poller_token row and inserts a history row only
