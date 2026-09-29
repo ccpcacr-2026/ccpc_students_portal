@@ -1636,6 +1636,16 @@
         const AUTO_LOGIN_ID      = _urlP.get('id') || _urlP.get('student_id') || '';
         const AUTO_LOGIN_PHONE   = _urlP.get('phone') || _urlP.get('phone_number') || '';
         const AUTO_LOGIN_NFC_UID = _urlP.get('nfc_uid') || _urlP.get('uid') || '';
+        // Direct link to one specific form, e.g. a QR code printed for one
+        // Group Form's registration (?gf=<group_form id>) or an ordinary
+        // dynamic Tab (?tab=<tab id>) — reuses the exact same
+        // _pendingTabRestore/_tryRestorePendingTab relay each nav-building
+        // loop (get_tabs, loadStudentGroupForms) already calls per item to
+        // silently resume "the tab you were last on" after a refresh; a deep
+        // link just pre-seeds that value so it wins on first load too,
+        // whether the visitor still has a saved session or is logging in
+        // fresh for the very first time.
+        const DEEP_LINK_TAB = _urlP.get('gf') ? `gf-${_urlP.get('gf')}` : (_urlP.get('tab') || '');
 
         let loggedInStudent = null;
         let allTabs = [];
@@ -1668,8 +1678,15 @@
         let _pendingTabRestore = null;
         function _tryRestorePendingTab() {
             if (!_pendingTabRestore || _pendingTabRestore === '__home__') { _pendingTabRestore = null; return; }
-            const btn = document.querySelector(`#bottom-nav-container .nav-item-btn[data-tab-id="${_pendingTabRestore}"]`);
-            if (btn) { const id = _pendingTabRestore; _pendingTabRestore = null; switchTab(id); }
+            const target = _pendingTabRestore;
+            // Plain JS equality scan, not a CSS attribute-selector built from
+            // this string — target can come straight from a URL query param
+            // (a deep link's ?tab=<name>), which a selector built by string
+            // interpolation would let break (or worse, redirect) on a stray
+            // quote/bracket.
+            const btn = Array.from(document.querySelectorAll('#bottom-nav-container .nav-item-btn'))
+                .find(b => b.dataset.tabId === target || b.dataset.tabName === target);
+            if (btn) { const id = btn.dataset.tabId; _pendingTabRestore = null; switchTab(id); }
         }
 
         window.onerror = function(msg, url, lineNo, columnNo, error) {
@@ -1701,6 +1718,7 @@
         // which left the login button dead for seconds on slow mobile connections.
         const initPortal = () => {
             try {
+                if (DEEP_LINK_TAB) _pendingTabRestore = DEEP_LINK_TAB;
                 const sidebarLogo = document.getElementById('sidebar-logo');
                 const loginLogo = document.getElementById('login-logo');
                 const mobileLogo = document.getElementById('mobile-logo');
@@ -1756,7 +1774,7 @@
                     // they land on the normal default landing first; whichever
                     // of them actually runs then tries to switch straight to
                     // this exact tab afterward (see _tryRestorePendingTab).
-                    try { _pendingTabRestore = localStorage.getItem('ccpc_last_tab'); } catch (e) {}
+                    try { if (!_pendingTabRestore) _pendingTabRestore = localStorage.getItem('ccpc_last_tab'); } catch (e) {}
                     if (data && data.student_id === 'admin') { loggedInStudent = data; showAdminPanel(); }
                     else if (data && data.student_id && data.phone_number) {
                         loggedInStudent = data;
@@ -4186,13 +4204,19 @@
                 </div>`).join('');
         }
 
-        function addNav(id, name, icon, active = false) {
+        // matchName: an extra, stable identifier a deep link (?tab=<name>) can
+        // target — needed for dynamic Tabs, whose real id (tab-${i}) is just
+        // its load-order index and isn't something a printed QR code could
+        // ever address reliably. Group Forms don't need it: their id (gf-${
+        // f.id}) is already stable. See _tryRestorePendingTab.
+        function addNav(id, name, icon, active = false, matchName) {
             const sidebar = document.getElementById('sidebar-items');
             const bottom = document.getElementById('bottom-nav-container');
-            
+
             const btn = document.createElement('button');
             btn.className = `nav-item-btn ${active ? 'active' : ''}`;
             btn.dataset.tabId = id;
+            if (matchName) btn.dataset.tabName = matchName;
             btn.innerHTML = `<i class="bi ${icon}"></i> <span>${name}</span>`;
             
             // Sidebar Version
@@ -4656,7 +4680,7 @@
                         try {
                             if (!t.tab_name) return;
                             const tid = `tab-${i}`;
-                            addNav(tid, t.tab_name, t.icon_class || 'bi-journal-bookmark-fill');
+                            addNav(tid, t.tab_name, t.icon_class || 'bi-journal-bookmark-fill', false, t.tab_name);
                             _refreshHomeGridIfVisible();
                             _tryRestorePendingTab();
                             const _sbar = document.getElementById('sidebar-items');
