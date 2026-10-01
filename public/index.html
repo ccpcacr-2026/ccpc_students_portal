@@ -6117,21 +6117,39 @@
                 (t.pending_invites || []).forEach(inv => { if (inv.profile) _gfProfileLookup[inv.invited_student_id] = inv.profile; });
             });
         }
+        // Some photo values are still legacy Google Drive file IDs (pre-dates
+        // the Supabase-storage uploader) rather than a full URL — same check
+        // ccpc-teachers' own _photoUrl already does.
+        function _gfPhotoUrl(raw) {
+            if (!raw) return '';
+            return raw.startsWith('http') ? raw : 'https://lh3.googleusercontent.com/d/' + raw;
+        }
+        function _gfAvatar(name, photo, px) {
+            const src = _gfPhotoUrl(photo);
+            const inner = src
+                ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`
+                : `<span class="text-white fw-800" style="font-size:${Math.round(px * 0.42)}px">${_escHtml((name || '?').trim().charAt(0).toUpperCase())}</span>`;
+            return `<div class="d-flex align-items-center justify-content-center shrink-0" style="width:${px}px;height:${px}px;border-radius:${Math.round(px * 0.3)}px;overflow:hidden;background:linear-gradient(135deg,#0d6efd,#6610f2)">${inner}</div>`;
+        }
         function gfShowStudentInfo(studentId) {
             const p = _gfProfileLookup[studentId];
             document.getElementById('gfStudentInfoOverlay')?.remove();
             const overlay = document.createElement('div');
             overlay.id = 'gfStudentInfoOverlay';
+            // z-index 99999: higher than every other overlay in this file
+            // (toasts/NFC scan sit at 9999) — this can be opened from on top
+            // of the roster modal, so it must never end up rendering behind
+            // something else's stacking context, which is what made it look
+            // broken/unreadable before.
             overlay.className = 'fixed inset-0 d-flex align-items-end align-items-sm-center justify-content-center p-3';
-            overlay.style.cssText = 'z-index:1070;background:rgba(0,0,0,0.4)';
+            overlay.style.cssText = 'z-index:99999;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px)';
             overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
             if (!p) {
                 overlay.innerHTML = `<div class="bg-white rounded-4 w-100 shadow-lg p-4 text-center" style="max-width:380px"><p class="small text-muted fw-bold">No profile info available for ${_escHtml(studentId)}.</p><button onclick="document.getElementById('gfStudentInfoOverlay').remove()" class="btn btn-sm btn-light w-100 mt-2 rounded-pill fw-800">Close</button></div>`;
                 document.body.appendChild(overlay);
                 return;
             }
-            const infoRows = [
-                ['Student ID', p.student_id],
+            const infoTiles = [
                 ['Class', `${p.class || ''}${p.section ? '-' + p.section : ''}`.replace(/^-|-$/, '') || null],
                 ['Roll', p.roll],
                 ['House', p.house && p.house !== '--' ? p.house : null],
@@ -6139,20 +6157,34 @@
                 ["Father's Name", p.fathers_name],
                 ["Mother's Name", p.mothers_name],
             ].filter(([, v]) => v);
-            const phoneRow = (label, tel) => {
+            const callBtn = (label, tel) => {
                 if (!tel) return '';
                 const clean = String(tel).replace(/[\s\-()]/g, '');
-                return `<div class="d-flex align-items-center justify-content-between py-2 border-bottom"><span class="text-muted fw-bold small">${label}</span><a href="tel:${encodeURIComponent(clean)}" onclick="event.stopPropagation()" class="d-flex align-items-center gap-1 text-primary fw-800 small text-decoration-none"><i class="bi bi-telephone-fill"></i>${_escHtml(tel)}</a></div>`;
-            };
-            const phones = phoneRow('Phone', p.phone_number) + phoneRow("Father's Phone", p.father_phone) + phoneRow("Mother's Phone", p.mother_phone);
-            overlay.innerHTML = `
-                <div class="bg-white rounded-4 w-100 shadow-lg p-4" style="max-width:380px">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                        <p class="fw-800 small mb-0">${_escHtml(p.student_name || studentId)}</p>
-                        <button onclick="document.getElementById('gfStudentInfoOverlay').remove()" class="btn btn-sm btn-link text-muted p-0"><i class="bi bi-x-lg"></i></button>
+                return `<a href="tel:${encodeURIComponent(clean)}" onclick="event.stopPropagation()" class="d-flex align-items-center gap-3 rounded-4 px-3 py-3 text-decoration-none" style="background:#ecfdf5;border:1px solid #a7f3d0">
+                    <div class="d-flex align-items-center justify-content-center rounded-circle text-white shrink-0" style="width:36px;height:36px;background:#059669"><i class="bi bi-telephone-fill"></i></div>
+                    <div class="text-start">
+                        <div class="text-uppercase fw-800" style="font-size:10px;letter-spacing:0.05em;color:#047857">${label}</div>
+                        <div class="fw-800" style="color:#1e293b">${_escHtml(tel)}</div>
                     </div>
-                    ${infoRows.map(([label, v]) => `<div class="d-flex align-items-center justify-content-between py-2 border-bottom"><span class="text-muted fw-bold small">${label}</span><span class="fw-bold small">${_escHtml(v)}</span></div>`).join('')}
-                    ${phones ? `<div class="mt-1">${phones}</div>` : '<p class="small text-muted fst-italic mt-2 mb-0">No phone numbers on file.</p>'}
+                </a>`;
+            };
+            const calls = callBtn('Call Student', p.phone_number) + callBtn('Call Father', p.father_phone) + callBtn('Call Mother', p.mother_phone);
+            overlay.innerHTML = `
+                <div class="bg-white rounded-4 w-100 shadow-lg overflow-hidden" style="max-width:380px">
+                    <div class="d-flex align-items-center gap-3 p-4 pb-3" style="background:linear-gradient(135deg,#eef2ff,#f0f9ff)">
+                        ${_gfAvatar(p.student_name, p.photo, 64)}
+                        <div class="flex-grow-1" style="min-width:0">
+                            <p class="fw-800 mb-0 text-truncate">${_escHtml(p.student_name || studentId)}</p>
+                            <p class="small text-muted fw-bold mb-0 mt-1">${_escHtml(p.student_id)}</p>
+                        </div>
+                        <button onclick="document.getElementById('gfStudentInfoOverlay').remove()" class="btn btn-sm btn-light rounded-circle d-flex align-items-center justify-content-center shrink-0" style="width:32px;height:32px"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    <div class="p-4 pt-3">
+                    ${infoTiles.length ? `<div class="row g-2 mb-3">
+                        ${infoTiles.map(([label, v]) => `<div class="col-6"><div class="bg-light rounded-3 px-3 py-2"><div class="text-uppercase fw-800 text-muted" style="font-size:9px;letter-spacing:0.05em">${label}</div><div class="fw-800 small text-truncate mt-1">${_escHtml(v)}</div></div></div>`).join('')}
+                    </div>` : ''}
+                    ${calls ? `<div class="d-flex flex-column gap-2">${calls}</div>` : '<p class="small text-muted fst-italic text-center mb-0">No phone numbers on file.</p>'}
+                    </div>
                 </div>`;
             document.body.appendChild(overlay);
         }
@@ -6217,8 +6249,8 @@
                         </div>` : ''}
                     </div>
                     <div class="mt-2 d-flex flex-wrap gap-2">
-                        ${t.members.map(m => `<button type="button" onclick='gfShowStudentInfo(${JSON.stringify(m.student_id)})' class="badge bg-light text-dark border rounded-pill px-3 py-2" style="cursor:pointer">${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</button>`).join('')}
-                        ${t.pending_invites.map(inv => `<button type="button" onclick='gfShowStudentInfo(${JSON.stringify(inv.invited_student_id)})' class="badge bg-light text-muted border rounded-pill px-3 py-2 fst-italic" style="cursor:pointer">${nameOf(inv.profile) || inv.invited_student_id} (pending)</button>`).join('')}
+                        ${t.members.map(m => `<button type="button" onclick='gfShowStudentInfo(${JSON.stringify(m.student_id)})' class="d-inline-flex align-items-center gap-2 bg-light text-dark border rounded-pill ps-1 pe-3 py-1 fw-bold small" style="cursor:pointer;border-width:1px">${_gfAvatar(m.profile?.student_name, m.profile?.photo, 24)}${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</button>`).join('')}
+                        ${t.pending_invites.map(inv => `<button type="button" onclick='gfShowStudentInfo(${JSON.stringify(inv.invited_student_id)})' class="d-inline-flex align-items-center gap-2 bg-light text-muted border rounded-pill ps-1 pe-3 py-1 fw-bold small fst-italic" style="cursor:pointer;border-width:1px">${_gfAvatar(inv.profile?.student_name, inv.profile?.photo, 24)}${nameOf(inv.profile) || inv.invited_student_id} (pending)</button>`).join('')}
                     </div>
                     ${!t.is_submitted && t.revision_comment ? `<div class="mt-2 p-2 rounded-3 bg-warning-subtle small" style="font-size:0.75rem"><div class="fw-800 text-warning-emphasis text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Changes Requested${t.revision_requested_at ? ' · ' + new Date(t.revision_requested_at).toLocaleString() : ''}</div><div style="white-space:pre-wrap">${_escHtml(t.revision_comment)}</div></div>` : ''}
                     ${answerRows.length ? `<div class="mt-2 p-2 rounded-3 bg-light small" style="font-size:0.75rem"><div class="fw-800 text-muted text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Answers</div>${answerRows.map(r => `<div class="mb-1"><span class="text-muted">${r.label}:</span> <strong>${r.value}</strong></div>`).join('')}</div>` : ''}

@@ -1561,7 +1561,7 @@ export async function POST(req) {
       // the admin roster's own query, which now also powers the clickable
       // "full student info + call" popup, so it needs phone/roll/parent
       // names too, not just enough to label a chip.
-      const profRows = await sb(`students_data?student_id=in.(${ids.map(encodeURIComponent).join(',')})&select=student_id,student_name,class,section,roll,house,session,phone_number,father_phone,mother_phone,fathers_name,mothers_name`);
+      const profRows = await sb(`students_data?student_id=in.(${ids.map(encodeURIComponent).join(',')})&select=student_id,student_name,class,section,roll,house,session,phone_number,father_phone,mother_phone,fathers_name,mothers_name,photo`);
       (Array.isArray(profRows) ? profRows : []).forEach(p => { nameById[p.student_id] = p; });
     }
     const membersByTeam = {};
