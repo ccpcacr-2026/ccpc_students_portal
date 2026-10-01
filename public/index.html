@@ -1250,6 +1250,9 @@
                                                     <option value="all">All teams</option>
                                                     <option value="submitted">Submitted only</option>
                                                     <option value="saved">Saved (not submitted)</option>
+                                                    <option value="approved">Approved only</option>
+                                                    <option value="rejected">Rejected only</option>
+                                                    <option value="unreviewed">Not yet reviewed</option>
                                                 </select>
                                                 <select id="gf-roster-sort" onchange="renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm)" class="form-select form-select-sm" style="max-width:180px">
                                                     <option value="newest">Newest first</option>
@@ -6052,18 +6055,19 @@
         // group-level answer labeled with its real field name (same field set
         // _gfFormatGroupData already uses for the on-screen preview).
         function exportGroupFormRoster() {
-            if (!_gfRosterTeams.length) { if (typeof showToast === 'function') showToast('No teams to export yet', 'error'); return; }
+            const teamsOut = _gfRosterFilteredSorted();
+            if (!teamsOut.length) { if (typeof showToast === 'function') showToast('No teams to export yet', 'error'); return; }
             let fields = [];
             try { fields = JSON.parse(_gfRosterForm?.fields_json || '[]'); } catch (e) {}
             const answerFields = fields.filter(f => f.type !== 'group_label' && f.type !== 'profile_picture');
             const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
-            const headers = ['Reference No.', 'Team ID', 'Leader', 'Leader Student ID', 'Status', 'Submitted', 'Submitted At', 'Locked', 'Members (excl. leader)', 'Pending Invites', ...answerFields.map(f => f.name || f.data_key)];
-            const rows = _gfRosterTeams.map(t => {
+            const headers = ['Reference No.', 'Team ID', 'Leader', 'Leader Student ID', 'Status', 'Review Status', 'Submitted', 'Submitted At', 'Locked', 'Members (excl. leader)', 'Pending Invites', ...answerFields.map(f => f.name || f.data_key)];
+            const rows = teamsOut.map(t => {
                 const leader = t.members.find(m => m.role === 'leader');
                 const others = t.members.filter(m => m.role !== 'leader').map(m => `${nameOf(m.profile)} [${m.student_id}]`).join('; ');
                 const pending = t.pending_invites.map(inv => `${nameOf(inv.profile)} [${inv.invited_student_id}]`).join('; ');
                 const answers = answerFields.map(f => (t.group_data || {})[f.data_key] ?? '');
-                return [t.reference_number || '', t.id, leader ? nameOf(leader.profile) : t.leader_student_id, t.leader_student_id, t.status, t.is_submitted ? 'Yes' : 'No', t.submitted_at ? new Date(t.submitted_at).toLocaleString() : '', t.is_locked ? 'Yes' : 'No', others, pending, ...answers];
+                return [t.reference_number || '', t.id, leader ? nameOf(leader.profile) : t.leader_student_id, t.leader_student_id, t.status, t.review_status || 'Pending', t.is_submitted ? 'Yes' : 'No', t.submitted_at ? new Date(t.submitted_at).toLocaleString() : '', t.is_locked ? 'Yes' : 'No', others, pending, ...answers];
             });
             const csv = [headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
             const a = document.createElement('a');
@@ -6075,7 +6079,7 @@
         // .gf-print-area/@media print rule) so the admin gets a clean handout
         // without a screenshot.
         function printGroupFormRoster() {
-            if (!_gfRosterTeams.length) { if (typeof showToast === 'function') showToast('No teams to print yet', 'error'); return; }
+            if (!_gfRosterFilteredSorted().length) { if (typeof showToast === 'function') showToast('No teams to print yet', 'error'); return; }
             const list = document.getElementById('admin-group-roster-list');
             if (list) list.classList.add('gf-print-area');
             window.print();
@@ -6103,22 +6107,36 @@
             return rows;
         }
 
-        function renderAdminGroupRoster(teams, form) {
-            const host = document.getElementById('admin-group-roster-list');
-            if (!teams.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams have been created for this form yet.</p>'; return; }
-            const maxSize = form ? form.max_team_size : null;
-            const filter = document.getElementById('gf-roster-filter')?.value || 'all';
-            const sort = document.getElementById('gf-roster-sort')?.value || 'newest';
+        // Shared by the on-screen render AND Download CSV/Print, so a status
+        // filter applies consistently everywhere — exporting or printing
+        // while a filter is active only ever includes the teams shown.
+        function _gfRosterFilteredSorted() {
             const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
             const leaderNameOf = t => nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id;
-
-            let shown = teams.filter(t => filter === 'submitted' ? t.is_submitted : filter === 'saved' ? !t.is_submitted : true);
-            shown = shown.slice().sort((a, b) => {
+            const filter = document.getElementById('gf-roster-filter')?.value || 'all';
+            const sort = document.getElementById('gf-roster-sort')?.value || 'newest';
+            let shown = _gfRosterTeams.filter(t => {
+                if (filter === 'submitted') return t.is_submitted;
+                if (filter === 'saved') return !t.is_submitted;
+                if (filter === 'approved') return t.review_status === 'approved';
+                if (filter === 'rejected') return t.review_status === 'rejected';
+                if (filter === 'unreviewed') return !t.review_status;
+                return true;
+            });
+            return shown.slice().sort((a, b) => {
                 if (sort === 'leader') return leaderNameOf(a).localeCompare(leaderNameOf(b));
                 if (sort === 'submitted_at') return new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0);
                 const cmp = new Date(a.created_at || 0) - new Date(b.created_at || 0);
                 return sort === 'oldest' ? cmp : -cmp;
             });
+        }
+        function renderAdminGroupRoster(teams, form) {
+            const host = document.getElementById('admin-group-roster-list');
+            if (!teams.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams have been created for this form yet.</p>'; return; }
+            const maxSize = form ? form.max_team_size : null;
+            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+            const leaderNameOf = t => nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id;
+            const shown = _gfRosterFilteredSorted();
             if (!shown.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams match this filter.</p>'; return; }
 
             host.innerHTML = shown.map(t => {
@@ -6134,11 +6152,15 @@
                             ${t.is_submitted ? ' <span class="badge bg-success rounded-pill" style="font-size:0.6rem">Submitted</span>' : ' <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:0.6rem">Saved</span>'}
                             ${t.is_locked ? ' <span class="badge bg-dark rounded-pill" style="font-size:0.6rem">Locked</span>' : ''}
                             ${!t.is_submitted && t.revision_comment ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Changes Requested</span>' : ''}
+                            ${t.review_status === 'approved' ? ' <span class="badge bg-success rounded-pill" style="font-size:0.6rem">Approved</span>' : ''}
+                            ${t.review_status === 'rejected' ? ' <span class="badge bg-danger rounded-pill" style="font-size:0.6rem">Rejected</span>' : ''}
                             ${!complete && form && form.members_required ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Incomplete</span>' : ''}
                             <div class="small text-muted" style="font-size:0.72rem">${t.members.length}${maxSize ? '/' + maxSize : ''} members${t.pending_invites.length ? ' · ' + t.pending_invites.length + ' pending invite(s)' : ''}${t.submitted_at ? ' · submitted ' + new Date(t.submitted_at).toLocaleString() : ''}</div>
                         </div>
                         ${t.status !== 'disbanded' ? `
-                        <div class="d-flex gap-2">
+                        <div class="d-flex gap-2 flex-wrap">
+                            ${t.review_status !== 'approved' ? `<button onclick="setReviewStatusAdmin(${t.id}, 'approved')" class="btn btn-xs btn-outline-success rounded-pill px-3">Approve</button>` : `<button onclick="setReviewStatusAdmin(${t.id}, null)" class="btn btn-xs btn-outline-secondary rounded-pill px-3">Unapprove</button>`}
+                            ${t.review_status !== 'rejected' ? `<button onclick="setReviewStatusAdmin(${t.id}, 'rejected')" class="btn btn-xs btn-outline-danger rounded-pill px-3">Reject</button>` : `<button onclick="setReviewStatusAdmin(${t.id}, null)" class="btn btn-xs btn-outline-secondary rounded-pill px-3">Unreject</button>`}
                             ${t.is_submitted ? `<button onclick="requestTeamChangesAdmin(${t.id})" class="btn btn-xs btn-outline-warning rounded-pill px-3">Request Changes</button>` : ''}
                             <button onclick="setTeamLockAdmin(${t.id}, ${!t.is_locked})" class="btn btn-xs ${t.is_locked ? 'btn-outline-dark' : 'btn-dark'} rounded-pill px-3">${t.is_locked ? 'Unlock' : 'Lock'}</button>
                             <button onclick="disbandTeamAdmin(${t.id})" class="btn btn-xs btn-outline-danger rounded-pill px-3">Disband</button>
@@ -6164,6 +6186,16 @@
         function disbandTeamAdmin(teamId) {
             if (!confirm('Disband this team?\n\nEvery member is removed (freed to join another team) but the team stays on record for history.')) return;
             portalFetch('admin_disband_team', { team_id: teamId }).then(res => {
+                if (res && res.result === 'success') openGroupRoster(_adminRosterFormId);
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        // status: 'approved' | 'rejected' | null (null clears back to "not yet
+        // reviewed"). Independent of is_submitted/is_locked — this is purely
+        // the admin's own verdict, re-settable any number of times.
+        function setReviewStatusAdmin(teamId, status) {
+            portalFetch('set_team_review_status', { team_id: teamId, status }).then(res => {
                 if (res && res.result === 'success') openGroupRoster(_adminRosterFormId);
                 else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });

@@ -299,3 +299,19 @@ BEGIN
 END;
 $$;
 GRANT EXECUTE ON FUNCTION student.group_form_next_seq(bigint) TO anon, authenticated, service_role;
+
+-- ── Reviewer permission tiers + Approve/Reject verdicts ──────────────────────
+-- 'admin' reviewers can approve/reject a submission and request changes;
+-- 'viewer' reviewers can only look at their slice (read-only — enforced
+-- server-side in ccpc-teachers' _isAuthorizedForGroupFormTeam, never just a
+-- hidden button). Default 'admin' preserves today's behavior for every rule
+-- already saved before this column existed.
+ALTER TABLE student.group_form_reviewer_rules ADD COLUMN IF NOT EXISTS permission text NOT NULL DEFAULT 'admin';
+
+-- The reviewer's own verdict — deliberately separate from is_submitted/
+-- is_locked/revision_comment (that whole family is about whether the LEADER
+-- can still edit the team; this is purely the reviewer's opinion of a
+-- submission, re-settable any number of times, never freezes anything).
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS review_status text;
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS review_status_by text;
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS review_status_at timestamptz;

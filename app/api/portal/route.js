@@ -1591,6 +1591,26 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success' });
   }
 
+  // ── Approve / Reject a submission (admin's own verdict) ──────────────────
+  // Deliberately independent of is_submitted/is_locked/revision_comment —
+  // that whole family is about whether the leader can still edit the team;
+  // this is just the admin's opinion of a submission, re-settable any
+  // number of times, never freezes or reopens anything.
+  if (action === 'set_team_review_status') {
+    const { team_id, status } = payload;
+    if (!team_id) return NextResponse.json({ result: 'error', message: 'team_id required.' });
+    if (status !== 'approved' && status !== 'rejected' && status !== null) {
+      return NextResponse.json({ result: 'error', message: "status must be 'approved', 'rejected', or null." });
+    }
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', {
+      review_status: status,
+      review_status_by: status ? 'admin' : null,
+      review_status_at: status ? new Date().toISOString() : null,
+    });
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
   // ── Look up a student by ID (student-callable) ───────────────────────────
   // Same narrow allowlist as get_public_profile above, for the same reason:
   // a leader typing a teammate's ID should see enough to confirm it's the
