@@ -1802,6 +1802,52 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', team_id, reference_number });
   }
 
+  // ── Backfill reference numbers onto existing teams (admin) ──────────────
+  // For teams created/submitted before Reference Number was configured (or
+  // before a config change), create_group's own best-effort assignment
+  // never ran. Walks every Group Form with reference_number_json.enabled
+  // (or just one, if group_form_id is given), finds its submitted teams
+  // still missing one, and fills them in via the exact same buildReference
+  // Number() + rpc/group_form_next_seq path create_group uses — so numbers
+  // keep handing out in the same sequence a brand-new team would get next.
+  // Processed one team at a time, oldest first, so the sequence stays
+  // chronological instead of racing itself across parallel requests.
+  if (action === 'backfill_reference_numbers') {
+    const { group_form_id } = payload;
+    const formsRes = group_form_id
+      ? await sb(`group_forms?id=eq.${encodeURIComponent(group_form_id)}`)
+      : await sb('group_forms');
+    const allForms = Array.isArray(formsRes) ? formsRes : [];
+    const forms = allForms.filter(f => {
+      try { return !!(JSON.parse(f.reference_number_json || '{}') || {}).enabled; } catch (_) { return false; }
+    });
+
+    const results = [];
+    for (const form of forms) {
+      const teamsRes = await sb(`group_form_teams?group_form_id=eq.${encodeURIComponent(form.id)}&status=eq.active&is_submitted=eq.true&reference_number=is.null&order=created_at.asc`);
+      const teams = Array.isArray(teamsRes) ? teamsRes : [];
+      let updated = 0, skipped = 0;
+      for (const team of teams) {
+        try {
+          const leaderRows = await sb(`students_data?student_id=eq.${encodeURIComponent(team.leader_student_id)}&select=*`);
+          const leaderProfile = (!leaderRows?.error && leaderRows[0]) ? leaderRows[0] : null;
+          const reference_number = await buildReferenceNumber(form.reference_number_json, form, leaderProfile, team.group_data);
+          if (reference_number) {
+            await sb(`group_form_teams?id=eq.${encodeURIComponent(team.id)}`, 'PATCH', { reference_number });
+            updated++;
+          } else {
+            skipped++;
+          }
+        } catch (e) {
+          skipped++;
+        }
+      }
+      results.push({ group_form_id: form.id, title: form.title, candidates: teams.length, updated, skipped });
+    }
+
+    return NextResponse.json({ result: 'success', forms: results });
+  }
+
   // ── Invite a teammate (leader only) ──────────────────────────────────────
   if (action === 'invite_to_group') {
     const { team_id, leader_id, invited_student_id } = payload;

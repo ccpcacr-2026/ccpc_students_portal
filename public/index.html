@@ -5719,6 +5719,7 @@
                         <div class="d-flex gap-2 align-items-center flex-wrap">
                             <button onclick="editGroupForm(${i})" class="btn btn-xs btn-primary rounded-pill px-3">Edit</button>
                             <button onclick="openGroupRoster(${f.id})" class="btn btn-xs btn-outline-dark rounded-pill px-3">View Teams</button>
+                            <button onclick="backfillGroupFormRefNumbers(${f.id})" class="btn btn-xs btn-outline-secondary rounded-pill px-3" title="Fill in reference numbers for submitted teams that don't have one yet">Backfill Ref#</button>
                             <button onclick="deleteGroupFormConfig(${f.id})" class="btn btn-xs btn-danger rounded-pill px-3">Del</button>
                             <div class="form-check form-switch mb-0 ms-auto" title="Active forms are visible to students; inactive forms are hidden without deleting their setup or data">
                                 <input class="form-check-input" type="checkbox" id="gf-active-${f.id}" ${f.is_enabled?'checked':''} onchange="toggleGroupFormFlag(${f.id},'is_enabled',this.checked)">
@@ -6029,6 +6030,21 @@
                 if (res && res.result === 'success') loadAdminGroupForms();
                 else if (typeof showToast === 'function') showToast((res && res.message) || 'Delete failed', 'error');
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error while deleting', 'error'); });
+        }
+
+        // Catches up submitted teams that never got a reference number — e.g.
+        // ones created before Reference Number was configured for this form,
+        // or before a since-fixed config. Safe to click any time: it only
+        // ever touches teams whose reference_number is still null.
+        function backfillGroupFormRefNumbers(id) {
+            if (!confirm('Fill in reference numbers for every submitted team under this form that doesn\'t have one yet?')) return;
+            portalFetch('backfill_reference_numbers', { group_form_id: id }).then(res => {
+                if (res && res.result === 'success') {
+                    const r = (res.forms || [])[0];
+                    const msg = r ? `Updated ${r.updated} of ${r.candidates} team(s)${r.skipped ? ' (' + r.skipped + ' skipped — no matching reference-number parts)' : ''}` : 'Nothing to backfill.';
+                    if (typeof showToast === 'function') showToast(msg, 'success'); else alert(msg);
+                } else if (typeof showToast === 'function') showToast((res && res.message) || 'Backfill failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error while backfilling', 'error'); });
         }
 
         // ── Admin: View every team under one Group Form ─────────────────────────
