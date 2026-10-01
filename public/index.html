@@ -6243,7 +6243,7 @@
                         <div class="d-flex gap-2 flex-wrap">
                             ${t.review_status !== 'approved' ? `<button onclick="setReviewStatusAdmin(${t.id}, 'approved')" class="btn btn-xs btn-outline-success rounded-pill px-3">Approve</button>` : `<button onclick="setReviewStatusAdmin(${t.id}, null)" class="btn btn-xs btn-outline-secondary rounded-pill px-3">Unapprove</button>`}
                             ${t.review_status !== 'rejected' ? `<button onclick="setReviewStatusAdmin(${t.id}, 'rejected')" class="btn btn-xs btn-outline-danger rounded-pill px-3">Reject</button>` : `<button onclick="setReviewStatusAdmin(${t.id}, null)" class="btn btn-xs btn-outline-secondary rounded-pill px-3">Unreject</button>`}
-                            ${t.is_submitted ? `<button onclick="requestTeamChangesAdmin(${t.id})" class="btn btn-xs btn-outline-warning rounded-pill px-3">Request Changes</button>` : ''}
+                            <button onclick="requestTeamChangesAdmin(${t.id})" class="btn btn-xs btn-outline-warning rounded-pill px-3">Request Changes</button>
                             <button onclick="setTeamLockAdmin(${t.id}, ${!t.is_locked})" class="btn btn-xs ${t.is_locked ? 'btn-outline-dark' : 'btn-dark'} rounded-pill px-3">${t.is_locked ? 'Unlock' : 'Lock'}</button>
                             <button onclick="disbandTeamAdmin(${t.id})" class="btn btn-xs btn-outline-danger rounded-pill px-3">Disband</button>
                         </div>` : ''}
