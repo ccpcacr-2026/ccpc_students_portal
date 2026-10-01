@@ -262,3 +262,40 @@ GRANT ALL ON student.group_form_reviewer_rules TO anon, authenticated, service_r
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS revision_comment text;
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS revision_requested_at timestamptz;
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS revision_requested_by text;
+
+-- ── Auto reference numbers for submissions (e.g. "2J2-007") ─────────────────
+-- Admin configures, per Group Form, which values become which short codes
+-- (group_forms.reference_number_json — same dimension vocabulary the
+-- reviewer-rule system already uses: 'house' | 'group' | 'answer:<data_key>'
+-- | a bare students_data column name). Assigned once, right after team
+-- creation (app/api/portal/route.js's create_group, NOT inside
+-- group_team_create itself) via this standalone atomic counter — kept
+-- deliberately separate from the team-creation transaction so a bad
+-- reference-number config can never break team creation, only this
+-- follow-up step.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS reference_number_json text NOT NULL DEFAULT '{"enabled":false,"parts":[],"seq_digits":3}';
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS reference_number text;
+
+CREATE TABLE IF NOT EXISTS student.group_form_counters (
+  group_form_id bigint PRIMARY KEY,
+  next_seq      int NOT NULL DEFAULT 1
+);
+ALTER TABLE student.group_form_counters ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_form_counters_all" ON student.group_form_counters;
+CREATE POLICY "group_form_counters_all" ON student.group_form_counters FOR ALL USING (true);
+GRANT ALL ON student.group_form_counters TO anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION student.group_form_next_seq(p_group_form_id bigint) RETURNS int
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = student, pg_temp
+AS $$
+DECLARE v_seq int;
+BEGIN
+  INSERT INTO student.group_form_counters (group_form_id, next_seq) VALUES (p_group_form_id, 2)
+  ON CONFLICT (group_form_id) DO UPDATE SET next_seq = student.group_form_counters.next_seq + 1
+  RETURNING next_seq - 1 INTO v_seq;
+  RETURN v_seq;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION student.group_form_next_seq(bigint) TO anon, authenticated, service_role;

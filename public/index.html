@@ -5259,6 +5259,7 @@
             const canSubmit = isLeader && !readOnly && !team.pending_invites.length && (!form.members_required || team.members.length >= form.max_team_size);
 
             let html = `<div class="card shadow-lg">${_gfHeaderHtml(form)}`;
+            if (team.reference_number) html += `<div class="d-flex align-items-center gap-2 mb-3"><span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Reference No.</span><span class="badge bg-dark rounded-pill px-3 py-2" style="font-size:0.9rem;letter-spacing:0.03em">${_escHtml(team.reference_number)}</span></div>`;
             if (locked) html += `<div class="alert alert-info py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-shield-check-fill me-2 fs-5"></i>Verified & Locked</div>`;
             else if (submitted) html += `<div class="alert alert-success py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-check-circle-fill me-2 fs-5"></i>Submitted${team.submitted_at ? ' — ' + new Date(team.submitted_at).toLocaleString() : ''}</div>`;
             else if (team.revision_comment) html += `<div class="alert alert-warning py-3 mb-4 rounded-4 shadow-sm border-0"><div class="fw-800 mb-1"><i class="bi bi-arrow-counterclockwise me-2 fs-5"></i>Changes requested${team.revision_requested_at ? ' — ' + new Date(team.revision_requested_at).toLocaleString() : ''}</div><div style="white-space:pre-wrap">${_escHtml(team.revision_comment)}</div></div>`;
@@ -6056,13 +6057,13 @@
             try { fields = JSON.parse(_gfRosterForm?.fields_json || '[]'); } catch (e) {}
             const answerFields = fields.filter(f => f.type !== 'group_label' && f.type !== 'profile_picture');
             const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
-            const headers = ['Team ID', 'Leader', 'Leader Student ID', 'Status', 'Submitted', 'Submitted At', 'Locked', 'Members (excl. leader)', 'Pending Invites', ...answerFields.map(f => f.name || f.data_key)];
+            const headers = ['Reference No.', 'Team ID', 'Leader', 'Leader Student ID', 'Status', 'Submitted', 'Submitted At', 'Locked', 'Members (excl. leader)', 'Pending Invites', ...answerFields.map(f => f.name || f.data_key)];
             const rows = _gfRosterTeams.map(t => {
                 const leader = t.members.find(m => m.role === 'leader');
                 const others = t.members.filter(m => m.role !== 'leader').map(m => `${nameOf(m.profile)} [${m.student_id}]`).join('; ');
                 const pending = t.pending_invites.map(inv => `${nameOf(inv.profile)} [${inv.invited_student_id}]`).join('; ');
                 const answers = answerFields.map(f => (t.group_data || {})[f.data_key] ?? '');
-                return [t.id, leader ? nameOf(leader.profile) : t.leader_student_id, t.leader_student_id, t.status, t.is_submitted ? 'Yes' : 'No', t.submitted_at ? new Date(t.submitted_at).toLocaleString() : '', t.is_locked ? 'Yes' : 'No', others, pending, ...answers];
+                return [t.reference_number || '', t.id, leader ? nameOf(leader.profile) : t.leader_student_id, t.leader_student_id, t.status, t.is_submitted ? 'Yes' : 'No', t.submitted_at ? new Date(t.submitted_at).toLocaleString() : '', t.is_locked ? 'Yes' : 'No', others, pending, ...answers];
             });
             const csv = [headers, ...rows].map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
             const a = document.createElement('a');
@@ -6128,6 +6129,7 @@
                     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                         <div>
                             <strong>${leaderNameOf(t)}</strong>'s team
+                            ${t.reference_number ? ` <span class="badge bg-dark rounded-pill" style="font-size:0.65rem;letter-spacing:0.03em">${_escHtml(t.reference_number)}</span>` : ''}
                             ${t.status === 'disbanded' ? ' <span class="badge bg-secondary rounded-pill" style="font-size:0.6rem">Disbanded</span>' : ''}
                             ${t.is_submitted ? ' <span class="badge bg-success rounded-pill" style="font-size:0.6rem">Submitted</span>' : ' <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:0.6rem">Saved</span>'}
                             ${t.is_locked ? ' <span class="badge bg-dark rounded-pill" style="font-size:0.6rem">Locked</span>' : ''}

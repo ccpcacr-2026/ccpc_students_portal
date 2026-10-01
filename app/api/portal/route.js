@@ -489,6 +489,52 @@ function checkGroupEligibility(eligibilityJson, leader, candidate) {
   return { ok: true };
 }
 
+// Which named band (e.g. "Group B (Six-Eight)") a profile's own value at
+// eligibility_json.group_field falls into — same band-matching rule
+// checkGroupEligibility uses, just returning the band's name instead of a
+// pass/fail. Used by the reference-number builder below (dimension 'group').
+function resolveGroupBandName(eligibilityJson, profile) {
+  let elig = {};
+  try { elig = JSON.parse(eligibilityJson || '{}') || {}; } catch (_) {}
+  if (elig.class_mode !== 'band') return null;
+  const groupField = elig.group_field || 'class';
+  const bands = Array.isArray(elig.bands) ? elig.bands : [];
+  const bandClasses = b => Array.isArray(b) ? b : (Array.isArray(b.classes) ? b.classes : []);
+  const bandName = b => Array.isArray(b) ? null : (b.name || null);
+  const val = profile ? profile[groupField] : undefined;
+  const band = bands.find(b => bandClasses(b).includes(val));
+  return band ? bandName(band) : null;
+}
+
+// Builds a submission reference number (e.g. "2J2-007") from an admin-
+// configured recipe (group_forms.reference_number_json) and assigns the
+// next sequence number via a dedicated counter RPC — deliberately NOT part
+// of the group_team_create transaction, so a bad reference-number config
+// can never break team creation itself, only this follow-up step (a team
+// created without one can always have it filled in later).
+async function buildReferenceNumber(referenceNumberJson, form, leaderProfile, groupData) {
+  let cfg = {};
+  try { cfg = JSON.parse(referenceNumberJson || '{}') || {}; } catch (_) {}
+  if (!cfg.enabled || !Array.isArray(cfg.parts) || !cfg.parts.length) return null;
+
+  let body = '';
+  for (const part of cfg.parts) {
+    const source = part && part.source;
+    const map = (part && part.map) || {};
+    let value;
+    if (source === 'group') value = resolveGroupBandName(form.eligibility_json, leaderProfile);
+    else if (source && source.startsWith('answer:')) value = (groupData || {})[source.slice(7)];
+    else if (source) value = leaderProfile ? leaderProfile[source] : undefined; // e.g. 'house', 'class'
+    body += (map[value] || '');
+  }
+  if (!body) return null; // nothing matched — don't hand out a bare sequence number alone
+
+  const seqRes = await sb('rpc/group_form_next_seq', 'POST', { p_group_form_id: form.id });
+  if (seqRes?.error || typeof seqRes !== 'number') return null;
+  const digits = Number(cfg.seq_digits) || 3;
+  return `${body}-${String(seqRes).padStart(digits, '0')}`;
+}
+
 // NOTE: set_gp_credentials saves {api_key, environment, channel} (see
 // get_tracking_config, which reads those same names back for display) --
 // this used to read gp_api_key/gp_env/gp_channel instead, a leftover from
@@ -1662,7 +1708,17 @@ export async function POST(req) {
 
     const res = await sb('rpc/group_team_create', 'POST', { p_group_form_id: group_form_id, p_leader_id: student_id, p_group_data: group_data || {} });
     if (res?.error) return NextResponse.json({ result: 'error', message: rpcErrorMessage(res.error) });
-    return NextResponse.json({ result: 'success', team_id: res });
+    const team_id = res;
+
+    let reference_number = null;
+    try {
+      const leaderRows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=*`);
+      const leaderProfile = (!leaderRows?.error && leaderRows[0]) ? leaderRows[0] : null;
+      reference_number = await buildReferenceNumber(form.reference_number_json, form, leaderProfile, group_data);
+      if (reference_number) await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { reference_number });
+    } catch (e) { /* team already exists either way — a reference-number hiccup is never fatal */ }
+
+    return NextResponse.json({ result: 'success', team_id, reference_number });
   }
 
   // ── Invite a teammate (leader only) ──────────────────────────────────────
