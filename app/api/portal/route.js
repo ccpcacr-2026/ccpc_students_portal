@@ -1984,6 +1984,32 @@ export async function POST(req) {
       revision_comment: null, revision_requested_at: null, revision_requested_by: null, revision_requested_by_name: null,
     });
     if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+
+    // Let the teacher who asked for changes know the leader acted on it.
+    // revision_requested_by is a real teacher_staff.app_users user_id when
+    // the request came from ccpc-teachers (admin or reviewer); it's the
+    // literal 'admin' when it came from ccpc-students' own shared admin
+    // login, which has no individual identity to notify — skip that case.
+    // Best-effort: never let a notification failure block the submission
+    // that already succeeded above.
+    try {
+      if (team.revision_requested_by && team.revision_requested_by !== 'admin') {
+        const leaderRows = await sb(`students_data?student_id=eq.${encodeURIComponent(leader_id)}&select=student_name`);
+        const leaderName = (!leaderRows?.error && leaderRows[0]?.student_name) || leader_id;
+        await sb('notifications', 'POST', [{
+          user_id: team.revision_requested_by,
+          type: 'group_form_resubmitted',
+          title: `Team resubmitted — ${form.title}`,
+          message: `${leaderName} resubmitted their team after your requested changes.`,
+          data: { team_id: Number(team_id), group_form_id: team.group_form_id },
+          is_read: false,
+          created_at: new Date().toISOString(),
+        }], { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
+      }
+    } catch (e) {
+      console.error('submit_group_team notify requester failed:', e);
+    }
+
     return NextResponse.json({ result: 'success' });
   }
 
