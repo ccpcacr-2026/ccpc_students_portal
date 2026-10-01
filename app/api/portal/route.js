@@ -517,13 +517,35 @@ async function buildReferenceNumber(referenceNumberJson, form, leaderProfile, gr
   try { cfg = JSON.parse(referenceNumberJson || '{}') || {}; } catch (_) {}
   if (!cfg.enabled || !Array.isArray(cfg.parts) || !cfg.parts.length) return null;
 
+  let fields = [];
+  try { fields = JSON.parse(form.fields_json || '[]') || []; } catch (_) {}
+
   let body = '';
   for (const part of cfg.parts) {
     const source = part && part.source;
     const map = (part && part.map) || {};
     let value;
     if (source === 'group') value = resolveGroupBandName(form.eligibility_json, leaderProfile);
-    else if (source && source.startsWith('answer:')) value = (groupData || {})[source.slice(7)];
+    else if (source && source.startsWith('answer:')) {
+      const key = source.slice(7);
+      value = (groupData || {})[key];
+      // This field may be conditionally shown (show_if) — e.g. Science
+      // Fair's two differently-keyed "Category" fields, one per eligibility
+      // Group, each hidden/shown by show_if. Whichever one the leader
+      // actually saw and filled in is the one with a real value in
+      // group_data; the other's data_key is simply absent. If the
+      // originally-configured field came back empty, fall back to any
+      // sibling field sharing its display name that DOES have a value —
+      // same idea the admin UI already applies when listing/merging their
+      // value options into one combined mapping.
+      if ((value === undefined || value === '') && fields.length) {
+        const configuredField = fields.find(f => f.data_key === key);
+        if (configuredField) {
+          const sibling = fields.find(f => f.name === configuredField.name && f.data_key !== key && (groupData || {})[f.data_key] !== undefined && (groupData || {})[f.data_key] !== '');
+          if (sibling) value = (groupData || {})[sibling.data_key];
+        }
+      }
+    }
     else if (source) value = leaderProfile ? leaderProfile[source] : undefined; // e.g. 'house', 'class'
     body += (map[value] || '');
   }
