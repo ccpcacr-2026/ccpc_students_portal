@@ -315,3 +315,12 @@ ALTER TABLE student.group_form_reviewer_rules ADD COLUMN IF NOT EXISTS permissio
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS review_status text;
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS review_status_by text;
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS review_status_at timestamptz;
+
+-- revision_requested_by holds a raw identity (a teacher's user_id in
+-- ccpc-teachers, or the literal 'admin' in ccpc-students' own shared login) —
+-- never fit for display. This carries the human-readable name resolved at the
+-- moment the request is made (ccpc-teachers looks it up from
+-- teacher_staff.users_profile; ccpc-students just writes 'Admin'), so the
+-- student-facing banner always has a name to show without either app needing
+-- to resolve the other app's identity system at read time.
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS revision_requested_by_name text;
