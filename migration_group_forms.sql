@@ -252,3 +252,13 @@ ALTER TABLE student.group_form_reviewer_rules ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "group_form_reviewer_rules_all" ON student.group_form_reviewer_rules;
 CREATE POLICY "group_form_reviewer_rules_all" ON student.group_form_reviewer_rules FOR ALL USING (true);
 GRANT ALL ON student.group_form_reviewer_rules TO anon, authenticated, service_role;
+
+-- ── "Request Changes" — admin/reviewer sends a submitted team back to the
+-- leader for edits, with a comment explaining why. Reuses is_submitted/
+-- is_locked exactly as they already work (both false => the team is
+-- editable again, same as it was before the leader ever submitted) —
+-- these three columns just carry the reviewer's note and a record of who
+-- asked and when.
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS revision_comment text;
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS revision_requested_at timestamptz;
+ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS revision_requested_by text;

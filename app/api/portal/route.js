@@ -1524,6 +1524,27 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success' });
   }
 
+  // ── Send a submitted team back to the leader for edits, with a comment ──
+  // Clears is_submitted/is_locked exactly like the pre-submission state —
+  // the leader's view re-opens invites/editing/member changes automatically
+  // since every one of those checks already just reads !is_submitted &&
+  // !is_locked. The comment is shown to the leader until they resubmit.
+  if (action === 'request_team_changes') {
+    const { team_id, comment } = payload;
+    if (!team_id || !comment || !String(comment).trim()) return NextResponse.json({ result: 'error', message: 'team_id and a comment are required.' });
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', {
+      is_submitted: false,
+      submitted_at: null,
+      is_locked: false,
+      revision_comment: String(comment).trim(),
+      revision_requested_at: new Date().toISOString(),
+      revision_requested_by: 'admin',
+      updated_at: new Date().toISOString(),
+    });
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
   // ── Look up a student by ID (student-callable) ───────────────────────────
   // Same narrow allowlist as get_public_profile above, for the same reason:
   // a leader typing a teammate's ID should see enough to confirm it's the
@@ -1821,7 +1842,10 @@ export async function POST(req) {
       return NextResponse.json({ result: 'error', code: 'PHOTO_REQUIRED', message: `${missingCount === 1 ? 'One teammate still needs' : missingCount + ' teammates still need'} to upload a profile picture before you can submit.` });
     }
 
-    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { is_submitted: true, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', {
+      is_submitted: true, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      revision_comment: null, revision_requested_at: null, revision_requested_by: null,
+    });
     if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
     return NextResponse.json({ result: 'success' });
   }

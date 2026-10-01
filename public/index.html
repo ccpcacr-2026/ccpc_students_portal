@@ -4952,6 +4952,8 @@
             return `${p.student_name}${p.class ? ' · ' + p.class + (p.section ? '-' + p.section : '') : ''}`;
         }
 
+        function _escHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
         // Cover photo + Header/Sub-header/Instructions block shared by every
         // Group Form student-side screen (create/invite/roster) — Header falls
         // back to the admin-facing Title when left blank.
@@ -5259,6 +5261,7 @@
             let html = `<div class="card shadow-lg">${_gfHeaderHtml(form)}`;
             if (locked) html += `<div class="alert alert-info py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-shield-check-fill me-2 fs-5"></i>Verified & Locked</div>`;
             else if (submitted) html += `<div class="alert alert-success py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-check-circle-fill me-2 fs-5"></i>Submitted${team.submitted_at ? ' — ' + new Date(team.submitted_at).toLocaleString() : ''}</div>`;
+            else if (team.revision_comment) html += `<div class="alert alert-warning py-3 mb-4 rounded-4 shadow-sm border-0"><div class="fw-800 mb-1"><i class="bi bi-arrow-counterclockwise me-2 fs-5"></i>Changes requested${team.revision_requested_at ? ' — ' + new Date(team.revision_requested_at).toLocaleString() : ''}</div><div style="white-space:pre-wrap">${_escHtml(team.revision_comment)}</div></div>`;
             html += `<p class="small text-muted mb-2">${team.members.length} of ${form.max_team_size} members${form.members_required && team.members.length < form.max_team_size ? ' — team must be full to count as complete' : ''}</p>`;
             html += `<div class="rounded-4 border overflow-hidden mb-3">${rosterHtml}</div>${pendingHtml}`;
 
@@ -6128,11 +6131,13 @@
                             ${t.status === 'disbanded' ? ' <span class="badge bg-secondary rounded-pill" style="font-size:0.6rem">Disbanded</span>' : ''}
                             ${t.is_submitted ? ' <span class="badge bg-success rounded-pill" style="font-size:0.6rem">Submitted</span>' : ' <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:0.6rem">Saved</span>'}
                             ${t.is_locked ? ' <span class="badge bg-dark rounded-pill" style="font-size:0.6rem">Locked</span>' : ''}
+                            ${!t.is_submitted && t.revision_comment ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Changes Requested</span>' : ''}
                             ${!complete && form && form.members_required ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Incomplete</span>' : ''}
                             <div class="small text-muted" style="font-size:0.72rem">${t.members.length}${maxSize ? '/' + maxSize : ''} members${t.pending_invites.length ? ' · ' + t.pending_invites.length + ' pending invite(s)' : ''}${t.submitted_at ? ' · submitted ' + new Date(t.submitted_at).toLocaleString() : ''}</div>
                         </div>
                         ${t.status !== 'disbanded' ? `
                         <div class="d-flex gap-2">
+                            ${t.is_submitted ? `<button onclick="requestTeamChangesAdmin(${t.id})" class="btn btn-xs btn-outline-warning rounded-pill px-3">Request Changes</button>` : ''}
                             <button onclick="setTeamLockAdmin(${t.id}, ${!t.is_locked})" class="btn btn-xs ${t.is_locked ? 'btn-outline-dark' : 'btn-dark'} rounded-pill px-3">${t.is_locked ? 'Unlock' : 'Lock'}</button>
                             <button onclick="disbandTeamAdmin(${t.id})" class="btn btn-xs btn-outline-danger rounded-pill px-3">Disband</button>
                         </div>` : ''}
@@ -6141,6 +6146,7 @@
                         ${t.members.map(m => `<span class="badge bg-light text-dark border rounded-pill px-3 py-2">${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</span>`).join('')}
                         ${t.pending_invites.map(inv => `<span class="badge bg-light text-muted border rounded-pill px-3 py-2 fst-italic">${nameOf(inv.profile) || inv.invited_student_id} (pending)</span>`).join('')}
                     </div>
+                    ${!t.is_submitted && t.revision_comment ? `<div class="mt-2 p-2 rounded-3 bg-warning-subtle small" style="font-size:0.75rem"><div class="fw-800 text-warning-emphasis text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Changes Requested${t.revision_requested_at ? ' · ' + new Date(t.revision_requested_at).toLocaleString() : ''}</div><div style="white-space:pre-wrap">${_escHtml(t.revision_comment)}</div></div>` : ''}
                     ${answerRows.length ? `<div class="mt-2 p-2 rounded-3 bg-light small" style="font-size:0.75rem"><div class="fw-800 text-muted text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Answers</div>${answerRows.map(r => `<div class="mb-1"><span class="text-muted">${r.label}:</span> <strong>${r.value}</strong></div>`).join('')}</div>` : ''}
                 </div>`;
             }).join('');
@@ -6157,6 +6163,19 @@
             if (!confirm('Disband this team?\n\nEvery member is removed (freed to join another team) but the team stays on record for history.')) return;
             portalFetch('admin_disband_team', { team_id: teamId }).then(res => {
                 if (res && res.result === 'success') openGroupRoster(_adminRosterFormId);
+                else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+        }
+
+        // Sends a submitted team back to the leader for edits — clears
+        // is_submitted/is_locked server-side so the leader's own view re-opens
+        // exactly like it was before they ever submitted, with this comment
+        // shown as the reason.
+        function requestTeamChangesAdmin(teamId) {
+            const comment = prompt('What needs to change? This note will be shown to the team leader.');
+            if (!comment || !comment.trim()) return;
+            portalFetch('request_team_changes', { team_id: teamId, comment: comment.trim() }).then(res => {
+                if (res && res.result === 'success') { openGroupRoster(_adminRosterFormId); if (typeof showToast === 'function') showToast('Sent back for changes'); }
                 else if (typeof showToast === 'function') showToast((res && res.message) || 'Failed', 'error');
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
         }
