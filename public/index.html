@@ -6047,6 +6047,7 @@
             portalFetch('get_group_form_roster', { group_form_id: groupFormId }).then(res => {
                 if (!res || res.result !== 'success') { document.getElementById('admin-group-roster-list').innerHTML = `<p class="text-danger small">${(res && res.message) || 'Failed to load'}</p>`; return; }
                 _gfRosterTeams = res.teams || [];
+                _gfRegisterProfiles(_gfRosterTeams);
                 renderAdminGroupRoster(_gfRosterTeams, form);
             }).catch(() => { document.getElementById('admin-group-roster-list').innerHTML = '<p class="text-danger small">Network error</p>'; });
             document.getElementById('admin-group-roster').scrollIntoView({ behavior: 'smooth' });
@@ -6105,6 +6106,55 @@
                 rows.push({ label: f.name || f.data_key, value: val });
             });
             return rows;
+        }
+
+        // Populated from the full roster every time it's fetched — powers the
+        // "tap a name, see everything + call" popup below; never sent anywhere.
+        let _gfProfileLookup = {};
+        function _gfRegisterProfiles(teams) {
+            (teams || []).forEach(t => {
+                (t.members || []).forEach(m => { if (m.profile) _gfProfileLookup[m.student_id] = m.profile; });
+                (t.pending_invites || []).forEach(inv => { if (inv.profile) _gfProfileLookup[inv.invited_student_id] = inv.profile; });
+            });
+        }
+        function gfShowStudentInfo(studentId) {
+            const p = _gfProfileLookup[studentId];
+            document.getElementById('gfStudentInfoOverlay')?.remove();
+            const overlay = document.createElement('div');
+            overlay.id = 'gfStudentInfoOverlay';
+            overlay.className = 'fixed inset-0 d-flex align-items-end align-items-sm-center justify-content-center p-3';
+            overlay.style.cssText = 'z-index:1070;background:rgba(0,0,0,0.4)';
+            overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+            if (!p) {
+                overlay.innerHTML = `<div class="bg-white rounded-4 w-100 shadow-lg p-4 text-center" style="max-width:380px"><p class="small text-muted fw-bold">No profile info available for ${_escHtml(studentId)}.</p><button onclick="document.getElementById('gfStudentInfoOverlay').remove()" class="btn btn-sm btn-light w-100 mt-2 rounded-pill fw-800">Close</button></div>`;
+                document.body.appendChild(overlay);
+                return;
+            }
+            const infoRows = [
+                ['Student ID', p.student_id],
+                ['Class', `${p.class || ''}${p.section ? '-' + p.section : ''}`.replace(/^-|-$/, '') || null],
+                ['Roll', p.roll],
+                ['House', p.house && p.house !== '--' ? p.house : null],
+                ['Session', p.session],
+                ["Father's Name", p.fathers_name],
+                ["Mother's Name", p.mothers_name],
+            ].filter(([, v]) => v);
+            const phoneRow = (label, tel) => {
+                if (!tel) return '';
+                const clean = String(tel).replace(/[\s\-()]/g, '');
+                return `<div class="d-flex align-items-center justify-content-between py-2 border-bottom"><span class="text-muted fw-bold small">${label}</span><a href="tel:${encodeURIComponent(clean)}" onclick="event.stopPropagation()" class="d-flex align-items-center gap-1 text-primary fw-800 small text-decoration-none"><i class="bi bi-telephone-fill"></i>${_escHtml(tel)}</a></div>`;
+            };
+            const phones = phoneRow('Phone', p.phone_number) + phoneRow("Father's Phone", p.father_phone) + phoneRow("Mother's Phone", p.mother_phone);
+            overlay.innerHTML = `
+                <div class="bg-white rounded-4 w-100 shadow-lg p-4" style="max-width:380px">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <p class="fw-800 small mb-0">${_escHtml(p.student_name || studentId)}</p>
+                        <button onclick="document.getElementById('gfStudentInfoOverlay').remove()" class="btn btn-sm btn-link text-muted p-0"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                    ${infoRows.map(([label, v]) => `<div class="d-flex align-items-center justify-content-between py-2 border-bottom"><span class="text-muted fw-bold small">${label}</span><span class="fw-bold small">${_escHtml(v)}</span></div>`).join('')}
+                    ${phones ? `<div class="mt-1">${phones}</div>` : '<p class="small text-muted fst-italic mt-2 mb-0">No phone numbers on file.</p>'}
+                </div>`;
+            document.body.appendChild(overlay);
         }
 
         // Shared by the on-screen render AND Download CSV/Print, so a status
@@ -6167,8 +6217,8 @@
                         </div>` : ''}
                     </div>
                     <div class="mt-2 d-flex flex-wrap gap-2">
-                        ${t.members.map(m => `<span class="badge bg-light text-dark border rounded-pill px-3 py-2">${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</span>`).join('')}
-                        ${t.pending_invites.map(inv => `<span class="badge bg-light text-muted border rounded-pill px-3 py-2 fst-italic">${nameOf(inv.profile) || inv.invited_student_id} (pending)</span>`).join('')}
+                        ${t.members.map(m => `<button type="button" onclick='gfShowStudentInfo(${JSON.stringify(m.student_id)})' class="badge bg-light text-dark border rounded-pill px-3 py-2" style="cursor:pointer">${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</button>`).join('')}
+                        ${t.pending_invites.map(inv => `<button type="button" onclick='gfShowStudentInfo(${JSON.stringify(inv.invited_student_id)})' class="badge bg-light text-muted border rounded-pill px-3 py-2 fst-italic" style="cursor:pointer">${nameOf(inv.profile) || inv.invited_student_id} (pending)</button>`).join('')}
                     </div>
                     ${!t.is_submitted && t.revision_comment ? `<div class="mt-2 p-2 rounded-3 bg-warning-subtle small" style="font-size:0.75rem"><div class="fw-800 text-warning-emphasis text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Changes Requested${t.revision_requested_at ? ' · ' + new Date(t.revision_requested_at).toLocaleString() : ''}</div><div style="white-space:pre-wrap">${_escHtml(t.revision_comment)}</div></div>` : ''}
                     ${answerRows.length ? `<div class="mt-2 p-2 rounded-3 bg-light small" style="font-size:0.75rem"><div class="fw-800 text-muted text-uppercase mb-1" style="font-size:0.62rem;letter-spacing:0.05em">Answers</div>${answerRows.map(r => `<div class="mb-1"><span class="text-muted">${r.label}:</span> <strong>${r.value}</strong></div>`).join('')}</div>` : ''}
