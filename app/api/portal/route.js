@@ -1596,6 +1596,22 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success' });
   }
 
+  // ── Permanently delete a team/entry (admin) ──────────────────────────────
+  // Unlike admin_disband_team (which keeps the team on record as a disbanded
+  // row, purely so members get freed to join elsewhere), this is a genuine
+  // hard delete — every invite and member row plus the team row itself,
+  // gone for good. For removing a mistaken/duplicate/test entry entirely,
+  // not for freeing members from a real one.
+  if (action === 'admin_delete_team') {
+    const { team_id } = payload;
+    if (!team_id) return NextResponse.json({ result: 'error', message: 'team_id required.' });
+    await sb(`group_form_team_invites?team_id=eq.${encodeURIComponent(team_id)}`, 'DELETE');
+    await sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}`, 'DELETE');
+    const r = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'DELETE');
+    if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
+    return NextResponse.json({ result: 'success' });
+  }
+
   // ── Send a submitted team back to the leader for edits, with a comment ──
   // Clears is_submitted/is_locked exactly like the pre-submission state —
   // the leader's view re-opens invites/editing/member changes automatically
