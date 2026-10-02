@@ -1247,14 +1247,7 @@
                                         <div class="d-flex justify-content-between align-items-center mb-3 gf-roster-toolbar flex-wrap gap-2">
                                             <h5 class="fw-800 m-0" id="admin-group-roster-title">Teams</h5>
                                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                                <select id="gf-roster-filter" onchange="renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm)" class="form-select form-select-sm" style="max-width:170px">
-                                                    <option value="all">All teams</option>
-                                                    <option value="submitted">Submitted only</option>
-                                                    <option value="saved">Saved (not submitted)</option>
-                                                    <option value="approved">Approved only</option>
-                                                    <option value="rejected">Rejected only</option>
-                                                    <option value="unreviewed">Not yet reviewed</option>
-                                                </select>
+                                                <button type="button" onclick="_gfToggleRosterFilterPanel()" class="btn btn-sm btn-outline-dark rounded-pill px-3" id="gf-roster-filter-toggle"><i class="bi bi-funnel me-1"></i>Filters<span id="gf-roster-filter-count" class="badge bg-dark rounded-pill ms-1" style="display:none"></span></button>
                                                 <select id="gf-roster-sort" onchange="renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm)" class="form-select form-select-sm" style="max-width:180px">
                                                     <option value="newest">Newest first</option>
                                                     <option value="oldest">Oldest first</option>
@@ -1269,6 +1262,7 @@
                                                 <button onclick="closeGroupRoster()" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Close</button>
                                             </div>
                                         </div>
+                                        <div id="gf-roster-filter-panel" class="p-3 mb-3 bg-light rounded-4 border" style="display:none"></div>
                                         <div id="admin-group-roster-list" class="d-flex flex-column gap-3"></div>
                                     </div>
                                 </div>
@@ -6057,10 +6051,20 @@
         // already-fetched roster instead of a second round trip.
         let _gfRosterTeams = [];
         let _gfRosterForm = null;
+        // Fully-customizable multi-dimension filter — each key holds a Set of
+        // selected option labels for that dimension; an empty Set means "no
+        // constraint on this dimension". Dimensions AND together, options
+        // within one dimension OR together (e.g. House∈{J,N} AND Group∈{A}
+        // AND Status∈{Rejected}), covering every combination the admin asks
+        // for (group-wise, house-wise, house+group, reject+house+group, …)
+        // without needing a dedicated option for each combination.
+        let _gfRosterFilterState = { submission: new Set(), review: new Set(), house: new Set(), group: new Set(), category: new Set() };
         function openGroupRoster(groupFormId) {
             _adminRosterFormId = groupFormId;
             const form = ALL_GROUP_FORMS.find(f => f.id === groupFormId);
             _gfRosterForm = form || null;
+            _gfRosterFilterState = { submission: new Set(), review: new Set(), house: new Set(), group: new Set(), category: new Set() };
+            document.getElementById('gf-roster-filter-panel').style.display = 'none';
             document.getElementById('admin-group-roster-title').textContent = 'Teams — ' + (form ? form.title : '');
             document.getElementById('admin-group-roster').classList.remove('hidden');
             document.getElementById('admin-group-roster-list').innerHTML = '<p class="text-muted small">Loading…</p>';
@@ -6069,8 +6073,67 @@
                 _gfRosterTeams = res.teams || [];
                 _gfRegisterProfiles(_gfRosterTeams);
                 renderAdminGroupRoster(_gfRosterTeams, form);
+                _gfRenderRosterFilterPanel();
             }).catch(() => { document.getElementById('admin-group-roster-list').innerHTML = '<p class="text-danger small">Network error</p>'; });
             document.getElementById('admin-group-roster').scrollIntoView({ behavior: 'smooth' });
+        }
+        function _gfTeamHouse(t) { return (t.members.find(m => m.role === 'leader')?.profile || {}).house || ''; }
+        function _gfTeamGroup(t) { return (t.group_data || {}).group || ''; }
+        function _gfTeamCategory(t) { return _gfAnswerByName(t, _gfRosterForm, /^category$/i) || ''; }
+        function _gfTeamSubmission(t) { return t.is_submitted ? 'Submitted' : 'Saved'; }
+        function _gfTeamReview(t) { return t.review_status === 'approved' ? 'Approved' : t.review_status === 'rejected' ? 'Rejected' : 'Unreviewed'; }
+        // Option lists always come from the FULL roster (not the currently-
+        // filtered subset) — a standard faceted-filter convention so picking
+        // one dimension never hides the options you'd need to adjust another.
+        function _gfRosterFilterDims() {
+            const distinct = fn => [...new Set(_gfRosterTeams.map(fn).filter(Boolean))].sort();
+            return [
+                { key: 'submission', label: 'Submission', values: ['Submitted', 'Saved'] },
+                { key: 'review', label: 'Review Status', values: ['Approved', 'Rejected', 'Unreviewed'] },
+                { key: 'house', label: 'House', values: distinct(_gfTeamHouse) },
+                { key: 'group', label: 'Group', values: distinct(_gfTeamGroup) },
+                { key: 'category', label: 'Category', values: distinct(_gfTeamCategory) },
+            ];
+        }
+        function _gfToggleRosterFilterPanel() {
+            const panel = document.getElementById('gf-roster-filter-panel');
+            const show = panel.style.display === 'none';
+            panel.style.display = show ? '' : 'none';
+            if (show) _gfRenderRosterFilterPanel();
+        }
+        function _gfRosterFilterActiveCount() {
+            return Object.values(_gfRosterFilterState).reduce((n, s) => n + s.size, 0);
+        }
+        function _gfUpdateRosterFilterBadge() {
+            const n = _gfRosterFilterActiveCount();
+            const badge = document.getElementById('gf-roster-filter-count');
+            if (badge) { badge.textContent = n; badge.style.display = n ? '' : 'none'; }
+        }
+        function toggleGfRosterFilter(dimKey, value) {
+            const set = _gfRosterFilterState[dimKey];
+            if (set.has(value)) set.delete(value); else set.add(value);
+            _gfRenderRosterFilterPanel();
+            renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm);
+        }
+        function clearGfRosterFilters() {
+            Object.values(_gfRosterFilterState).forEach(s => s.clear());
+            _gfRenderRosterFilterPanel();
+            renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm);
+        }
+        function _gfRenderRosterFilterPanel() {
+            const host = document.getElementById('gf-roster-filter-panel');
+            if (!host || host.style.display === 'none') { _gfUpdateRosterFilterBadge(); return; }
+            const dims = _gfRosterFilterDims().filter(d => d.values.length);
+            host.innerHTML = dims.map(d => {
+                const sel = _gfRosterFilterState[d.key];
+                return `<div class="mb-2">
+                    <div class="small fw-800 text-muted text-uppercase mb-1" style="font-size:0.65rem;letter-spacing:0.04em">${_escHtml(d.label)}</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        ${d.values.map(v => `<button type="button" onclick='toggleGfRosterFilter(${JSON.stringify(d.key)}, ${JSON.stringify(v)})' class="btn btn-xs ${sel.has(v) ? 'btn-dark' : 'btn-outline-secondary'} rounded-pill px-3">${_escHtml(v)}</button>`).join('')}
+                    </div>
+                </div>`;
+            }).join('') + (_gfRosterFilterActiveCount() ? `<button type="button" onclick="clearGfRosterFilters()" class="btn btn-xs btn-link text-danger fw-800 px-0">Clear all filters</button>` : '');
+            _gfUpdateRosterFilterBadge();
         }
         // One row per team: leader, members, pending invites, and every
         // group-level answer labeled with its real field name (same field set
@@ -6415,19 +6478,20 @@
         // Shared by the on-screen render AND Download CSV/Print, so a status
         // filter applies consistently everywhere — exporting or printing
         // while a filter is active only ever includes the teams shown.
+        function _gfTeamMatchesRosterFilters(t) {
+            const st = _gfRosterFilterState;
+            if (st.submission.size && !st.submission.has(_gfTeamSubmission(t))) return false;
+            if (st.review.size && !st.review.has(_gfTeamReview(t))) return false;
+            if (st.house.size && !st.house.has(_gfTeamHouse(t))) return false;
+            if (st.group.size && !st.group.has(_gfTeamGroup(t))) return false;
+            if (st.category.size && !st.category.has(_gfTeamCategory(t))) return false;
+            return true;
+        }
         function _gfRosterFilteredSorted() {
             const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''}${p.roll ? ', Roll ' + p.roll : ''})` : 'Unknown';
             const leaderNameOf = t => nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id;
-            const filter = document.getElementById('gf-roster-filter')?.value || 'all';
             const sort = document.getElementById('gf-roster-sort')?.value || 'newest';
-            let shown = _gfRosterTeams.filter(t => {
-                if (filter === 'submitted') return t.is_submitted;
-                if (filter === 'saved') return !t.is_submitted;
-                if (filter === 'approved') return t.review_status === 'approved';
-                if (filter === 'rejected') return t.review_status === 'rejected';
-                if (filter === 'unreviewed') return !t.review_status;
-                return true;
-            });
+            let shown = _gfRosterTeams.filter(_gfTeamMatchesRosterFilters);
             return shown.slice().sort((a, b) => {
                 if (sort === 'leader') return leaderNameOf(a).localeCompare(leaderNameOf(b));
                 if (sort === 'submitted_at') return new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0);
