@@ -6081,7 +6081,7 @@
             let fields = [];
             try { fields = JSON.parse(_gfRosterForm?.fields_json || '[]'); } catch (e) {}
             const answerFields = fields.filter(f => f.type !== 'group_label' && f.type !== 'profile_picture');
-            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''}${p.roll ? ', Roll ' + p.roll : ''})` : 'Unknown';
             const headers = ['Reference No.', 'Team ID', 'Leader', 'Leader Student ID', 'Status', 'Review Status', 'Submitted', 'Submitted At', 'Locked', 'Members (excl. leader)', 'Pending Invites', ...answerFields.map(f => f.name || f.data_key)];
             const rows = teamsOut.map(t => {
                 const leader = t.members.find(m => m.role === 'leader');
@@ -6189,7 +6189,7 @@
             const teams = _gfPrintableTeams();
             if (!teams.length) return;
             const form = _gfRosterForm;
-            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''}${p.roll ? ', Roll ' + p.roll : ''})` : 'Unknown';
             const rows = teams.map(t => {
                 const leader = t.members.find(m => m.role === 'leader');
                 const others = t.members.filter(m => m.role !== 'leader');
@@ -6248,7 +6248,7 @@
             const teams = _gfPrintableTeams();
             if (!teams.length) return;
             const form = _gfRosterForm;
-            const nameOf = p => p ? p.student_name : '';
+            const nameOf = p => p ? `${p.student_name}${p.roll ? ' (Roll ' + p.roll + ')' : ''}` : '';
             const accent = t => t.review_status === 'approved' ? '#22c55e' : t.review_status === 'rejected' ? '#ef4444' : '#94a3b8';
             const tokens = teams.map(t => {
                 const leader = t.members.find(m => m.role === 'leader');
@@ -6275,7 +6275,7 @@
             const teams = _gfPrintableTeams();
             if (!teams.length) return;
             const form = _gfRosterForm;
-            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''}${p.roll ? ', Roll ' + p.roll : ''})` : 'Unknown';
             const stickerHtml = t => {
                 const category = _gfAnswerByName(t, form, /^category$/i);
                 const group = (t.group_data || {}).group;
@@ -6413,7 +6413,7 @@
         // filter applies consistently everywhere — exporting or printing
         // while a filter is active only ever includes the teams shown.
         function _gfRosterFilteredSorted() {
-            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''}${p.roll ? ', Roll ' + p.roll : ''})` : 'Unknown';
             const leaderNameOf = t => nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id;
             const filter = document.getElementById('gf-roster-filter')?.value || 'all';
             const sort = document.getElementById('gf-roster-sort')?.value || 'newest';
@@ -6436,7 +6436,7 @@
             const host = document.getElementById('admin-group-roster-list');
             if (!teams.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams have been created for this form yet.</p>'; return; }
             const maxSize = form ? form.max_team_size : null;
-            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''})` : 'Unknown';
+            const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''}${p.roll ? ', Roll ' + p.roll : ''})` : 'Unknown';
             const leaderNameOf = t => nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id;
             const shown = _gfRosterFilteredSorted();
             if (!shown.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams match this filter.</p>'; return; }
