@@ -1263,6 +1263,7 @@
                                             </div>
                                         </div>
                                         <div id="gf-roster-filter-panel" class="p-3 mb-3 bg-light rounded-4 border" style="display:none"></div>
+                                        <div id="gf-roster-summary" class="mb-3"></div>
                                         <div id="admin-group-roster-list" class="d-flex flex-column gap-3"></div>
                                     </div>
                                 </div>
@@ -6499,13 +6500,40 @@
                 return sort === 'oldest' ? cmp : -cmp;
             });
         }
+        // Same counting-summary idea as the Project List print's header —
+        // total plus a breakdown by Category/Group/House/Status, live over
+        // whatever's currently shown (updates as filters change).
+        function _gfRenderRosterSummary(teams, form) {
+            const host = document.getElementById('gf-roster-summary');
+            if (!host) return;
+            if (!teams.length) { host.innerHTML = ''; return; }
+            const byCategory = _gfCountBy(teams, t => _gfAnswerByName(t, form, /^category$/i));
+            const byGroup = _gfCountBy(teams, _gfTeamGroup);
+            const byHouse = _gfCountBy(teams, _gfTeamHouse);
+            const byStatus = _gfCountBy(teams, t => t.review_status ? t.review_status[0].toUpperCase() + t.review_status.slice(1) : 'Pending');
+            const group = (title, pairs) => pairs.length ? `<div class="flex-fill" style="min-width:140px">
+                <div class="text-uppercase fw-800 text-muted mb-1" style="font-size:0.62rem;letter-spacing:0.04em">${_escHtml(title)}</div>
+                <div class="d-flex flex-column gap-1">${pairs.map(([k, v]) => `<div class="d-flex justify-content-between gap-3" style="font-size:0.72rem"><span class="text-muted fw-bold">${_escHtml(k)}</span><span class="fw-800">${v}</span></div>`).join('')}</div>
+            </div>` : '';
+            host.innerHTML = `<div class="card border-0 shadow-sm p-3 d-flex flex-row flex-wrap gap-4">
+                <div class="d-flex flex-column align-items-center justify-content-center pe-3 border-end" style="min-width:90px">
+                    <span class="fs-3 fw-800">${teams.length}</span>
+                    <span class="text-uppercase fw-800 text-muted" style="font-size:0.6rem;letter-spacing:0.04em">Total Projects</span>
+                </div>
+                ${group('By Category', byCategory)}
+                ${group('By Group', byGroup)}
+                ${group('By House', byHouse)}
+                ${group('By Status', byStatus)}
+            </div>`;
+        }
         function renderAdminGroupRoster(teams, form) {
             const host = document.getElementById('admin-group-roster-list');
-            if (!teams.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams have been created for this form yet.</p>'; return; }
+            if (!teams.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams have been created for this form yet.</p>'; _gfRenderRosterSummary([], form); return; }
             const maxSize = form ? form.max_team_size : null;
             const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''}${p.roll ? ', Roll ' + p.roll : ''})` : 'Unknown';
             const leaderNameOf = t => nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id;
             const shown = _gfRosterFilteredSorted();
+            _gfRenderRosterSummary(shown, form);
             if (!shown.length) { host.innerHTML = '<p class="text-muted small fst-italic">No teams match this filter.</p>'; return; }
 
             host.innerHTML = shown.map(t => {

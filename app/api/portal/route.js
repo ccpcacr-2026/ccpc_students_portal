@@ -2047,6 +2047,24 @@ export async function POST(req) {
     });
     if (r?.error) return NextResponse.json({ result: 'error', message: r.error });
 
+    // create_group only ever gets one shot at a reference number, computed
+    // from whatever group_data existed at team-creation time — usually
+    // empty, since the leader fills in answers (Category, etc.) afterward
+    // via update_group_data. Retry here, now that submission requires every
+    // answer to actually be filled in — this is what actually gives most
+    // teams their real reference number, not creation time. Best-effort,
+    // never blocks a submission that already succeeded above.
+    try {
+      if (!team.reference_number) {
+        const leaderRows = await sb(`students_data?student_id=eq.${encodeURIComponent(leader_id)}&select=*`);
+        const leaderProfile = (!leaderRows?.error && leaderRows[0]) ? leaderRows[0] : null;
+        const reference_number = await buildReferenceNumber(form.reference_number_json, form, leaderProfile, team.group_data);
+        if (reference_number) await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', { reference_number });
+      }
+    } catch (e) {
+      console.error('submit_group_team reference-number assignment failed:', e);
+    }
+
     // Let the teacher who asked for changes know the leader acted on it.
     // revision_requested_by is a real teacher_staff.app_users user_id when
     // the request came from ccpc-teachers (admin or reviewer); it's the
