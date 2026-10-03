@@ -1247,6 +1247,10 @@
                                         <div class="d-flex justify-content-between align-items-center mb-3 gf-roster-toolbar flex-wrap gap-2">
                                             <h5 class="fw-800 m-0" id="admin-group-roster-title">Teams</h5>
                                             <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <div class="position-relative">
+                                                    <i class="bi bi-search position-absolute text-muted" style="left:10px;top:50%;transform:translateY(-50%);font-size:0.75rem"></i>
+                                                    <input type="search" id="gf-roster-search" oninput="renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm)" placeholder="Search name, ID, roll, ref no…" class="form-control form-control-sm" style="width:220px;padding-left:28px">
+                                                </div>
                                                 <button type="button" onclick="_gfToggleRosterFilterPanel()" class="btn btn-sm btn-outline-dark rounded-pill px-3" id="gf-roster-filter-toggle"><i class="bi bi-funnel me-1"></i>Filters<span id="gf-roster-filter-count" class="badge bg-dark rounded-pill ms-1" style="display:none"></span></button>
                                                 <select id="gf-roster-sort" onchange="renderAdminGroupRoster(_gfRosterTeams, _gfRosterForm)" class="form-select form-select-sm" style="max-width:180px">
                                                     <option value="newest">Newest first</option>
@@ -6066,6 +6070,8 @@
             _gfRosterForm = form || null;
             _gfRosterFilterState = { submission: new Set(), review: new Set(), house: new Set(), group: new Set(), category: new Set() };
             document.getElementById('gf-roster-filter-panel').style.display = 'none';
+            const searchEl = document.getElementById('gf-roster-search');
+            if (searchEl) searchEl.value = '';
             document.getElementById('admin-group-roster-title').textContent = 'Teams — ' + (form ? form.title : '');
             document.getElementById('admin-group-roster').classList.remove('hidden');
             document.getElementById('admin-group-roster-list').innerHTML = '<p class="text-muted small">Loading…</p>';
@@ -6488,11 +6494,24 @@
             if (st.category.size && !st.category.has(_gfTeamCategory(t))) return false;
             return true;
         }
+        // Free-text search — matches against every field an admin might
+        // actually type: reference number, project title, and every
+        // member's (not just the leader's) name/student ID/roll. Combines
+        // with the chip filters (AND), not a replacement for them.
+        function _gfTeamMatchesRosterSearch(t, form, term) {
+            if (!term) return true;
+            const q = term.trim().toLowerCase();
+            if (!q) return true;
+            const parts = [t.reference_number, _gfProjectTitle(t, form), t.leader_student_id];
+            t.members.forEach(m => { parts.push(m.student_id, m.profile?.student_name, m.profile?.roll); });
+            return parts.filter(Boolean).some(v => String(v).toLowerCase().includes(q));
+        }
         function _gfRosterFilteredSorted() {
             const nameOf = p => p ? `${p.student_name} (${p.class || ''}${p.section ? '-' + p.section : ''}${p.roll ? ', Roll ' + p.roll : ''})` : 'Unknown';
             const leaderNameOf = t => nameOf(t.members.find(m => m.role === 'leader')?.profile) || t.leader_student_id;
             const sort = document.getElementById('gf-roster-sort')?.value || 'newest';
-            let shown = _gfRosterTeams.filter(_gfTeamMatchesRosterFilters);
+            const searchTerm = document.getElementById('gf-roster-search')?.value || '';
+            let shown = _gfRosterTeams.filter(t => _gfTeamMatchesRosterFilters(t) && _gfTeamMatchesRosterSearch(t, _gfRosterForm, searchTerm));
             return shown.slice().sort((a, b) => {
                 if (sort === 'leader') return leaderNameOf(a).localeCompare(leaderNameOf(b));
                 if (sort === 'submitted_at') return new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0);
