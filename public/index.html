@@ -6573,15 +6573,16 @@
                             ${!complete && form && form.members_required ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Incomplete</span>' : ''}
                             <div class="small text-muted" style="font-size:0.72rem">${t.members.length}${maxSize ? '/' + maxSize : ''} members${t.pending_invites.length ? ' · ' + t.pending_invites.length + ' pending invite(s)' : ''}${t.submitted_at ? ' · submitted ' + new Date(t.submitted_at).toLocaleString() : ''}</div>
                         </div>
-                        ${t.status !== 'disbanded' ? `
                         <div class="d-flex gap-2 flex-wrap gf-no-print">
+                            ${t.status !== 'disbanded' ? `
                             ${t.review_status !== 'approved' ? `<button onclick="setReviewStatusAdmin(${t.id}, 'approved')" class="btn btn-xs btn-outline-success rounded-pill px-3">Approve</button>` : `<button onclick="setReviewStatusAdmin(${t.id}, null)" class="btn btn-xs btn-outline-secondary rounded-pill px-3">Unapprove</button>`}
                             ${t.review_status !== 'rejected' ? `<button onclick="setReviewStatusAdmin(${t.id}, 'rejected')" class="btn btn-xs btn-outline-danger rounded-pill px-3">Reject</button>` : `<button onclick="setReviewStatusAdmin(${t.id}, null)" class="btn btn-xs btn-outline-secondary rounded-pill px-3">Unreject</button>`}
                             <button onclick="requestTeamChangesAdmin(${t.id})" class="btn btn-xs btn-outline-warning rounded-pill px-3">Request Changes</button>
                             <button onclick="setTeamLockAdmin(${t.id}, ${!t.is_locked})" class="btn btn-xs ${t.is_locked ? 'btn-outline-dark' : 'btn-dark'} rounded-pill px-3">${t.is_locked ? 'Unlock' : 'Lock'}</button>
                             <button onclick="disbandTeamAdmin(${t.id})" class="btn btn-xs btn-outline-danger rounded-pill px-3">Disband</button>
+                            ` : ''}
                             <button onclick="deleteTeamAdmin(${t.id})" class="btn btn-xs btn-danger rounded-pill px-3">Delete</button>
-                        </div>` : ''}
+                        </div>
                     </div>
                     <div class="mt-2 d-flex flex-wrap gap-2">
                         ${t.members.map(m => `<button type="button" onclick='gfShowStudentInfo(${JSON.stringify(m.student_id)})' class="d-inline-flex align-items-center gap-2 bg-light text-dark border rounded-pill ps-1 pe-3 py-1 fw-bold small" style="cursor:pointer;border-width:1px">${_gfAvatar(m.profile?.student_name, m.profile?.photo, 24)}${nameOf(m.profile) || m.student_id}${m.role === 'leader' ? ' 👑' : ''}</button>`).join('')}
