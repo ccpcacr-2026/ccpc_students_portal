@@ -1003,6 +1003,18 @@
                                         </div>
                                     </div>
 
+                                    <!-- House colors — one color per house, themes that student's own Personal Hub avatar/accent -->
+                                    <div class="mt-5 p-4 rounded-4 border shadow-sm" style="background:#fff">
+                                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                            <span class="fw-800"><i class="bi bi-palette-fill text-primary me-2"></i>House Colors</span>
+                                            <button onclick="saveHouseColorsAdmin()" class="btn btn-sm btn-primary rounded-pill px-3">Save House Colors</button>
+                                        </div>
+                                        <p class="small text-muted mb-3" style="font-size:0.72rem">Pick a color for each house — it themes that student's own Personal Hub (avatar ring + profile accent) when they log in.</p>
+                                        <div id="house-colors-list" class="d-flex flex-wrap gap-3">
+                                            <span class="text-muted small fst-italic">Loading houses...</span>
+                                        </div>
+                                    </div>
+
                                     <!-- Permanent tabs (Wallet, Canteen, Stationary, etc.) — built-in, not user-created -->
                                     <div class="mt-5 p-4 rounded-4 border shadow-sm" style="background:#fff">
                                         <span class="fw-800"><i class="bi bi-pin-angle-fill text-primary me-2"></i>Permanent Tabs</span>
@@ -2431,6 +2443,7 @@
                 loadAdminTabs();
                 loadPermanentTabsAdmin();
                 loadLoginPasswordColumnsAdmin();
+                loadHouseColorsAdmin();
                 loadIncludeFields();
                 loadEditableProfileFields();
                 loadTrackingConfig();
@@ -3720,6 +3733,10 @@
         let EDITABLE_FIELDS = [];
         // Tabs the admin has promoted into the profile (extra groups appended below the static ones)
         let PROFILE_SECTIONS = [];
+        // Admin-picked color per house (Setup > House Colors) — themes the
+        // logged-in student's own avatar ring + profile accent, never other
+        // students' data (only their own loggedInStudent.house is looked up).
+        let HOUSE_COLORS = {};
 
         // Unified list of profile groups: static PROFILE_GROUPS + promoted PROFILE_SECTIONS.
         // Each field is { key, label, options } — options only for promoted choose/checkbox fields.
@@ -3799,14 +3816,22 @@
         function renderOwnPhotoAvatar() {
             const el = document.getElementById('hub-photo-avatar');
             if (!el || !loggedInStudent) return;
+            // House color rings the avatar either way (photo or initials) and
+            // tints the initials background when there's no photo — visible
+            // house identity without needing a separate badge/field.
+            const houseColor = HOUSE_COLORS[loggedInStudent.house] || null;
+            el.style.boxShadow = houseColor ? `0 0 0 3px ${houseColor}` : '';
             if (loggedInStudent.photo) {
                 el.style.backgroundImage = `url('${loggedInStudent.photo}')`;
                 el.textContent = '';
             } else {
                 el.style.backgroundImage = '';
+                el.style.background = houseColor || 'var(--primary)';
                 const name = loggedInStudent.name || loggedInStudent.student_name || loggedInStudent.student_id || '?';
                 el.textContent = String(name).trim().charAt(0).toUpperCase();
             }
+            const card = document.getElementById('hub-profile-card');
+            if (card) card.style.borderLeft = houseColor ? `4px solid ${houseColor}` : '';
         }
 
         // Square-crop + 130KB compression + upload_photo — shared by the "My
@@ -4078,12 +4103,15 @@
                 portalFetch('get_editable_fields', {}),
                 portalFetch('get_profile_sections', {}),
                 portalFetch('get_group_values', {}),
-            ]).then(([ef, ps, gv]) => {
+                portalFetch('get_house_colors', {}),
+            ]).then(([ef, ps, gv, hc]) => {
                 EDITABLE_FIELDS = (ef && Array.isArray(ef.fields)) ? ef.fields : [];
                 PROFILE_SECTIONS = (ps && Array.isArray(ps.sections)) ? ps.sections : [];
                 // 'group' is fixed-choice, but the choices are whatever the school
                 // has actually assigned so far — not a hardcoded enum like blood/gender.
                 if (gv && Array.isArray(gv.values) && gv.values.length) PROFILE_FIELD_OPTIONS.group = gv.values;
+                HOUSE_COLORS = (hc && hc.colors && typeof hc.colors === 'object') ? hc.colors : {};
+                renderOwnPhotoAvatar();
                 if (document.getElementById('hub-profile-card')) renderProfilePane(false);
             }).catch(() => {});
         }
@@ -5633,6 +5661,39 @@
                 }
                 loadLoginPasswordColumnsAdmin(); // re-sync (also restores the checkbox if the save was rejected, e.g. last-column-unchecked)
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); loadLoginPasswordColumnsAdmin(); });
+        }
+
+        // House Colors (admin picks one color per house) — houses come from
+        // whatever's actually in students_data (get_house_values), same
+        // "no hardcoded enum" reasoning as the Group field's own options.
+        function _hcSafeId(h) { return String(h).replace(/[^a-zA-Z0-9]/g, '_'); }
+        function loadHouseColorsAdmin() {
+            Promise.all([portalFetch('get_house_values', {}), portalFetch('get_house_colors', {})]).then(([hv, hc]) => {
+                const list = document.getElementById('house-colors-list');
+                if (!list) return;
+                const houses = (hv && Array.isArray(hv.values)) ? hv.values : [];
+                const colors = (hc && hc.colors) ? hc.colors : {};
+                if (!houses.length) { list.innerHTML = '<span class="text-muted small fst-italic">No house values found in students_data yet.</span>'; return; }
+                list.innerHTML = houses.map(h => `
+                    <div class="d-flex align-items-center gap-2 p-2 border rounded-3" style="min-width:180px">
+                        <input type="color" id="house-color-${_hcSafeId(h)}" value="${colors[h] || '#6366f1'}" class="form-control form-control-color p-1" style="width:44px;height:36px" title="${h}">
+                        <span class="small fw-700">${h}</span>
+                    </div>`).join('');
+            }).catch(() => {});
+        }
+        function saveHouseColorsAdmin() {
+            portalFetch('get_house_values', {}).then(hv => {
+                const houses = (hv && Array.isArray(hv.values)) ? hv.values : [];
+                const colors = {};
+                houses.forEach(h => {
+                    const el = document.getElementById(`house-color-${_hcSafeId(h)}`);
+                    if (el) colors[h] = el.value;
+                });
+                return portalFetch('save_house_colors', { colors });
+            }).then(res => {
+                if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('House colors saved', 'success'); else alert('Saved'); }
+                else { if (typeof showToast === 'function') showToast((res && res.message) || 'Could not save', 'error'); }
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
         }
 
         function adminResetPin() {

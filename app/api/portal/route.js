@@ -1277,6 +1277,43 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success' });
   }
 
+  // ── Distinct house values already in use, for the admin's House Colors
+  // picker — mirrors get_group_values exactly (same "whatever's actually in
+  // students_data, not a hardcoded enum" reasoning).
+  if (action === 'get_house_values') {
+    const rows = await sb('students_data?select=house&limit=10000');
+    const values = new Set();
+    (Array.isArray(rows) ? rows : []).forEach(r => { const h = String(r.house || '').trim(); if (h) values.add(h); });
+    return NextResponse.json({ values: Array.from(values).sort() });
+  }
+
+  // ── House colors — purely cosmetic: themes a student's own Personal Hub
+  // avatar/accent by their house, one admin-picked color per house. Same
+  // portal_settings key-value pattern as editable_profile_fields; readable
+  // by anyone (a color mapping isn't sensitive) so a logged-in student's own
+  // page can apply it without a separate admin check.
+  if (action === 'get_house_colors') {
+    const rows = await sb('portal_settings?key=eq.house_colors');
+    let colors = {};
+    try { colors = JSON.parse((rows && !rows.error && rows[0]?.value) || '{}'); } catch (_) {}
+    return NextResponse.json({ result: 'success', colors: (colors && typeof colors === 'object' && !Array.isArray(colors)) ? colors : {} });
+  }
+  if (action === 'save_house_colors') {
+    const colors = payload.colors;
+    if (!colors || typeof colors !== 'object' || Array.isArray(colors)) {
+      return NextResponse.json({ result: 'error', message: 'colors must be an object.' });
+    }
+    const clean = {};
+    Object.entries(colors).forEach(([house, color]) => {
+      const h = String(house || '').trim();
+      const c = String(color || '').trim();
+      if (h && /^#[0-9a-fA-F]{6}$/.test(c)) clean[h] = c;
+    });
+    const r = await psSave('house_colors', JSON.stringify(clean));
+    if (!r.ok) return NextResponse.json({ result: 'error', message: r.message });
+    return NextResponse.json({ result: 'success' });
+  }
+
   // ── Student updates their own profile (only admin-approved fields) ─────────
   if (action === 'update_student_profile') {
     const { student_id, updates } = payload;
