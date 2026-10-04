@@ -1,0 +1,60 @@
+-- OMR exam results — published, subject-wise results with answer keys,
+-- uploaded from the OptiMark Pro desktop scanner's own output files
+-- (answer_key.json per Set + result.csv with per-question Q1..Qn columns).
+-- Run in the Supabase SQL editor (same project as the rest of the portal).
+--
+-- Explicitly qualified with `student.` — see migration_group_forms.sql's own
+-- header for why (a stray `public.` copy of an identically-named table has
+-- happened before in this project from an unqualified CREATE TABLE).
+
+CREATE SCHEMA IF NOT EXISTS student;
+
+-- ── One row per upload (Class + Subject + exam) ─────────────────────────────
+-- Answer keys are embedded as JSON rather than a separate table — small
+-- (tens of questions), always read together with the batch, and this matches
+-- the JSONB-ish text-column convention already used elsewhere in this app
+-- (group_data, reference_number_json, ...).
+CREATE TABLE IF NOT EXISTS student.omr_exam_batches (
+  id                bigserial   PRIMARY KEY,
+  class             text        NOT NULL,
+  subject           text        NOT NULL,
+  exam_title        text        NOT NULL,
+  exam_date         date,
+  -- {"A": {"1":["A"],"2":["B","C"],...}, "B": {...}} — one entry per Set
+  answer_keys_json  text        NOT NULL DEFAULT '{}',
+  total_questions   int         NOT NULL DEFAULT 0,
+  total_students    int         NOT NULL DEFAULT 0,
+  -- Non-fatal warnings carried from scoring time (e.g. "no matching answer
+  -- key for set code X") — shown to the admin on the manage screen, never to
+  -- students; doesn't block publishing.
+  warnings_json     text        NOT NULL DEFAULT '[]',
+  is_published      boolean     NOT NULL DEFAULT false,
+  published_at      timestamptz,
+  created_by        text,        -- teacher_staff.app_users user_id
+  created_by_name   text,        -- resolved at upload time (see group_form_teams.revision_requested_by_name for the same pattern/reasoning)
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS omr_exam_batches_class_subject_idx ON student.omr_exam_batches (class, subject);
+ALTER TABLE student.omr_exam_batches ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "omr_exam_batches_all" ON student.omr_exam_batches;
+CREATE POLICY "omr_exam_batches_all" ON student.omr_exam_batches FOR ALL USING (true);
+
+-- ── One row per student per batch ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS student.omr_exam_results (
+  id                bigserial   PRIMARY KEY,
+  batch_id          bigint      NOT NULL REFERENCES student.omr_exam_batches(id) ON DELETE CASCADE,
+  student_id        text        NOT NULL,
+  set_code          text,
+  marks             int         NOT NULL DEFAULT 0,
+  total_questions   int         NOT NULL DEFAULT 0,
+  -- {"1": {"marked":["A"],"verdict":"correct"}, "2": {"marked":[],"verdict":"unanswered"}, ...}
+  answers_json      text        NOT NULL DEFAULT '{}',
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (batch_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS omr_exam_results_student_idx ON student.omr_exam_results (student_id);
+CREATE INDEX IF NOT EXISTS omr_exam_results_batch_idx ON student.omr_exam_results (batch_id);
+ALTER TABLE student.omr_exam_results ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "omr_exam_results_all" ON student.omr_exam_results;
+CREATE POLICY "omr_exam_results_all" ON student.omr_exam_results FOR ALL USING (true);

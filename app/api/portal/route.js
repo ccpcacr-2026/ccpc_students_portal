@@ -1737,6 +1737,24 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', data: Array.isArray(rows) ? rows : [] });
   }
 
+  // ── My OMR exam results (published only — never trusts the client to
+  // filter) ─────────────────────────────────────────────────────────────
+  if (action === 'get_my_omr_results') {
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    const resultRows = await sb(`omr_exam_results?student_id=eq.${encodeURIComponent(student_id)}&order=created_at.desc`);
+    if (resultRows?.error) return NextResponse.json({ result: 'error', message: resultRows.error });
+    const rows = Array.isArray(resultRows) ? resultRows : [];
+    if (!rows.length) return NextResponse.json({ result: 'success', results: [] });
+    const batchIds = [...new Set(rows.map(r => r.batch_id))];
+    const batchRows = await sb(`omr_exam_batches?id=in.(${batchIds.join(',')})&is_published=eq.true`);
+    if (batchRows?.error) return NextResponse.json({ result: 'error', message: batchRows.error });
+    const batchById = {};
+    (Array.isArray(batchRows) ? batchRows : []).forEach(b => { batchById[b.id] = b; });
+    const results = rows.filter(r => batchById[r.batch_id]).map(r => ({ ...r, batch: batchById[r.batch_id] }));
+    return NextResponse.json({ result: 'success', results });
+  }
+
   // ── Get my team (or my pending invite) for one Group Form ───────────────
   if (action === 'get_my_team') {
     const { student_id, group_form_id } = payload;

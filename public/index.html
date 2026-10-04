@@ -2899,6 +2899,9 @@
                     if (id === 'notifications') {
                         loadStudentNotifications();
                     }
+                    if (id === 'my-results') {
+                        loadMyOmrResults();
+                    }
                     if (id === 'student-forum') {
                         loadStudentForumPosts();
                     }
@@ -3228,6 +3231,78 @@
                     } else if (dot) { dot.remove(); }
                 });
             } catch (e) {}
+        }
+        // ── My Results (published OMR exam results) ──────────────────────────
+        // get_my_omr_results already filters to is_published=true server-side
+        // (never trusts the client) — every batch in the response is safe to
+        // show as-is.
+        let _myOmrResults = [];
+        async function loadMyOmrResults() {
+            const sid = cantSid();
+            const el = document.getElementById('my-results-list');
+            if (!sid || !el) return;
+            el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p>';
+            try {
+                const r = await portalFetch('get_my_omr_results', { student_id: sid });
+                if (!r || r.result !== 'success') { el.innerHTML = '<p class="text-muted small">Could not load results.</p>'; return; }
+                _myOmrResults = r.results || [];
+                if (!_myOmrResults.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No published results yet</p>'; return; }
+                el.innerHTML = _myOmrResults.map((res, i) => {
+                    const b = res.batch || {};
+                    const pct = b.total_questions ? Math.round((res.marks / b.total_questions) * 100) : 0;
+                    const dateStr = b.exam_date ? new Date(b.exam_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+                    return `
+                    <div class="wallet-stat-card mb-2" style="text-align:left">
+                        <div class="d-flex align-items-center justify-content-between" style="cursor:pointer" onclick="_omrToggleResultDetail(${i})">
+                            <div>
+                                <div style="font-weight:800;font-size:0.9rem">${cantEsc(b.exam_title || '')}</div>
+                                <div class="wallet-stat-label mt-1">${cantEsc(b.subject || '')} &middot; ${cantEsc(b.class || '')}${dateStr ? ' &middot; ' + dateStr : ''}</div>
+                            </div>
+                            <div class="text-end">
+                                <div style="font-weight:800;font-size:1.1rem;color:var(--p-primary)">${res.marks}/${b.total_questions}</div>
+                                <div class="wallet-stat-label">${pct}%</div>
+                            </div>
+                        </div>
+                        <div id="my-results-detail-${i}" class="hidden mt-3" style="border-top:1px solid rgba(0,0,0,0.08);padding-top:10px"></div>
+                    </div>`;
+                }).join('');
+            } catch (e) { el.innerHTML = '<p class="text-muted small">Could not load results.</p>'; }
+        }
+        // Per-question breakdown, built on first tap and cached in the DOM —
+        // green = correct, red = wrong (shows the correct answer so the
+        // student can actually learn from it), gray = unanswered/no key
+        // matched for their set.
+        function _omrToggleResultDetail(i) {
+            const host = document.getElementById(`my-results-detail-${i}`);
+            if (!host) return;
+            if (!host.classList.contains('hidden')) { host.classList.add('hidden'); return; }
+            const res = _myOmrResults[i];
+            if (!res) return;
+            if (!host.dataset.built) {
+                let answers = {};
+                try { answers = JSON.parse(res.answers_json || '{}'); } catch (e) {}
+                let keyForSet = {};
+                try {
+                    const keys = JSON.parse((res.batch && res.batch.answer_keys_json) || '{}');
+                    keyForSet = keys[res.set_code] || {};
+                } catch (e) {}
+                const qnums = Object.keys(answers).map(Number).sort((a, b) => a - b);
+                host.innerHTML = `<div class="d-flex flex-wrap gap-2">` + qnums.map(q => {
+                    const a = answers[q] || {};
+                    const verdict = a.verdict;
+                    const marked = (a.marked || []).join(',') || '-';
+                    const correct = (keyForSet[q] || []).join(',') || '-';
+                    const bg = verdict === 'correct' ? '#dcfce7' : verdict === 'wrong' ? '#fee2e2' : '#f1f5f9';
+                    const fg = verdict === 'correct' ? '#15803d' : verdict === 'wrong' ? '#b91c1c' : '#64748b';
+                    return `<div style="background:${bg};color:${fg};border-radius:10px;padding:6px 8px;min-width:54px;text-align:center">
+                        <div style="font-size:0.65rem;font-weight:800;opacity:0.7">Q${q}</div>
+                        <div style="font-weight:800;font-size:0.85rem">${cantEsc(marked)}</div>
+                        ${verdict === 'wrong' ? `<div style="font-size:0.62rem;font-weight:700">Key: ${cantEsc(correct)}</div>` : ''}
+                    </div>`;
+                }).join('') + `</div>`;
+                host.dataset.built = '1';
+            }
+            host.classList.remove('hidden');
         }
 
         // ── Forum (Student section — post/reply, scoped to own class+section or
@@ -4363,6 +4438,7 @@
                 addNav('attendance', 'Attendance', 'bi-fingerprint');
                 addNav('announcements', 'Announcements', 'bi-megaphone-fill');
                 addNav('notifications', 'Notifications', 'bi-bell-fill');
+                addNav('my-results', 'My Results', 'bi-clipboard-data-fill');
                 addNav('student-diary', 'Diary', 'bi-journal-text');
                 addNav('student-forum', 'Forum', 'bi-chat-square-text-fill');
                 addNav('student-messages', 'Messages', 'bi-envelope-fill');
@@ -4434,6 +4510,17 @@
                     </div>
                     <div id="notifications-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
                 if(content) content.appendChild(notifPane);
+
+                // ── My Results (published OMR exam results, with a per-question
+                // answer-key breakdown — uploaded from the OMR scanner via the
+                // teachers' admin app) ──
+                const omrResultsPane = document.createElement('div');
+                omrResultsPane.className = 'tab-pane ccpc-page'; omrResultsPane.id = 'my-results-content';
+                omrResultsPane.innerHTML = `
+                    <h2 class="ccpc-page-title">My <em>Results</em></h2>
+                    <p class="ccpc-page-sub">Published exam results, with your answers checked against the answer key.</p>
+                    <div id="my-results-list" class="mt-3"><p class="text-center py-5" style="color:var(--p-ink-dim)">Loading…</p></div>`;
+                if(content) content.appendChild(omrResultsPane);
 
                 // ── Forum (Student section — students can post/reply too now,
                 // scoped to their own class+section or posts they're tagged in) ──
