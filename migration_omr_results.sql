@@ -67,6 +67,21 @@ CREATE POLICY "omr_exam_results_all" ON student.omr_exam_results FOR ALL USING (
 -- its own (those two only ever show the CURRENT state's most recent flip).
 ALTER TABLE student.omr_exam_batches ADD COLUMN IF NOT EXISTS publish_history_json text NOT NULL DEFAULT '[]';
 
+-- ── Scoring Rule (matches OptiMark Pro's own Settings > Scan Policy >
+-- "Scoring Rule" selector: subset/exact/partial) ─────────────────────────
+-- A multi-letter key entry (e.g. a question where ["A","B","C","D"] are all
+-- marked "correct" in the key) means something different under each rule:
+--   subset  (OptiMark Pro's own default) — full credit if every letter the
+--           student marked is IN the key, even just one of several listed.
+--   exact   — full credit only if the student's marks equal the key exactly.
+--   partial — proportional credit (marks fractional, hence the column-type
+--           change below) if a strict subset; any mark outside the key is
+--           zero credit for that question.
+-- Recorded per batch (not a single app-wide setting) since the admin picks
+-- it per upload, same as OptiMark Pro's own per-scan-session setting.
+ALTER TABLE student.omr_exam_batches ADD COLUMN IF NOT EXISTS scoring_rule text NOT NULL DEFAULT 'subset';
+ALTER TABLE student.omr_exam_results ALTER COLUMN marks TYPE numeric;
+
 -- ── GRANT (new custom-schema tables don't inherit this automatically —
 -- see the earlier fix for the same issue on the two tables above) ────────
 GRANT ALL ON student.omr_exam_batches TO service_role;

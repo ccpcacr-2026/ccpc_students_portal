@@ -3237,6 +3237,13 @@
         // (never trusts the client) — every batch in the response is safe to
         // show as-is.
         let _myOmrResults = [];
+        // Marks can be fractional under OptiMark Pro's "Partial" scoring
+        // rule -- avoids floating-point noise like "2.5000000001" from the
+        // credit summation.
+        function _omrFmtMarks(n) {
+            const r = Math.round(n * 100) / 100;
+            return Number.isInteger(r) ? String(r) : r.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+        }
         async function loadMyOmrResults() {
             const sid = cantSid();
             const el = document.getElementById('my-results-list');
@@ -3259,7 +3266,7 @@
                                 <div class="mt-1" style="font-size:0.82rem;font-weight:700;color:var(--p-ink-dim)">${cantEsc(b.subject || '')} &middot; ${cantEsc(b.class || '')}${res.set_code ? ' &middot; Set ' + cantEsc(res.set_code) : ''}${dateStr ? ' &middot; ' + dateStr : ''}</div>
                             </div>
                             <div class="text-end">
-                                <div style="font-weight:800;font-size:1.1rem;color:var(--p-primary)">${res.marks}/${b.total_questions}</div>
+                                <div style="font-weight:800;font-size:1.1rem;color:var(--p-primary)">${_omrFmtMarks(res.marks)}/${b.total_questions}</div>
                                 <div class="wallet-stat-label">${pct}%</div>
                             </div>
                         </div>
@@ -3292,12 +3299,12 @@
                     const verdict = a.verdict;
                     const marked = (a.marked || []).join(',') || '-';
                     const correct = (keyForSet[q] || []).join(',') || '-';
-                    const bg = verdict === 'correct' ? '#dcfce7' : verdict === 'wrong' ? '#fee2e2' : '#f1f5f9';
-                    const fg = verdict === 'correct' ? '#15803d' : verdict === 'wrong' ? '#b91c1c' : '#64748b';
+                    const bg = verdict === 'correct' ? '#dcfce7' : verdict === 'wrong' ? '#fee2e2' : verdict === 'partial' ? '#fef3c7' : '#f1f5f9';
+                    const fg = verdict === 'correct' ? '#15803d' : verdict === 'wrong' ? '#b91c1c' : verdict === 'partial' ? '#b45309' : '#64748b';
                     return `<div style="background:${bg};color:${fg};border-radius:10px;padding:6px 8px;min-width:54px;text-align:center">
                         <div style="font-size:0.65rem;font-weight:800;opacity:0.7">Q${q}</div>
                         <div style="font-weight:800;font-size:0.85rem">${cantEsc(marked)}</div>
-                        ${verdict === 'wrong' ? `<div style="font-size:0.62rem;font-weight:700">Key: ${cantEsc(correct)}</div>` : ''}
+                        ${verdict === 'wrong' || verdict === 'partial' ? `<div style="font-size:0.62rem;font-weight:700">Key: ${cantEsc(correct)}</div>` : ''}
                     </div>`;
                 }).join('') + `</div>`;
                 host.dataset.built = '1';
