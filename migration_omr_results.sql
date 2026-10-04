@@ -58,3 +58,17 @@ CREATE INDEX IF NOT EXISTS omr_exam_results_batch_idx ON student.omr_exam_result
 ALTER TABLE student.omr_exam_results ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "omr_exam_results_all" ON student.omr_exam_results;
 CREATE POLICY "omr_exam_results_all" ON student.omr_exam_results FOR ALL USING (true);
+
+-- ── Publish/unpublish audit trail ────────────────────────────────────────
+-- Append-only: [{"action":"published"|"unpublished","by":"<user_id>","by_name":"...","at":"<iso timestamp>"}, ...]
+-- "Who uploaded" is already created_by/created_by_name/created_at above —
+-- this covers the separate, repeatable publish/unpublish/publish-again
+-- history the single is_published flag + published_at can't represent on
+-- its own (those two only ever show the CURRENT state's most recent flip).
+ALTER TABLE student.omr_exam_batches ADD COLUMN IF NOT EXISTS publish_history_json text NOT NULL DEFAULT '[]';
+
+-- ── GRANT (new custom-schema tables don't inherit this automatically —
+-- see the earlier fix for the same issue on the two tables above) ────────
+GRANT ALL ON student.omr_exam_batches TO service_role;
+GRANT ALL ON student.omr_exam_results TO service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA student TO service_role;
