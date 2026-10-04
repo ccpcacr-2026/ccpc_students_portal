@@ -50,6 +50,10 @@
             --primary:      #059669;
             --primary-l:    #10b981;
             --primary-ll:   #34d399;
+            /* r, g, b channels of --primary, kept in sync by applyHouseTheme()
+               so rgba(var(--primary-rgb), alpha) tints can follow the theme
+               color too, not just solid fills/var(--primary) usages. */
+            --primary-rgb:  5, 150, 105;
             --indigo:       #6366F1;
             --warning:      #F59E0B;
             --danger:       #EF4444;
@@ -66,7 +70,7 @@
             --radius-lg: 20px;
             --radius-md: 14px;
             --radius-sm: 10px;
-            --shadow-g:     0 8px 28px rgba(5,150,105,0.22);
+            --shadow-g:     0 8px 28px rgba(var(--primary-rgb),0.22);
             --shadow:       0 4px 20px rgba(0,0,0,0.06);
             --shadow-sm:    0 1px 6px rgba(0,0,0,0.05);
             --shadow-lg:    0 12px 40px rgba(0,0,0,0.1);
@@ -369,7 +373,7 @@
         .sidebar-logo-box {
             width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
             background: linear-gradient(135deg, var(--primary), var(--primary-l));
-            box-shadow: 0 4px 14px rgba(16,185,129,0.4);
+            box-shadow: 0 4px 14px rgba(var(--primary-rgb),0.4);
             display: flex; align-items: center; justify-content: center; overflow: hidden;
         }
 
@@ -394,7 +398,7 @@
 
         .nav-item-btn i { font-size: 1.15rem; width: 20px; text-align: center; flex-shrink: 0; }
         .nav-item-btn:hover { color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.07); transform: translateX(4px); }
-        .nav-item-btn.active { color: #fff; background: linear-gradient(135deg, var(--primary) 0%, #0ea570 100%); box-shadow: 0 4px 18px rgba(5,150,105,0.35); }
+        .nav-item-btn.active { color: #fff; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-l) 100%); box-shadow: 0 4px 18px rgba(var(--primary-rgb),0.35); }
         .nav-item-btn.text-danger { color: rgba(252,129,129,0.75) !important; }
         .nav-item-btn.text-danger:hover { color: #fca5a5 !important; background: rgba(252,129,129,0.1) !important; }
 
@@ -416,7 +420,7 @@
             background: rgba(255,255,255,0.96); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border-g); z-index: 1040;
             padding: 0 16px; display: none; align-items: center; gap: 12px;
-            box-shadow: 0 2px 12px rgba(5,150,105,0.07);
+            box-shadow: 0 2px 12px rgba(var(--primary-rgb),0.07);
         }
 
         @media (max-width: 991px) { .mobile-header { display: flex; } }
@@ -452,8 +456,8 @@
             overflow: hidden; word-break: break-word; line-height: 1.2;
         }
         .bottom-nav .nav-item-btn i { font-size: 1.2rem; width: auto; display: block; }
-        .bottom-nav .nav-item-btn:hover { color: var(--primary); background: #f0fdf4; }
-        .bottom-nav .nav-item-btn.active { color: var(--primary); background: #ecfdf5; box-shadow: none; }
+        .bottom-nav .nav-item-btn:hover { color: var(--primary); background: var(--bg); }
+        .bottom-nav .nav-item-btn.active { color: var(--primary); background: var(--border-g); box-shadow: none; }
 
         /* ── Include-Field Chips ─────────────────────── */
         .include-field-chip {
@@ -554,8 +558,8 @@
             cursor: pointer; white-space: nowrap;
         }
         .hub-tab-btn i { font-size: 1rem; }
-        .hub-tab-btn:hover { color: var(--primary); background: #f0fdf4; }
-        .hub-tab-btn.active { background: linear-gradient(135deg, var(--primary), var(--primary-l)); color: #fff; box-shadow: 0 4px 16px rgba(5,150,105,0.3); }
+        .hub-tab-btn:hover { color: var(--primary); background: var(--bg); }
+        .hub-tab-btn.active { background: linear-gradient(135deg, var(--primary), var(--primary-l)); color: #fff; box-shadow: 0 4px 16px rgba(var(--primary-rgb),0.3); }
 
         .hub-tab-pane { display: none; }
         .hub-tab-pane.active { display: block; animation: fadeUp 0.38s ease; }
@@ -608,7 +612,7 @@
         }
         .form-control:focus, .form-select:focus {
             border-color: var(--primary); background: #fff;
-            box-shadow: 0 0 0 4px rgba(16,185,129,0.1); outline: none;
+            box-shadow: 0 0 0 4px rgba(var(--primary-rgb),0.1); outline: none;
         }
 
         /* ── Buttons ─────────────────────────────────── */
@@ -617,7 +621,7 @@
             border: none; padding: 14px 28px; border-radius: var(--radius-lg);
             font-weight: 800; box-shadow: var(--shadow-g); color: #fff; transition: all 0.22s;
         }
-        .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(5,150,105,0.35); color: #fff; }
+        .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(var(--primary-rgb),0.35); color: #fff; }
         .btn-outline-primary { border-color: var(--primary); color: var(--primary); font-weight: 700; }
         .btn-outline-primary:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
 
@@ -629,7 +633,7 @@
             transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
             display: flex; align-items: center; justify-content: center; gap: 10px;
         }
-        .btn-premium-save:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(5,150,105,0.35); }
+        .btn-premium-save:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(var(--primary-rgb),0.35); }
 
         /* ── Premium Form Group ──────────────────────── */
         .premium-form-group { position: relative; margin-bottom: 0.5rem; }
@@ -655,7 +659,7 @@
         .premium-form-group .form-select[value]:not([value=""]) ~ label { top: 13px; font-size: 0.6rem; color: var(--primary); letter-spacing: 0.1em; }
 
         .premium-form-group .form-control:focus,
-        .premium-form-group .form-select:focus { background: #fff; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(16,185,129,0.1); outline: none; }
+        .premium-form-group .form-select:focus { background: #fff; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(var(--primary-rgb),0.1); outline: none; }
 
         /* Dropdowns: restore a visible chevron (the custom background shorthand above wiped
            Bootstrap's arrow, making selects look like text inputs) */
@@ -759,7 +763,7 @@
         /* ── Student Strip (mobile / all) ──────────────────────── */
         .student-strip {
             display: flex; align-items: center; gap: 12px;
-            background: linear-gradient(135deg, var(--primary), #0ea570);
+            background: linear-gradient(135deg, var(--primary), var(--primary-l));
             border-radius: var(--radius-md); padding: 10px 15px;
             margin-bottom: 16px; color: #fff; box-shadow: var(--shadow-g);
             position: sticky; top: 0; z-index: 90;
@@ -784,10 +788,10 @@
         }
 
         /* ── Dynamic nav tab accent ────────────────────────────── */
-        .nav-item-btn.nav-dynamic { border-left: 3px solid rgba(16,185,129,0.45); padding-left: 10px; }
+        .nav-item-btn.nav-dynamic { border-left: 3px solid rgba(var(--primary-rgb),0.45); padding-left: 10px; }
         .nav-item-btn.nav-dynamic.active { border-left-color: rgba(255,255,255,0.25); }
-        .bottom-nav .nav-item-btn.nav-dynamic { border-left: none; border-bottom: 2px solid rgba(5,150,105,0.5); padding-bottom: 3px; }
-        .bottom-nav .nav-item-btn.nav-dynamic.active { border-bottom-color: rgba(5,150,105,0.8); }
+        .bottom-nav .nav-item-btn.nav-dynamic { border-left: none; border-bottom: 2px solid rgba(var(--primary-rgb),0.5); padding-bottom: 3px; }
+        .bottom-nav .nav-item-btn.nav-dynamic.active { border-bottom-color: rgba(var(--primary-rgb),0.8); }
 
         /* ── Compressed profile grid ───────────────────────────── */
         .profile-grid-compressed { padding: 14px 16px !important; }
@@ -3813,6 +3817,67 @@
             return html;
         }
 
+        // ── House theming: recolors the WHOLE post-login shell (sidebar,
+        // bottom-nav, primary buttons, focus rings, Personal Hub tabs) to the
+        // logged-in student's own house color — not just the avatar. Works by
+        // overriding the few CSS variables (--primary/-l/-rgb, --bg,
+        // --border-g, --sidebar-bg) that every one of those rules is built
+        // on (see the "whole sidebar + theme color" request); the login
+        // screen itself stays the default green since no student/house is
+        // known yet at that point. Shades are derived in HSL (fixed
+        // lightness per role) rather than linear-interpolated from the raw
+        // hex, so an admin's dark OR pale color-picker choice still produces
+        // a usable light tint / dark sidebar instead of mud or no contrast.
+        function _hexToRgb(hex) {
+            const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || '').trim());
+            return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null;
+        }
+        function _rgbToHsl([r, g, b]) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h = 0, s = 0; const l = (max + min) / 2;
+            if (max !== min) {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+                else if (max === g) h = (b - r) / d + 2;
+                else h = (r - g) / d + 4;
+                h /= 6;
+            }
+            return [h * 360, s * 100, l * 100];
+        }
+        function _hsl(h, s, l) { return `hsl(${h.toFixed(1)}, ${Math.max(0, Math.min(100, s)).toFixed(1)}%, ${Math.max(0, Math.min(100, l)).toFixed(1)}%)`; }
+        function applyHouseTheme() {
+            const root = document.documentElement.style;
+            const color = loggedInStudent && HOUSE_COLORS[loggedInStudent.house];
+            const rgb = color && _hexToRgb(color);
+            if (!rgb) {
+                // No house color assigned (or admin hasn't picked one yet) —
+                // fall back to the design's own default green by clearing
+                // any override from a previous student's session.
+                ['--primary', '--primary-rgb', '--primary-l', '--primary-ll', '--bg', '--border-g', '--sidebar-bg'].forEach(v => root.removeProperty(v));
+                return;
+            }
+            const [h, s] = _rgbToHsl(rgb);
+            root.setProperty('--primary', color);
+            root.setProperty('--primary-rgb', rgb.join(', '));
+            root.setProperty('--primary-l', _hsl(h, s, 46));
+            root.setProperty('--primary-ll', _hsl(h, Math.max(s - 5, 0), 58));
+            root.setProperty('--bg', _hsl(h, Math.min(s, 45), 97));
+            root.setProperty('--border-g', _hsl(h, Math.min(s, 55), 90));
+            root.setProperty('--sidebar-bg', _hsl(h, Math.min(s, 45), 9));
+        }
+        // Fetches the admin-configured house→color map and (re)applies the
+        // theme — called right after login (so the sidebar is correct from
+        // the very first paint) and again once Personal Hub's own data loads
+        // (loadEditableFields()); calling it twice is harmless.
+        function loadHouseTheme() {
+            portalFetch('get_house_colors', {}).then(hc => {
+                HOUSE_COLORS = (hc && hc.colors && typeof hc.colors === 'object') ? hc.colors : {};
+                applyHouseTheme();
+                renderOwnPhotoAvatar();
+            }).catch(() => {});
+        }
         function renderOwnPhotoAvatar() {
             const el = document.getElementById('hub-photo-avatar');
             if (!el || !loggedInStudent) return;
@@ -4099,19 +4164,17 @@
 
         // Fetch editable fields + promoted profile sections, then refresh the pane
         function loadEditableFields() {
+            loadHouseTheme();
             Promise.all([
                 portalFetch('get_editable_fields', {}),
                 portalFetch('get_profile_sections', {}),
                 portalFetch('get_group_values', {}),
-                portalFetch('get_house_colors', {}),
-            ]).then(([ef, ps, gv, hc]) => {
+            ]).then(([ef, ps, gv]) => {
                 EDITABLE_FIELDS = (ef && Array.isArray(ef.fields)) ? ef.fields : [];
                 PROFILE_SECTIONS = (ps && Array.isArray(ps.sections)) ? ps.sections : [];
                 // 'group' is fixed-choice, but the choices are whatever the school
                 // has actually assigned so far — not a hardcoded enum like blood/gender.
                 if (gv && Array.isArray(gv.values) && gv.values.length) PROFILE_FIELD_OPTIONS.group = gv.values;
-                HOUSE_COLORS = (hc && hc.colors && typeof hc.colors === 'object') ? hc.colors : {};
-                renderOwnPhotoAvatar();
                 if (document.getElementById('hub-profile-card')) renderProfilePane(false);
             }).catch(() => {});
         }
@@ -4402,6 +4465,11 @@
                     });
                 }
                 _renderAccountSwitchButton();
+                // Themes the sidebar/bottom-nav/buttons to this student's own
+                // house color right away — not deferred until they happen to
+                // open Personal Hub (loadEditableFields() also calls this
+                // same helper once it loads, which is harmless/idempotent).
+                loadHouseTheme();
 
                 const sidebar = document.getElementById('sidebar-items');
                 const bottom = document.getElementById('bottom-nav-container');
