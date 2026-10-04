@@ -3256,7 +3256,7 @@
                         <div class="d-flex align-items-center justify-content-between" style="cursor:pointer" onclick="_omrToggleResultDetail(${i})">
                             <div>
                                 <div style="font-weight:800;font-size:0.9rem">${cantEsc(b.exam_title || '')}</div>
-                                <div class="wallet-stat-label mt-1">${cantEsc(b.subject || '')} &middot; ${cantEsc(b.class || '')}${dateStr ? ' &middot; ' + dateStr : ''}</div>
+                                <div class="mt-1" style="font-size:0.82rem;font-weight:700;color:var(--p-ink-dim)">${cantEsc(b.subject || '')} &middot; ${cantEsc(b.class || '')}${res.set_code ? ' &middot; Set ' + cantEsc(res.set_code) : ''}${dateStr ? ' &middot; ' + dateStr : ''}</div>
                             </div>
                             <div class="text-end">
                                 <div style="font-weight:800;font-size:1.1rem;color:var(--p-primary)">${res.marks}/${b.total_questions}</div>
