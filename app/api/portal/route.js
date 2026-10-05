@@ -458,6 +458,40 @@ async function hasProfilePhoto(studentId) {
   return !!(photo && String(photo).trim());
 }
 
+// After an invite is accepted (by the student themselves, or on their
+// behalf via the admin-side's identical RPC) the team may already meet
+// every requirement submit_group_team itself checks — rather than leave
+// the leader to remember a separate manual Submit, finish the job right
+// here. Mirrors submit_group_team's own gating exactly (pending invites,
+// members_required, every member's photo) and silently no-ops if anything
+// isn't actually ready — this is a convenience, never a requirement, so a
+// caller never needs to check its result or handle a failure from it.
+async function _maybeAutoSubmitTeam(team_id) {
+  const teamRows = await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`);
+  const team = (!teamRows?.error && teamRows[0]) ? teamRows[0] : null;
+  if (!team || team.status !== 'active' || team.is_locked || team.is_submitted) return;
+
+  const [formRows, memberRows, pendingRows] = await Promise.all([
+    sb(`group_forms?id=eq.${encodeURIComponent(team.group_form_id)}`),
+    sb(`group_form_team_members?team_id=eq.${encodeURIComponent(team_id)}`),
+    sb(`group_form_team_invites?team_id=eq.${encodeURIComponent(team_id)}&status=eq.pending`),
+  ]);
+  const form = (!formRows?.error && formRows[0]) ? formRows[0] : null;
+  if (!form) return;
+  const members = Array.isArray(memberRows) ? memberRows : [];
+  const pending = Array.isArray(pendingRows) ? pendingRows : [];
+  if (pending.length) return;
+  if (form.members_required && members.length < form.max_team_size) return;
+
+  const photoChecks = await Promise.all(members.map(m => hasProfilePhoto(m.student_id)));
+  if (photoChecks.some(ok => !ok)) return;
+
+  await sb(`group_form_teams?id=eq.${encodeURIComponent(team_id)}`, 'PATCH', {
+    is_submitted: true, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    revision_comment: null, revision_requested_at: null, revision_requested_by: null, revision_requested_by_name: null,
+  });
+}
+
 function checkGroupEligibility(eligibilityJson, leader, candidate) {
   let elig = {};
   try { elig = JSON.parse(eligibilityJson || '{}') || {}; } catch (_) {}
@@ -1998,6 +2032,9 @@ export async function POST(req) {
     }
     const res = await sb('rpc/group_team_accept_invite', 'POST', { p_invite_id: invite_id, p_student_id: student_id });
     if (res?.error) return NextResponse.json({ result: 'error', message: rpcErrorMessage(res.error) });
+    const inviteRows = await sb(`group_form_team_invites?id=eq.${encodeURIComponent(invite_id)}&select=team_id`);
+    const acceptedTeamId = (!inviteRows?.error && inviteRows[0]) ? inviteRows[0].team_id : null;
+    if (acceptedTeamId) await _maybeAutoSubmitTeam(acceptedTeamId);
     return NextResponse.json({ result: 'success' });
   }
 
