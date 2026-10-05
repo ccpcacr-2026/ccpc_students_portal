@@ -3271,16 +3271,26 @@
                 if (!r || r.result !== 'success') { el.innerHTML = '<p class="text-muted small">Could not load results.</p>'; return; }
                 _myOmrResults = r.results || [];
                 if (!_myOmrResults.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No published results yet</p>'; return; }
+                // Subject/Class/Set/Date each get their own fixed color (not
+                // hashed per value) so the SAME piece of info reads the same
+                // color on every result card — e.g. Set is always amber —
+                // rather than one flat muted line a student has to actually
+                // parse to tell them apart.
+                const omrInfoChip = (text, bg, fg) => text ? `<span style="display:inline-block;background:${bg};color:${fg};font-weight:800;font-size:0.68rem;padding:2px 8px;border-radius:999px;margin:2px 4px 2px 0">${cantEsc(text)}</span>` : '';
                 el.innerHTML = _myOmrResults.map((res, i) => {
                     const b = res.batch || {};
                     const pct = b.total_questions ? Math.round((res.marks / b.total_questions) * 100) : 0;
                     const dateStr = b.exam_date ? new Date(b.exam_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+                    const infoChips = omrInfoChip(b.subject, '#eef2ff', '#6366f1')
+                        + omrInfoChip(b.class, '#faf5ff', '#a855f7')
+                        + omrInfoChip(res.set_code ? 'Set ' + res.set_code : '', '#fffbeb', '#f59e0b')
+                        + omrInfoChip(dateStr, '#f0fdfa', '#14b8a6');
                     return `
                     <div class="wallet-stat-card mb-2" style="text-align:left">
                         <div class="d-flex align-items-center justify-content-between" style="cursor:pointer" onclick="_omrToggleResultDetail(${i})">
                             <div>
                                 <div style="font-weight:800;font-size:0.9rem">${cantEsc(b.exam_title || '')}</div>
-                                <div class="mt-1" style="font-size:0.82rem;font-weight:700;color:var(--p-ink-dim)">${cantEsc(b.subject || '')} &middot; ${cantEsc(b.class || '')}${res.set_code ? ' &middot; Set ' + cantEsc(res.set_code) : ''}${dateStr ? ' &middot; ' + dateStr : ''}</div>
+                                <div class="mt-1">${infoChips}</div>
                             </div>
                             <div class="text-end">
                                 <div style="font-weight:800;font-size:1.1rem;color:var(--p-primary)">${_omrFmtMarks(res.marks)}/${b.total_questions}</div>
