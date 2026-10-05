@@ -482,6 +482,7 @@ async function _maybeAutoSubmitTeam(team_id) {
   const pending = Array.isArray(pendingRows) ? pendingRows : [];
   if (pending.length) return;
   if (form.members_required && members.length < form.max_team_size) return;
+  if (missingRequiredFields(form.fields_json, team.group_data).length) return;
 
   const photoChecks = await Promise.all(members.map(m => hasProfilePhoto(m.student_id)));
   if (photoChecks.some(ok => !ok)) return;
@@ -490,6 +491,43 @@ async function _maybeAutoSubmitTeam(team_id) {
     is_submitted: true, submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     revision_comment: null, revision_requested_at: null, revision_requested_by: null, revision_requested_by_name: null,
   });
+}
+
+// Server-side mirror of the client's matchShowIfData/_gfMissingRequiredFields
+// — a field the admin marked Mandatory (fields_json[].required) but that's
+// hidden by its own show_if is never actually required, matching exactly
+// what the leader sees. Used both to reject a premature submit_group_team
+// with a specific message, and to gate auto-submit the same way pending
+// invites/members_required/photos already do. data's checkbox values are
+// always the same comma-joined string every submit path already stores, so
+// one plain "is it blank" check covers every field type uniformly.
+function missingRequiredFields(fieldsJsonStr, data) {
+  let fields = [];
+  try { fields = JSON.parse(fieldsJsonStr || '[]'); } catch (_) {}
+  const d = data || {};
+  const lookup = key => d[key];
+  const matchSingle = (cond, val) => {
+    const cur = String(val == null ? '' : val).toLowerCase().trim();
+    const targets = Array.isArray(cond.value) ? cond.value : Array.isArray(cond.values) ? cond.values : [cond.value];
+    return targets.some(t => String(t == null ? '' : t).toLowerCase().trim() === cur);
+  };
+  const matchShowIf = showIf => {
+    if (!showIf) return true;
+    let result;
+    if (Array.isArray(showIf.all)) result = showIf.all.every(c => matchSingle(c, lookup(c.field)));
+    else if (Array.isArray(showIf.any)) result = showIf.any.some(c => matchSingle(c, lookup(c.field)));
+    else result = matchSingle(showIf, lookup(showIf.field));
+    return showIf.negate ? !result : result;
+  };
+  const missing = [];
+  fields.forEach(f => {
+    if (!f.required) return;
+    if (f.type === 'group_label' || f.type === 'profile_picture' || f.type === 'class_group') return;
+    if (f.show_if && !matchShowIf(f.show_if)) return;
+    const val = d[f.data_key];
+    if (val === undefined || val === null || String(val).trim() === '') missing.push(f.name || f.data_key);
+  });
+  return missing;
 }
 
 function checkGroupEligibility(eligibilityJson, leader, candidate) {
@@ -1100,6 +1138,11 @@ export async function POST(req) {
     const submittedAt = existing[0] ? existing[0].submitted_at : new Date().toISOString();
 
     const cleanData = Object.fromEntries(Object.entries(data).filter(([k]) => k !== 'tabName' && k !== 'editable'));
+
+    const missingFields = missingRequiredFields(tabRow && !tabRow.error && tabRow[0] ? tabRow[0].fields_json : '[]', cleanData);
+    if (missingFields.length) {
+      return NextResponse.json({ result: 'error', message: `Fill in required field${missingFields.length === 1 ? '' : 's'}: ${missingFields.join(', ')}.` });
+    }
 
     // Upsert on the (student_id, tab_name) unique key instead of a separate
     // check-then-insert-or-update — the client retries submit up to 3x on a
@@ -2125,6 +2168,10 @@ export async function POST(req) {
     }
     if (form.members_required && members.length < form.max_team_size) {
       return NextResponse.json({ result: 'error', message: `This form requires a full team of ${form.max_team_size} before you can submit.` });
+    }
+    const missingFields = missingRequiredFields(form.fields_json, team.group_data);
+    if (missingFields.length) {
+      return NextResponse.json({ result: 'error', message: `Fill in required field${missingFields.length === 1 ? '' : 's'}: ${missingFields.join(', ')}.` });
     }
 
     const photoChecks = await Promise.all(members.map(m => hasProfilePhoto(m.student_id)));

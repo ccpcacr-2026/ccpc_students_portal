@@ -3602,14 +3602,23 @@
             } catch (e) { listEl.innerHTML = '<p class="text-muted small">Network error loading fees.</p>'; }
         }
 
+        // f.required is the admin's new per-field "Mandatory" toggle (Setup/Group
+        // Form builder). Dropdowns stay unconditionally required regardless of it
+        // (unchanged long-standing behavior, so every existing form keeps working
+        // exactly as before) — the toggle's actual effect is adding required-ness
+        // to text/paragraph/number, and (via data-required-group, since a native
+        // `required` on one checkbox can't mean "at least one of these") checkbox
+        // groups, neither of which could be made mandatory before this.
         function renderField(f, val, readOnly) {
             const v = val || '';
             const opts = f.options || [];
+            const reqAttr = f.required ? 'required' : '';
+            const reqMark = f.required ? ' <span class="text-danger">*</span>' : '';
             if (f.type === 'paragraph') {
                 return `
                     <div class="premium-form-group">
-                        <textarea name="${f.data_key}" class="form-control" placeholder=" " rows="4" ${readOnly?'disabled':''}>${v}</textarea>
-                        <label>${f.name}</label>
+                        <textarea name="${f.data_key}" class="form-control" placeholder=" " rows="4" ${reqAttr} ${readOnly?'disabled':''}>${v}</textarea>
+                        <label>${f.name}${reqMark}</label>
                     </div>`;
             }
             if (f.type === 'choose') {
@@ -3624,8 +3633,8 @@
             }
             if (f.type === 'checkbox') {
                 return `
-                    <div class="mb-2">
-                        <span class="small fw-800 text-muted uppercase mb-3 d-block">${f.name}</span>
+                    <div class="mb-2"${f.required ? ` data-required-group="${f.data_key}"` : ''}>
+                        <span class="small fw-800 text-muted uppercase mb-3 d-block">${f.name}${reqMark}</span>
                         <div class="premium-checkbox-group">
                             ${opts.map(o => `
                                 <label class="premium-checkbox-card">
@@ -3638,9 +3647,22 @@
             }
             return `
                 <div class="premium-form-group">
-                    <input type="${f.type}" name="${f.data_key}" class="form-control" value="${v}" placeholder=" " ${readOnly?'disabled':''}>
-                    <label>${f.name}</label>
+                    <input type="${f.type}" name="${f.data_key}" class="form-control" value="${v}" placeholder=" " ${reqAttr} ${readOnly?'disabled':''}>
+                    <label>${f.name}${reqMark}</label>
                 </div>`;
+        }
+        // Native HTML `required` can't express "at least one of this checkbox
+        // group" — scans every [data-required-group] wrapper renderField marks
+        // inside `form` and reports the first one with nothing checked, so a
+        // submit handler can block submission the same way native validation
+        // blocks a missing text/dropdown field.
+        function _firstUnsatisfiedCheckboxGroup(form) {
+            const groups = form.querySelectorAll('[data-required-group]');
+            for (const w of groups) {
+                const key = w.dataset.requiredGroup;
+                if (!form.querySelector(`input[name="${CSS.escape(key)}"]:checked`)) return w;
+            }
+            return null;
         }
 
         // ── Conditional ("dependable") fields ──────────────────────────────────────
@@ -3684,6 +3706,24 @@
             else if (Array.isArray(showIf.any)) result = showIf.any.some(c => matchSingle(c, lookup(c.field)));
             else result = matchSingle(showIf, lookup(showIf.field));
             return showIf.negate ? !result : result;
+        }
+
+        // Fields the admin marked Mandatory that still have no answer in
+        // group_data — a field hidden by its own show_if is never required,
+        // matching what the leader actually sees (and the server's own
+        // identical check in submit_group_team/_maybeAutoSubmitTeam).
+        function _gfMissingRequiredFields(fields, groupData) {
+            const data = groupData || {};
+            const lookup = key => data[key];
+            const missing = [];
+            (fields || []).forEach(f => {
+                if (!f.required) return;
+                if (f.type === 'group_label' || f.type === 'profile_picture' || f.type === 'class_group') return;
+                if (f.show_if && !matchShowIfData(f.show_if, lookup)) return;
+                const val = data[f.data_key];
+                if (val === undefined || val === null || String(val).trim() === '') missing.push(f.name || f.data_key);
+            });
+            return missing;
         }
 
         function getFieldValue(form, name) {
@@ -5022,6 +5062,16 @@
                                                 e.preventDefault();
                                                 const btn = form.querySelector('button[type="submit"]');
                                                 const status = form.querySelector('.status-msg');
+                                                // Native required/select-required already blocked the browser's own
+                                                // submit for text/paragraph/number/choose — this only covers what
+                                                // native HTML can't express: a mandatory checkbox GROUP needing at
+                                                // least one box checked.
+                                                const unsatisfiedGroup = _firstUnsatisfiedCheckboxGroup(form);
+                                                if (unsatisfiedGroup) {
+                                                    if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.innerText = 'Please select at least one option for every required field.'; }
+                                                    unsatisfiedGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                    return;
+                                                }
                                                 const fd = new FormData(form);
                                                 const submission = { student_id: loggedInStudent.student_id, ...loggedInStudent, ...Object.fromEntries(fd) };
                                                 fields.filter(f => f.type === 'checkbox').forEach(f => {
@@ -5366,6 +5416,12 @@
                 e.preventDefault();
                 const btn = form_el.querySelector('button[type="submit"]');
                 const status = form_el.querySelector('.status-msg');
+                const unsatisfiedGroup = _firstUnsatisfiedCheckboxGroup(form_el);
+                if (unsatisfiedGroup) {
+                    if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = 'Please select at least one option for every required field.'; }
+                    unsatisfiedGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                }
                 const group_data = Object.fromEntries(new FormData(form_el));
                 fields.filter(f => f.type === 'checkbox').forEach(f => {
                     group_data[f.data_key] = Array.from(form_el.querySelectorAll(`input[name="${f.data_key}"]:checked`)).map(c => c.value).join(', ');
@@ -5459,10 +5515,13 @@
                         ${!readOnly ? `<button onclick="gfCancelInvite('${tid}', ${inv.id})" class="btn btn-xs btn-outline-secondary rounded-pill px-2">Cancel</button>` : ''}
                     </div>`).join('')}</div>` : '';
             const canInviteMore = isLeader && !readOnly && team.members.length < form.max_team_size;
-            // Submit is only reachable once nothing's left pending and (if the
-            // form requires it) the roster is full — matches submit_group_team's
-            // own server-side check exactly, so this is never a false "ready".
-            const canSubmit = isLeader && !readOnly && !team.pending_invites.length && (!form.members_required || team.members.length >= form.max_team_size);
+            // Submit is only reachable once nothing's left pending, (if the form
+            // requires it) the roster is full, and every field the admin marked
+            // Mandatory actually has an answer — matches submit_group_team's own
+            // server-side check exactly (including show_if: a field hidden by its
+            // own condition is never required), so this is never a false "ready".
+            const missingRequired = _gfMissingRequiredFields(fields, team.group_data);
+            const canSubmit = isLeader && !readOnly && !team.pending_invites.length && (!form.members_required || team.members.length >= form.max_team_size) && !missingRequired.length;
 
             let html = `<div class="card shadow-lg">${_gfHeaderHtml(form)}`;
             if (team.reference_number) html += `<div class="d-flex align-items-center gap-2 mb-3"><span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Reference No.</span><span class="badge bg-dark rounded-pill px-3 py-2" style="font-size:0.9rem;letter-spacing:0.03em">${_escHtml(team.reference_number)}</span></div>`;
@@ -5501,7 +5560,7 @@
 
             if (isLeader && !readOnly) {
                 html += `<div class="mt-4">
-                    ${!canSubmit ? `<p class="small text-muted text-center mb-2" style="font-size:0.75rem"><i class="bi bi-info-circle me-1"></i>${team.pending_invites.length ? `Waiting on ${team.pending_invites.length} pending invite${team.pending_invites.length === 1 ? '' : 's'} before you can submit.` : 'Team must be full before you can submit.'}</p>` : ''}
+                    ${!canSubmit ? `<p class="small text-muted text-center mb-2" style="font-size:0.75rem"><i class="bi bi-info-circle me-1"></i>${team.pending_invites.length ? `Waiting on ${team.pending_invites.length} pending invite${team.pending_invites.length === 1 ? '' : 's'} before you can submit.` : (form.members_required && team.members.length < form.max_team_size) ? 'Team must be full before you can submit.' : missingRequired.length ? `Fill in required field${missingRequired.length === 1 ? '' : 's'}: ${missingRequired.map(cantEsc).join(', ')}.` : ''}</p>` : ''}
                     <button type="button" onclick="gfSubmitTeam('${tid}', ${team.id})" class="btn btn-success w-100" ${canSubmit ? '' : 'disabled'}><i class="bi bi-send-check-fill me-1"></i>Submit</button>
                 </div>`;
             }
@@ -5533,6 +5592,12 @@
                     e.preventDefault();
                     const btn = gdForm.querySelector('button[type="submit"]');
                     const status = gdForm.querySelector('.status-msg');
+                    const unsatisfiedGroup = _firstUnsatisfiedCheckboxGroup(gdForm);
+                    if (unsatisfiedGroup) {
+                        if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = 'Please select at least one option for every required field.'; }
+                        unsatisfiedGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        return;
+                    }
                     const group_data = Object.fromEntries(new FormData(gdForm));
                     fields.filter(f => f.type === 'checkbox').forEach(f => {
                         group_data[f.data_key] = Array.from(gdForm.querySelectorAll(`input[name="${f.data_key}"]:checked`)).map(c => c.value).join(', ');
@@ -7422,6 +7487,10 @@
                         </select>
                     </div>
                     <div class="col-md-4"><input type="text" placeholder="Options (comma separated)" class="form-control f-options ${['checkbox','choose'].includes(data?.type)?'':'hidden'}" value="${(data?.options||[]).join(',')}"></div>
+                    <div class="col-auto d-flex align-items-center gap-1">
+                        <input type="checkbox" class="form-check-input f-required" id="${row.id}-required" ${data?.required ? 'checked' : ''} style="margin-top:0">
+                        <label class="small fw-700 text-muted mb-0" for="${row.id}-required" style="font-size:0.7rem;white-space:nowrap">Required</label>
+                    </div>
                     ${keyInput}
                     <div class="col-auto d-flex gap-1">${_fieldRowActions}</div>
                     ${showIfBlockHtml(data)}`;
@@ -7485,7 +7554,8 @@
             }
             const name = row.querySelector('input[placeholder*="Label"]')?.value || '';
             const options = (row.querySelector('.f-options')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
-            return { kind: 'field', data: { name, type, options, show_if } };
+            const required = row.querySelector('.f-required')?.checked || false;
+            return { kind: 'field', data: { name, type, options, show_if, required } };
         }
         function duplicateField(btn) {
             const row = btn.closest('.draggable-row');
@@ -7634,6 +7704,7 @@
                         if (!f) { let k = sz(fn); if(cl) k = `${cl}_${k}`; f = k; let c = 1; while(fields.some(fd=>fd.data_key===f)) { f = `${k}_${c++}`; } }
                         const obj = { name:fn, type:type, options:fo, data_key:f };
                         if (showIf) obj.show_if = showIf;
+                        if (row.querySelector('.f-required')?.checked) obj.required = true;
                         fields.push(obj);
                     }
                 }
