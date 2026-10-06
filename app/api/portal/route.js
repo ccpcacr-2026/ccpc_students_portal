@@ -1931,6 +1931,24 @@ export async function POST(req) {
     if (!form) return NextResponse.json({ result: 'error', message: 'Group form not found.' });
     if (!form.is_enabled) return NextResponse.json({ result: 'error', message: 'This form is not available.' });
     if (!form.accepting_new) return NextResponse.json({ result: 'error', message: 'Registration is closed for new teams.' });
+
+    // get_group_forms hides a form from the nav when its Logic Rules
+    // (condition_json) don't match this student, but that's a nav filter
+    // only -- it was never rechecked here, so a student with the direct
+    // ?gf=<id> link (which the admin UI itself hands out as a QR code) could
+    // still create a team the Logic Rules say they're not eligible for.
+    let condObj = null;
+    try { condObj = JSON.parse(form.condition_json || '{}'); } catch {}
+    if (condObj && condObj.rules?.length) {
+      const profileRows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=*`);
+      const profile = (profileRows && !profileRows.error && profileRows[0]) ? profileRows[0] : { student_id };
+      const subRows = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(student_id)}&select=tab_name`);
+      const submissions = subRows?.error ? [] : subRows;
+      const results = await Promise.all(condObj.rules.map(r => evalRule(r, profile, submissions)));
+      const pass = condObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
+      if (!pass) return NextResponse.json({ result: 'error', message: 'This form is not available for your profile.' });
+    }
+
     if (!(await hasProfilePhoto(student_id))) {
       return NextResponse.json({ result: 'error', code: 'PHOTO_REQUIRED', message: 'Please upload a profile picture before creating a team.' });
     }

@@ -324,3 +324,77 @@ ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS review_status_at t
 -- student-facing banner always has a name to show without either app needing
 -- to resolve the other app's identity system at read time.
 ALTER TABLE student.group_form_teams ADD COLUMN IF NOT EXISTS revision_requested_by_name text;
+
+-- ── group_data edit history ──────────────────────────────────────────────
+-- Unlike students_data (which has its own edit_history table + trigger),
+-- a team's group_data had NO change history at all — once a leader edited
+-- their Project Name/Details (or anything else), the previous value was
+-- simply gone, with no record it had ever been different. Added after a
+-- real incident: a leader's Submit click silently discarded an unsaved
+-- edit (fixed separately), and there was no way to tell which teams had
+-- been edited since their first save, let alone what changed.
+--
+-- One row per UPDATE that actually changes group_data, logging only the
+-- keys that differ (old vs new) — same {"<key>": {"old":…,"new":…}} shape
+-- edit_history already uses for students_data, so an admin UI for one can
+-- reuse the same rendering logic as the other. Does NOT capture WHO made
+-- the edit — a trigger has no reliable way to know the acting user without
+-- extra app-level plumbing (a session variable set on every write), which
+-- nothing here currently sets. In practice almost every edit is the team's
+-- own leader (the only one with write access to group_data besides an
+-- admin's own Edit-modal override), so this is a known, accepted gap, not
+-- an oversight to revisit lightly.
+CREATE TABLE IF NOT EXISTS student.group_form_team_edit_history (
+  id                 bigserial   PRIMARY KEY,
+  team_id            bigint      NOT NULL,
+  group_form_id      bigint,
+  leader_student_id  text,
+  edited_history     jsonb       NOT NULL,
+  created_at         timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS group_form_team_edit_history_team_idx ON student.group_form_team_edit_history (team_id);
+ALTER TABLE student.group_form_team_edit_history ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_form_team_edit_history_all" ON student.group_form_team_edit_history;
+CREATE POLICY "group_form_team_edit_history_all" ON student.group_form_team_edit_history FOR ALL USING (true);
+GRANT ALL ON student.group_form_team_edit_history TO service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA student TO service_role;
+
+-- Diffs OLD.group_data against NEW.group_data key-by-key (both jsonb) and
+-- inserts one history row per UPDATE, but only when something in group_data
+-- actually changed (an UPDATE that only touches e.g. is_locked/review_status
+-- logs nothing here) and only when the diff is non-empty.
+CREATE OR REPLACE FUNCTION student.log_group_form_team_edit() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  diff jsonb := '{}'::jsonb;
+  k text;
+  old_val jsonb;
+  new_val jsonb;
+BEGIN
+  IF NEW.group_data IS DISTINCT FROM OLD.group_data THEN
+    FOR k IN
+      SELECT DISTINCT key FROM (
+        SELECT jsonb_object_keys(COALESCE(OLD.group_data, '{}'::jsonb)) AS key
+        UNION
+        SELECT jsonb_object_keys(COALESCE(NEW.group_data, '{}'::jsonb)) AS key
+      ) keys
+    LOOP
+      old_val := COALESCE(OLD.group_data, '{}'::jsonb) -> k;
+      new_val := COALESCE(NEW.group_data, '{}'::jsonb) -> k;
+      IF old_val IS DISTINCT FROM new_val THEN
+        diff := diff || jsonb_build_object(k, jsonb_build_object('old', old_val, 'new', new_val));
+      END IF;
+    END LOOP;
+    IF diff <> '{}'::jsonb THEN
+      INSERT INTO student.group_form_team_edit_history (team_id, group_form_id, leader_student_id, edited_history)
+      VALUES (NEW.id, NEW.group_form_id, NEW.leader_student_id, diff);
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_group_form_team_edit_history ON student.group_form_teams;
+CREATE TRIGGER trg_group_form_team_edit_history
+  AFTER UPDATE ON student.group_form_teams
+  FOR EACH ROW EXECUTE FUNCTION student.log_group_form_team_edit();
