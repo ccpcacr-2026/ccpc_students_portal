@@ -938,7 +938,7 @@
                         <div class="p-4 d-flex justify-content-between align-items-center flex-wrap gap-2 text-white" style="background:linear-gradient(135deg,var(--sidebar-bg),#1a3d28)">
                             <h5 class="m-0 fw-800">Admin Control Console</h5>
                             <div class="nav nav-pills" role="tablist">
-                                <button class="btn btn-sm fw-800 active me-2" data-bs-toggle="tab" data-bs-target="#admin-manage" onclick="_activeFieldsContainerId = 'fields-list';" style="background:rgba(255,255,255,0.18);color:#fff;border-radius:10px;border:none">Setup</button>
+                                <button class="btn btn-sm fw-800 active me-2" data-bs-toggle="tab" data-bs-target="#admin-manage" onclick="_activeFieldsContainerId = 'fields-list'; document.getElementById('tab-builder-section')?.classList.add('hidden');" style="background:rgba(255,255,255,0.18);color:#fff;border-radius:10px;border:none">Setup</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-reports" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Data</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-history" onclick="loadEditHistory()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">History</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-nfc" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">NFC</button>
@@ -951,11 +951,16 @@
                         <div class="p-4 bg-white">
                             <div class="tab-content">
                                 <div class="tab-pane active" id="admin-manage">
+                                    <button type="button" onclick="showNewTabForm()" class="btn btn-primary rounded-pill px-4 fw-800 mb-4"><i class="bi bi-plus-lg me-1"></i>New Form</button>
+                                    <div id="tab-builder-section" class="hidden">
                                     <div class="sticky-builder-controls shadow-sm border rounded-4">
                                         <div class="row g-3 align-items-end">
-                                            <div class="col-md-5"><label class="small fw-800 text-muted">TAB NAME</label><input type="text" id="new-tab-name" class="form-control"></div>
-                                            <div class="col-md-4 pb-2"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="new-tab-editable" checked><label class="form-check-label fw-800">Allows Edits</label></div></div>
-                                            <div class="col-md-3"><button onclick="saveNewTab()" class="btn btn-primary w-100">Save</button></div>
+                                            <div class="col-md-4"><label class="small fw-800 text-muted">TAB NAME</label><input type="text" id="new-tab-name" class="form-control"></div>
+                                            <div class="col-md-3 pb-2"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="new-tab-editable" checked><label class="form-check-label fw-800">Allows Edits</label></div></div>
+                                            <div class="col-md-5 d-flex gap-2">
+                                                <button onclick="resetTabBuilder()" class="btn btn-outline-secondary w-100">Cancel</button>
+                                                <button onclick="saveNewTab()" class="btn btn-primary w-100">Save</button>
+                                            </div>
                                         </div>
                                         <div class="row g-3 mt-1">
                                             <div class="col-md-6">
@@ -991,6 +996,7 @@
                                         </div>
                                     </div>
                                     <div id="fields-list" class="mt-5"></div>
+                                    </div>
 
                                     <!-- Student-editable profile fields (global setting) -->
                                     <div class="mt-5 p-4 rounded-4 border shadow-sm" style="background:#fff">
@@ -7890,6 +7896,25 @@
             return { fields, optionless };
         }
 
+        // Opens the (collapsed-by-default) builder for a brand-new Individual
+        // Form — the "+ New Form" button's own handler. Reuses resetTabBuilder
+        // to actually blank every field, then just reveals the section.
+        function showNewTabForm() {
+            resetTabBuilder();
+            document.getElementById('tab-builder-section')?.classList.remove('hidden');
+            document.getElementById('tab-builder-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        function resetTabBuilder() {
+            document.getElementById('tab-builder-section')?.classList.add('hidden');
+            document.getElementById('new-tab-name').value = '';
+            document.getElementById('new-tab-icon').value = 'bi-folder-fill';
+            _syncIconPicker('new-tab-icon-grid');
+            document.getElementById('new-tab-editable').checked = true;
+            _activeFieldsContainerId = 'fields-list';
+            document.getElementById('fields-list').innerHTML = '';
+            document.getElementById('conditions-list').innerHTML = '';
+            loadIncludeFields([]);
+        }
         function saveNewTab() {
             const name = document.getElementById('new-tab-name').value.trim();
             const icon = document.getElementById('new-tab-icon').value.trim() || 'bi-journal-text';
@@ -7928,6 +7953,7 @@
         }
 
         function editTab(i) {
+            document.getElementById('tab-builder-section')?.classList.remove('hidden');
             _activeFieldsContainerId = 'fields-list'; // in case a Group Form edit left this pointed elsewhere
             const t = allTabs[i];
             document.getElementById('new-tab-name').value = t.tab_name;
