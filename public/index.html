@@ -3790,8 +3790,20 @@
         // checkbox's <label> wrapper, both marked [data-opt-show-if] by
         // renderField from f.option_show_if. Always run right alongside
         // evaluateConditionalFields, at every one of its call sites.
+        //
+        // Skipped entirely on a LOCKED (read-only, no submit button) view —
+        // this re-evaluates against whatever option_show_if rules exist
+        // RIGHT NOW, not the rules in effect when the student actually
+        // submitted. If an admin edits a field's per-option conditions after
+        // a submission is locked, re-running this against a frozen record
+        // could reset/hide an option the student legitimately answered with
+        // (nothing they chose ever changes — only the display would), which
+        // defeats the point of a locked view showing exactly what was
+        // submitted. Nothing is interactive there anyway (every control is
+        // already `disabled`), so there's no stale-value-gets-submitted risk
+        // to guard against in the first place.
         function evaluateOptionConditions(form) {
-            if (!form) return;
+            if (!form || !form.querySelector('button[type="submit"]')) return;
             form.querySelectorAll('[data-opt-show-if]').forEach(el => {
                 try {
                     const show = matchShowIfForm(JSON.parse(el.dataset.optShowIf), form);
