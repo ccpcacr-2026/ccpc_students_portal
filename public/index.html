@@ -5667,15 +5667,21 @@
                         unsatisfiedGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         return;
                     }
-                    const group_data = Object.fromEntries(new FormData(gdForm));
-                    fields.filter(f => f.type === 'checkbox').forEach(f => {
-                        group_data[f.data_key] = Array.from(gdForm.querySelectorAll(`input[name="${f.data_key}"]:checked`)).map(c => c.value).join(', ');
-                    });
+                    const group_data = _gfCollectGroupData(gdForm);
                     if (btn) btn.disabled = true;
                     portalFetch('update_group_data', { team_id: team.id, leader_id: loggedInStudent.student_id, group_data }).then(res => {
-                        if (btn) btn.disabled = false;
-                        if (res && res.result === 'success') { if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-success'; status.textContent = 'Saved.'; } }
-                        else if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = (res && res.message) || 'Save failed.'; }
+                        if (res && res.result === 'success') {
+                            if (typeof showToast === 'function') showToast('Saved', 'success');
+                            // Re-render so the Submit button's enabled state (computed
+                            // from team.group_data) picks up what was just saved —
+                            // without this, filling in a previously-missing required
+                            // field and saving left Submit stuck disabled until the
+                            // student navigated away and back.
+                            renderGroupFormPane(tid, pane, form);
+                        } else {
+                            if (btn) btn.disabled = false;
+                            if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = (res && res.message) || 'Save failed.'; }
+                        }
                     }).catch(() => { if (btn) btn.disabled = false; if (status) { status.className = 'status-msg text-center mt-3 small fw-bold text-danger'; status.textContent = 'Network error.'; } });
                 };
             }
@@ -5732,13 +5738,54 @@
         // Finalizes a saved team — the server re-validates everything (no
         // pending invites, full if required, every member has a photo) since
         // the client-side canSubmit check here is only a UX shortcut.
+        // Reads a Team Details form into the group_data shape the server
+        // expects — a checkbox field needs every checked box for the same
+        // name comma-joined, which plain FormData can't express (it only
+        // ever keeps the LAST same-name entry). Derived purely from the live
+        // DOM (not the `fields` array) so it works from any call site that
+        // just has the form element, not the field definitions.
+        function _gfCollectGroupData(gdForm) {
+            const group_data = Object.fromEntries(new FormData(gdForm));
+            const checkboxNames = new Set(Array.from(gdForm.querySelectorAll('input[type="checkbox"]')).map(cb => cb.name));
+            checkboxNames.forEach(name => {
+                group_data[name] = Array.from(gdForm.querySelectorAll(`input[name="${name}"]:checked`)).map(c => c.value).join(', ');
+            });
+            return group_data;
+        }
+        // Saves whatever's CURRENTLY in the Team Details form, if one is on
+        // screen — same validation + request "Save Team Details" itself
+        // uses, factored out so gfSubmitTeam can run it first. Resolves null
+        // when there's no details form to save (a Group Form with no
+        // fields), otherwise portalFetch's own {result,message} shape.
+        function _gfSaveTeamDetailsIfPresent(tid, teamId) {
+            const gdForm = document.getElementById(`${tid}-gd-form`);
+            if (!gdForm) return Promise.resolve(null);
+            const unsatisfiedGroup = _firstUnsatisfiedCheckboxGroup(gdForm);
+            if (unsatisfiedGroup) {
+                unsatisfiedGroup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return Promise.resolve({ result: 'error', message: 'Please select at least one option for every required field in Team Details.' });
+            }
+            return portalFetch('update_group_data', { team_id: teamId, leader_id: loggedInStudent.student_id, group_data: _gfCollectGroupData(gdForm) });
+        }
         function gfSubmitTeam(tid, teamId) {
             if (!confirm('Submit this team?\n\nOnce submitted, the team and its details can no longer be changed.')) return;
             const pane = document.getElementById(`${tid}-content`);
-            portalFetch('submit_group_team', { team_id: teamId, leader_id: loggedInStudent.student_id }).then(res => {
-                if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Team submitted', 'success'); if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm); }
-                else if (typeof showToast === 'function') showToast((res && res.message) || 'Could not submit', 'error');
-            }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+            // Submit used to be entirely separate from "Save Team Details" —
+            // a leader who edited a field and went straight to Submit (the
+            // natural, expected thing to do) had that edit silently
+            // discarded, with whatever was PREVIOUSLY saved submitted
+            // instead. Always save first now, so Submit means what it looks
+            // like it means; if the save itself fails, nothing is submitted.
+            _gfSaveTeamDetailsIfPresent(tid, teamId).then(saveRes => {
+                if (saveRes && saveRes.result !== 'success') {
+                    if (typeof showToast === 'function') showToast((saveRes && saveRes.message) || 'Could not save your changes — not submitted.', 'error');
+                    return;
+                }
+                portalFetch('submit_group_team', { team_id: teamId, leader_id: loggedInStudent.student_id }).then(res => {
+                    if (res && res.result === 'success') { if (typeof showToast === 'function') showToast('Team submitted', 'success'); if (pane && pane._gfForm) renderGroupFormPane(tid, pane, pane._gfForm); }
+                    else if (typeof showToast === 'function') showToast((res && res.message) || 'Could not submit', 'error');
+                }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); });
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error while saving — not submitted.', 'error'); });
         }
 
         function loadIncludeFields(selectedKeys = []) {
