@@ -1221,7 +1221,7 @@
                                         </div>
                                         <div class="mt-4 p-4 bg-light rounded-4 border">
                                             <div class="d-flex justify-content-between align-items-center mb-1 gap-2 flex-wrap">
-                                                <span class="small fw-800 text-muted uppercase">Logic Rules</span>
+                                                <span class="small fw-800 text-muted uppercase">Logic Rules — Who can see this form? (Active)</span>
                                                 <div class="d-flex align-items-center gap-2">
                                                     <select id="gf-condition-logic" class="form-select form-select-sm rounded-pill fw-800" style="font-size:0.7rem;width:auto" title="ALL = a student must match every rule. ANY = matching just one rule is enough — use this for 'class X OR section Y OR this specific student'.">
                                                         <option value="AND">Match ALL rules</option>
@@ -1230,8 +1230,22 @@
                                                     <button type="button" onclick="addConditionRow(null, 'gf-conditions-list')" class="btn btn-xs btn-dark rounded-pill px-3">+ Add Rule</button>
                                                 </div>
                                             </div>
-                                            <p class="small text-muted mb-3" style="font-size:0.7rem">Show this form's nav entry only to matching students — e.g. CLASS EQUALS Ten. Each rule's Target also accepts a comma-separated list (e.g. CLASS EQUALS Nine,Ten or STUDENT ID EQUALS 2028111198,2028111199). Use "Match ANY rule" to combine different kinds of criteria as alternatives (e.g. SECTION EQUALS A, OR STUDENT ID EQUALS 2028111198). Leave empty to show it to every student (still gated by "Visible to students" above). This is separate from "Who can a leader invite?" below, which only affects an already-visible form's team roster.</p>
+                                            <p class="small text-muted mb-3" style="font-size:0.7rem">Show this form's nav entry only to matching students — e.g. CLASS EQUALS Ten. Each rule's Target also accepts a comma-separated list (e.g. CLASS EQUALS Nine,Ten or STUDENT ID EQUALS 2028111198,2028111199). Use "Match ANY rule" to combine different kinds of criteria as alternatives (e.g. SECTION EQUALS A, OR STUDENT ID EQUALS 2028111198). Leave empty to show it to every student (still gated by "Active" above). This is separate from "Who can a leader invite?" below, which only affects an already-visible form's team roster.</p>
                                             <div id="gf-conditions-list" class="d-flex flex-column gap-3"></div>
+                                        </div>
+                                        <div class="mt-4 p-4 bg-light rounded-4 border">
+                                            <div class="d-flex justify-content-between align-items-center mb-1 gap-2 flex-wrap">
+                                                <span class="small fw-800 text-muted uppercase">Logic Rules — Who can start a NEW team? (Open)</span>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <select id="gf-accepting-condition-logic" class="form-select form-select-sm rounded-pill fw-800" style="font-size:0.7rem;width:auto" title="ALL = a student must match every rule. ANY = matching just one rule is enough.">
+                                                        <option value="AND">Match ALL rules</option>
+                                                        <option value="OR">Match ANY rule</option>
+                                                    </select>
+                                                    <button type="button" onclick="addConditionRow(null, 'gf-accepting-conditions-list')" class="btn btn-xs btn-dark rounded-pill px-3">+ Add Rule</button>
+                                                </div>
+                                            </div>
+                                            <p class="small text-muted mb-3" style="font-size:0.7rem">Optional extra gate — only matching students can create a NEW team (everyone who passes the "Who can see this form?" rules above still SEES the form either way). Use this to show a form to everyone but only open registration to some classes/sections/students, independent of the "Open" switch above (which is all-or-nothing). Leave empty to let anyone who can see the form also register — same as before this box existed. Doesn't affect teams that already exist.</p>
+                                            <div id="gf-accepting-conditions-list" class="d-flex flex-column gap-3"></div>
                                         </div>
                                         <div class="mt-4 p-4 bg-light rounded-4 border">
                                             <span class="small fw-800 text-muted text-uppercase" style="letter-spacing:0.06em">Who can a leader invite?</span>
@@ -6377,6 +6391,8 @@
             document.getElementById('gf-accepting-new').checked = true;
             document.getElementById('gf-condition-logic').value = 'AND';
             document.getElementById('gf-conditions-list').innerHTML = '';
+            document.getElementById('gf-accepting-condition-logic').value = 'AND';
+            document.getElementById('gf-accepting-conditions-list').innerHTML = '';
             gfResetEligibilityForm();
             _activeFieldsContainerId = 'gf-fields-list';
             document.getElementById('gf-fields-list').innerHTML = '';
@@ -6403,6 +6419,9 @@
             document.getElementById('gf-conditions-list').innerHTML = '';
             document.getElementById('gf-condition-logic').value = 'AND';
             try { const cl = JSON.parse(f.condition_json || '{}'); document.getElementById('gf-condition-logic').value = cl.logic === 'OR' ? 'OR' : 'AND'; (cl.rules || []).forEach(r => addConditionRow(r, 'gf-conditions-list')); } catch (e) {}
+            document.getElementById('gf-accepting-conditions-list').innerHTML = '';
+            document.getElementById('gf-accepting-condition-logic').value = 'AND';
+            try { const acl = JSON.parse(f.accepting_condition_json || '{}'); document.getElementById('gf-accepting-condition-logic').value = acl.logic === 'OR' ? 'OR' : 'AND'; (acl.rules || []).forEach(r => addConditionRow(r, 'gf-accepting-conditions-list')); } catch (e) {}
             document.getElementById('gf-fields-list').innerHTML = '';
             // Bands must be rendered before the fields loop — a show_if
             // condition referencing a class_group field looks up its value
@@ -6438,6 +6457,7 @@
                 fields_json: JSON.stringify(fields),
                 eligibility_json: gfSerializeEligibility(),
                 condition_json: JSON.stringify({ logic: document.getElementById('gf-condition-logic').value === 'OR' ? 'OR' : 'AND', rules: readConditionRules('gf-conditions-list') }),
+                accepting_condition_json: JSON.stringify({ logic: document.getElementById('gf-accepting-condition-logic').value === 'OR' ? 'OR' : 'AND', rules: readConditionRules('gf-accepting-conditions-list') }),
                 is_enabled: document.getElementById('gf-is-enabled').checked,
                 accepting_new: document.getElementById('gf-accepting-new').checked,
             };

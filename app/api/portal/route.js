@@ -1559,7 +1559,7 @@ export async function POST(req) {
 
   // ── Save Group Form Config (admin) ──────────────────────────────────────
   if (action === 'save_group_form') {
-    const { id, title, header, sub_header, description, icon_class, cover_photo_url, max_team_size, members_required, fields_json, eligibility_json, condition_json, is_enabled, accepting_new, sort_order } = payload;
+    const { id, title, header, sub_header, description, icon_class, cover_photo_url, max_team_size, members_required, fields_json, eligibility_json, condition_json, accepting_condition_json, is_enabled, accepting_new, sort_order } = payload;
 
     if (id) {
       // Partial update — only touches fields actually sent. The admin card's
@@ -1583,6 +1583,7 @@ export async function POST(req) {
       if (fields_json !== undefined) rowData.fields_json = fields_json || '[]';
       if (eligibility_json !== undefined) rowData.eligibility_json = eligibility_json || '{}';
       if (condition_json !== undefined) rowData.condition_json = condition_json || '{}';
+      if (accepting_condition_json !== undefined) rowData.accepting_condition_json = accepting_condition_json || '{}';
       if (is_enabled !== undefined) rowData.is_enabled = !!is_enabled;
       if (accepting_new !== undefined) rowData.accepting_new = !!accepting_new;
       if (sort_order !== undefined) rowData.sort_order = sort_order;
@@ -1605,6 +1606,7 @@ export async function POST(req) {
       fields_json: fields_json || '[]',
       eligibility_json: eligibility_json || '{}',
       condition_json: condition_json || '{}',
+      accepting_condition_json: accepting_condition_json || '{}',
       is_enabled: is_enabled !== false,
       accepting_new: accepting_new !== false,
       sort_order: sort_order || 0,
@@ -1937,16 +1939,31 @@ export async function POST(req) {
     // only -- it was never rechecked here, so a student with the direct
     // ?gf=<id> link (which the admin UI itself hands out as a QR code) could
     // still create a team the Logic Rules say they're not eligible for.
-    let condObj = null;
+    //
+    // accepting_condition_json is a SEPARATE, optional rule set for "who can
+    // start a NEW team" -- an admin can show a form to every class (so it
+    // passes condition_json) while only letting a subset actually register
+    // (accepting_condition_json), e.g. a staged rollout by class/section.
+    // Empty means no extra restriction beyond condition_json, same as before
+    // this column existed.
+    let condObj = null, acceptCondObj = null;
     try { condObj = JSON.parse(form.condition_json || '{}'); } catch {}
-    if (condObj && condObj.rules?.length) {
+    try { acceptCondObj = JSON.parse(form.accepting_condition_json || '{}'); } catch {}
+    if ((condObj && condObj.rules?.length) || (acceptCondObj && acceptCondObj.rules?.length)) {
       const profileRows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=*`);
       const profile = (profileRows && !profileRows.error && profileRows[0]) ? profileRows[0] : { student_id };
       const subRows = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(student_id)}&select=tab_name`);
       const submissions = subRows?.error ? [] : subRows;
-      const results = await Promise.all(condObj.rules.map(r => evalRule(r, profile, submissions)));
-      const pass = condObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
-      if (!pass) return NextResponse.json({ result: 'error', message: 'This form is not available for your profile.' });
+      if (condObj && condObj.rules?.length) {
+        const results = await Promise.all(condObj.rules.map(r => evalRule(r, profile, submissions)));
+        const pass = condObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
+        if (!pass) return NextResponse.json({ result: 'error', message: 'This form is not available for your profile.' });
+      }
+      if (acceptCondObj && acceptCondObj.rules?.length) {
+        const results = await Promise.all(acceptCondObj.rules.map(r => evalRule(r, profile, submissions)));
+        const pass = acceptCondObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
+        if (!pass) return NextResponse.json({ result: 'error', message: 'Registration is not open for your profile yet.' });
+      }
     }
 
     if (!(await hasProfilePhoto(student_id))) {

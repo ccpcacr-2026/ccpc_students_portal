@@ -398,3 +398,14 @@ DROP TRIGGER IF EXISTS trg_group_form_team_edit_history ON student.group_form_te
 CREATE TRIGGER trg_group_form_team_edit_history
   AFTER UPDATE ON student.group_form_teams
   FOR EACH ROW EXECUTE FUNCTION student.log_group_form_team_edit();
+
+-- ── Separate "who can start a NEW team" rules ────────────────────────────────
+-- condition_json (above) gates whether a student sees the form's nav entry
+-- at all, and until now that was the ONLY gate create_group checked -- so
+-- "visible to" and "can register" were always the same audience. An admin
+-- asked for these independently: e.g. show the form to every class so
+-- everyone knows it exists, but only let Nine and Ten actually start a team.
+-- Same {logic, rules} shape as condition_json, same evalRule() evaluator.
+-- Empty (the default) means no extra restriction -- anyone who can see the
+-- form can also register, exactly like before this column existed.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS accepting_condition_json text NOT NULL DEFAULT '{}';
