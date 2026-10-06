@@ -945,7 +945,7 @@
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-tracking" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Bus</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-notices" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Notices</button>
                                 <button class="btn btn-sm fw-800 me-2" data-bs-toggle="tab" data-bs-target="#admin-import" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Import</button>
-                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-groups" onclick="_activeFieldsContainerId = 'gf-fields-list'; loadAdminGroupForms()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Groups</button>
+                                <button class="btn btn-sm fw-800" data-bs-toggle="tab" data-bs-target="#admin-groups" onclick="_activeFieldsContainerId = 'gf-fields-list'; document.getElementById('gf-builder-section')?.classList.add('hidden'); loadAdminGroupForms()" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7);border-radius:10px;border:none">Groups</button>
                             </div>
                         </div>
                         <div class="p-4 bg-white">
@@ -1166,6 +1166,8 @@
                                 </div>
                                 <div class="tab-pane" id="admin-groups">
                                     <p class="small text-muted mb-4" style="font-size:0.72rem">A Group Form is a form several students submit ONE shared entry for, as a team — e.g. Science Fair sign-up. A student becomes a team's leader by creating it, invites teammates by Student ID, and each teammate must log in and accept before they count as a member.</p>
+                                    <button type="button" onclick="gfShowCreateForm()" class="btn btn-primary rounded-pill px-4 fw-800 mb-4"><i class="bi bi-plus-lg me-1"></i>New Group Form</button>
+                                    <div id="gf-builder-section" class="hidden">
                                     <div class="sticky-builder-controls shadow-sm border rounded-4">
                                         <input type="hidden" id="gf-editing-id" value="">
                                         <div class="row g-3 align-items-end">
@@ -1254,6 +1256,7 @@
                                     <div class="d-flex justify-content-end gap-2 mt-4">
                                         <button type="button" onclick="cancelGroupFormEdit()" class="btn btn-outline-secondary rounded-pill px-4 fw-800">Cancel</button>
                                         <button type="button" onclick="saveGroupForm()" class="btn btn-primary rounded-pill px-4 fw-800"><i class="bi bi-check-lg me-1"></i>Save Group Form</button>
+                                    </div>
                                     </div>
 
                                     <hr class="my-5">
@@ -3623,10 +3626,11 @@
             }
             if (f.type === 'choose') {
                 // f.option_show_if = {"<option text>": {field,value[,negate]}} — an
-                // INDIVIDUAL dropdown option can be dependable too, not just the
-                // whole field (see evaluateOptionConditions). An option with no
-                // entry here is always shown, so every existing dropdown keeps
-                // working exactly as before.
+                // INDIVIDUAL option (dropdown here, checkbox below) can be
+                // dependable too, not just the whole field (see
+                // evaluateOptionConditions). An option with no entry here is
+                // always shown, so every existing field keeps working exactly
+                // as before.
                 const optIf = f.option_show_if || {};
                 return `
                     <div class="premium-form-group">
@@ -3642,16 +3646,20 @@
                     </div>`;
             }
             if (f.type === 'checkbox') {
+                const optIf = f.option_show_if || {};
                 return `
                     <div class="mb-2"${f.required ? ` data-required-group="${f.data_key}"` : ''}>
                         <span class="small fw-800 text-muted uppercase mb-3 d-block">${f.name}${reqMark}</span>
                         <div class="premium-checkbox-group">
-                            ${opts.map(o => `
-                                <label class="premium-checkbox-card">
+                            ${opts.map(o => {
+                                const cond = optIf[o];
+                                const attr = cond ? ` data-opt-show-if='${JSON.stringify(cond).replace(/'/g,"&#39;")}'` : '';
+                                return `
+                                <label class="premium-checkbox-card"${attr}>
                                     <input type="checkbox" name="${f.data_key}" value="${o}" ${String(v).split(', ').includes(o)?'checked':''} ${readOnly?'disabled':''}>
                                     <span class="fw-600">${o}</span>
-                                </label>
-                            `).join('')}
+                                </label>`;
+                            }).join('')}
                         </div>
                     </div>`;
             }
@@ -3770,29 +3778,34 @@
                 } catch(e) {}
             });
         }
-        // Per-option dependable dropdown options — same live-filtering idea as
+        // Per-option dependable options — same live-filtering idea as
         // evaluateConditionalFields's whole-field [data-show-if] above, scoped
-        // to individual <option data-opt-show-if> elements instead (set by
-        // renderField from f.option_show_if). Always run right alongside
-        // evaluateConditionalFields, at every one of its call sites. `hidden`
-        // AND `disabled` together (display:none alone isn't reliable on an
-        // <option> in every browser); if the currently-selected option gets
-        // filtered out, the select resets to "" so a stale/no-longer-valid
-        // choice can never be silently submitted.
+        // to individual options instead: a dropdown's <option> or a
+        // checkbox's <label> wrapper, both marked [data-opt-show-if] by
+        // renderField from f.option_show_if. Always run right alongside
+        // evaluateConditionalFields, at every one of its call sites.
         function evaluateOptionConditions(form) {
             if (!form) return;
-            form.querySelectorAll('select').forEach(sel => {
-                let selectedHidden = false;
-                Array.from(sel.options).forEach(opt => {
-                    if (!opt.dataset.optShowIf) return;
-                    try {
-                        const show = matchShowIfForm(JSON.parse(opt.dataset.optShowIf), form);
-                        opt.hidden = !show;
-                        opt.disabled = !show;
-                        if (!show && opt.selected) selectedHidden = true;
-                    } catch (e) {}
-                });
-                if (selectedHidden) sel.value = '';
+            form.querySelectorAll('[data-opt-show-if]').forEach(el => {
+                try {
+                    const show = matchShowIfForm(JSON.parse(el.dataset.optShowIf), form);
+                    if (el.tagName === 'OPTION') {
+                        // `hidden` AND `disabled` together — display:none alone
+                        // isn't reliable on an <option> in every browser. If the
+                        // currently-selected option gets filtered out, reset the
+                        // select so a stale/no-longer-valid choice is never
+                        // silently submitted.
+                        el.hidden = !show;
+                        el.disabled = !show;
+                        if (!show && el.selected) { el.selected = false; const sel = el.closest('select'); if (sel) sel.value = ''; }
+                    } else {
+                        // A checkbox option's own <label> wrapper — hide it, and
+                        // uncheck its box so a filtered-out choice can never stay
+                        // checked and get submitted anyway.
+                        el.style.display = show ? '' : 'none';
+                        if (!show) { const cb = el.querySelector('input[type="checkbox"]'); if (cb) cb.checked = false; }
+                    }
+                } catch (e) {}
             });
         }
 
@@ -6266,7 +6279,17 @@
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error', 'error'); loadAdminGroupForms(); });
         }
 
+        // Opens the (collapsed-by-default) builder for a brand-new Group Form —
+        // the "+ New Group Form" button's own handler. Reuses cancelGroupFormEdit
+        // to actually blank every field (same reset Cancel/a successful Save
+        // already do), then just reveals the section.
+        function gfShowCreateForm() {
+            cancelGroupFormEdit();
+            document.getElementById('gf-builder-section')?.classList.remove('hidden');
+            document.getElementById('gf-builder-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         function cancelGroupFormEdit() {
+            document.getElementById('gf-builder-section')?.classList.add('hidden');
             document.getElementById('gf-editing-id').value = '';
             document.getElementById('gf-title').value = '';
             document.getElementById('gf-icon').value = 'bi-people-fill';
@@ -6289,6 +6312,7 @@
 
         function editGroupForm(i) {
             const f = ALL_GROUP_FORMS[i];
+            document.getElementById('gf-builder-section')?.classList.remove('hidden');
             _activeFieldsContainerId = 'gf-fields-list';
             document.getElementById('gf-editing-id').value = f.id;
             document.getElementById('gf-title').value = f.title || '';
@@ -7337,7 +7361,7 @@
                 if (!label) return;
                 let key = row.querySelector('.f-key')?.value.trim();
                 if (!key) { key = sz(label); if (cl) key = `${cl}_${key}`; }
-                const options = (row.querySelector('.f-options')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+                const options = Array.from(row.querySelectorAll('.f-option-row .f-option-text')).map(el => el.value.trim()).filter(Boolean);
                 out.push({ key, label, type, options });
             });
             return out;
@@ -7423,79 +7447,63 @@
                 </div>`;
         }
 
-        // ── Per-OPTION "show if" (dependable individual dropdown options) ───────
-        // Mirrors the field-level show_if block above but scoped to one Choose
-        // field's own options — e.g. a single "Category" dropdown can show
-        // different choices depending on "Group", instead of needing a separate
-        // duplicate field per Group value. Deliberately ONE {field,value}
-        // condition per option, no ALL/ANY/negate — options are the small/
-        // simple end of conditional logic; the full condition builder above
-        // stays for whole-field show_if. Uses its own `optif-*`/`.f-option-
-        // show-if` class names (never `.showif-*`/`.f-options`) so every
+        // ── Options editor: one row per option, each with its own optional
+        // "show if" condition ───────────────────────────────────────────────
+        // Replaces the old single comma-separated text input — typing "A,B,C"
+        // gave no way to attach anything to just one option. Shared by both
+        // Dropdown AND Checkbox fields now (not Dropdown-only). Deliberately
+        // ONE {field,value} condition per option, no ALL/ANY/negate — options
+        // are the small/simple end of conditional logic; the full condition
+        // builder above stays for whole-field show_if. Uses its own
+        // `.f-option-row`/`optif-*` class names (never `.showif-*`) so every
         // existing whole-row class scan (_readRowShowIf, getBuilderFieldKeys,
-        // serializeFieldRow's options read, etc.) can never mistake an option
-        // condition for the field's own, or vice versa.
-        //
-        // Source of truth while editing: the hidden `.f-option-show-if` input
-        // (one JSON object, {"<option text>": {field,value}}) — kept in sync
-        // by _writeOptionConditionsToHidden on every change, and read back
-        // directly by serializeFieldsFromContainer/serializeFieldRow at save
-        // time. _rebuildOptionConditionRows regenerates the visible rows from
-        // the CURRENT options text + that hidden map whenever the admin edits
-        // the options list, so renaming/adding/removing an option never loses
-        // a condition on an option that's still there.
-        function _optionShowIfBlockHtml(data) {
-            // Always rendered (just hidden via class when the field isn't
-            // currently a Dropdown) — same approach as .f-options itself —
-            // so switching an existing field's type TO Dropdown mid-edit has
-            // a block already in the DOM for the .f-type onchange handler to
-            // reveal, instead of a null .optif-block lookup.
-            const show = data?.type === 'choose';
-            const stored = (data && data.option_show_if) ? JSON.stringify(data.option_show_if).replace(/'/g, '&#39;') : '';
-            return `
-                <div class="col-12 optif-block mt-2 p-2 rounded-3 ${show ? '' : 'hidden'}" style="background:#f8fafc;border:1px dashed #cbd5e1">
-                    <div class="d-flex align-items-center gap-1 mb-1"><i class="bi bi-filter-circle text-muted" style="font-size:0.72rem"></i><span class="text-muted fw-800" style="font-size:0.66rem;letter-spacing:0.04em;text-transform:uppercase">Per-option conditions</span></div>
-                    <div class="optif-rows d-flex flex-column gap-1"></div>
-                    <input type="hidden" class="f-option-show-if" value='${stored}'>
-                </div>`;
-        }
-        function _optionConditionRowHtml(optionText, fieldKey, value) {
-            const safe = String(optionText).replace(/"/g, '&quot;');
-            return `<div class="optif-row d-flex align-items-center gap-2 flex-wrap" data-option="${safe}" style="font-size:0.74rem">
-                <span class="fw-700 text-dark" style="min-width:90px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${safe}">${optionText}</span>
+        // etc.) can never mistake an option condition for the field's own.
+        // Each row IS the source of truth while editing — no derived/hidden
+        // JSON to keep in sync, unlike the old comma-text approach.
+        function _optionRowHtml(optionText, condField, condValue) {
+            const safeText = (optionText || '').replace(/"/g, '&quot;');
+            const safeField = (condField || '').replace(/"/g, '&quot;');
+            return `<div class="f-option-row d-flex align-items-center gap-2 flex-wrap" data-cond-field="${safeField}" style="font-size:0.78rem">
+                <input type="text" class="form-control form-control-sm f-option-text" placeholder="Option text" style="max-width:170px" value="${safeText}">
                 <span class="text-muted" style="font-size:0.68rem">shown only if</span>
-                <select class="form-select form-select-sm optif-field" style="max-width:160px"><option value="">(always shown)</option></select>
+                <select class="form-select form-select-sm optif-field" style="max-width:150px" onchange="_syncOptionValueControl(this)"><option value="">(always shown)</option></select>
                 <span class="text-muted">=</span>
-                <input type="text" class="form-control form-control-sm optif-value" placeholder="value" style="max-width:120px" value="${(value||'').replace(/"/g,'&quot;')}">
+                <input type="text" class="form-control form-control-sm optif-value" placeholder="value" style="max-width:110px" value="${(condValue||'').replace(/"/g,'&quot;')}">
+                <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="this.closest('.f-option-row').remove()" title="Remove option"><i class="bi bi-x-lg"></i></button>
             </div>`;
         }
-        // Rebuilds the visible per-option rows from the CURRENT .f-options text,
-        // preserving any condition already set (read from the hidden JSON map)
-        // for an option that's still present. Called on load and on every
-        // .f-options input event.
-        function _rebuildOptionConditionRows(row) {
-            const block = row.querySelector('.optif-block');
-            if (!block) return;
-            const rowsHost = block.querySelector('.optif-rows');
-            const hidden = block.querySelector('.f-option-show-if');
-            let existing = {};
-            try { existing = JSON.parse(hidden.value || '{}') || {}; } catch (e) {}
-            const options = (row.querySelector('.f-options')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
-            rowsHost.innerHTML = options.map(o => _optionConditionRowHtml(o, existing[o]?.field || '', _showIfValStr(existing[o]?.value))).join('');
-            const keys = getBuilderFieldKeys();
-            rowsHost.querySelectorAll('.optif-row').forEach(r => {
-                const optionText = r.dataset.option;
-                const cond = existing[optionText];
-                const sel = r.querySelector('.optif-field');
-                populateShowIfSelect(sel, cond?.field || '', keys);
-                if (cond && cond.field) _syncOptionValueControl(sel, _showIfValStr(cond.value));
-            });
+        // Always rendered (just hidden via class when the field isn't
+        // currently Dropdown/Checkbox) — same approach the old .f-options
+        // input used — so switching an existing field's type mid-edit has a
+        // block already in the DOM for the .f-type onchange handler to reveal.
+        function _optionsBlockHtml(data) {
+            const opts = data?.options || [];
+            const optIf = data?.option_show_if || {};
+            const rowsHtml = opts.map(o => _optionRowHtml(o, optIf[o]?.field, _showIfValStr(optIf[o]?.value))).join('');
+            const visible = ['checkbox', 'choose'].includes(data?.type);
+            return `
+                <div class="col-12 f-options-block ${visible ? '' : 'hidden'} mt-2">
+                    <div class="f-options-rows d-flex flex-column gap-1 mb-2">${rowsHtml}</div>
+                    <button type="button" class="btn btn-sm btn-outline-dark rounded-pill px-2" style="font-size:0.7rem" onclick="_addOptionRow(this)"><i class="bi bi-plus"></i> Add option</button>
+                </div>`;
         }
-        // Same idea as _syncShowIfValueControl, scoped to one .optif-row's own
-        // .optif-value — swaps it between a plain text input and a dropdown of
-        // the chosen controlling field's own options.
+        // "+ Add option" — appends one blank row, field dropdown populated the
+        // same way a freshly-added field-level condition row is.
+        function _addOptionRow(btn) {
+            const block = btn.closest('.f-options-block');
+            const rowsHost = block.querySelector('.f-options-rows');
+            const wrap = document.createElement('div');
+            wrap.innerHTML = _optionRowHtml('', '', '');
+            const row = wrap.firstElementChild;
+            rowsHost.appendChild(row);
+            populateShowIfSelect(row.querySelector('.optif-field'), '', getBuilderFieldKeys());
+            row.querySelector('.f-option-text').focus();
+        }
+        // Same idea as _syncShowIfValueControl, scoped to one .f-option-row's
+        // own .optif-value — swaps it between a plain text input and a
+        // dropdown of the chosen controlling field's own options.
         function _syncOptionValueControl(fieldSelect, presetValue) {
-            const rowEl = fieldSelect.closest('.optif-row');
+            const rowEl = fieldSelect.closest('.f-option-row');
             const oldEl = rowEl && rowEl.querySelector('.optif-value');
             if (!oldEl) return;
             const currentVal = presetValue !== undefined ? presetValue : oldEl.value;
@@ -7504,34 +7512,36 @@
             if (options && options.length) {
                 newEl = document.createElement('select');
                 newEl.className = 'form-select form-select-sm optif-value';
-                newEl.style.maxWidth = '120px';
+                newEl.style.maxWidth = '110px';
                 newEl.innerHTML = `<option value="">(choose a value)</option>` +
                     options.map(o => `<option value="${o.replace(/"/g,'&quot;')}" ${o===currentVal?'selected':''}>${o}</option>`).join('');
             } else {
                 newEl = document.createElement('input');
                 newEl.type = 'text';
                 newEl.className = 'form-control form-control-sm optif-value';
-                newEl.style.maxWidth = '120px';
+                newEl.style.maxWidth = '110px';
                 newEl.placeholder = 'value';
                 newEl.value = currentVal || '';
             }
             oldEl.replaceWith(newEl);
         }
-        // Re-serializes every visible .optif-row into the hidden .f-option-
-        // show-if JSON map — an option with no field chosen is simply left out
-        // (meaning "always shown"), not stored as an empty condition.
-        function _writeOptionConditionsToHidden(row) {
-            const block = row.querySelector('.optif-block');
-            if (!block) return;
-            const map = {};
-            block.querySelectorAll('.optif-row').forEach(r => {
-                const optionText = r.dataset.option;
+        // Reads a field row's .f-option-row list back into {options,
+        // option_show_if} — shared by serializeFieldsFromContainer (save) and
+        // serializeFieldRow (duplicate/cut/copy/paste), so both always agree
+        // on what an option row means. An option with no condition field
+        // chosen is left out of option_show_if entirely (= always shown).
+        function _readOptionRows(row) {
+            const options = [];
+            const option_show_if = {};
+            row.querySelectorAll('.f-option-row').forEach(r => {
+                const text = r.querySelector('.f-option-text')?.value.trim();
+                if (!text) return;
+                options.push(text);
                 const field = r.querySelector('.optif-field')?.value;
                 const value = r.querySelector('.optif-value')?.value;
-                if (field) map[optionText] = { field, value: value || '' };
+                if (field) option_show_if[text] = { field, value: value || '' };
             });
-            const hidden = block.querySelector('.f-option-show-if');
-            if (hidden) hidden.value = Object.keys(map).length ? JSON.stringify(map) : '';
+            return { options, option_show_if };
         }
 
         // Duplicate/Cut/Copy/Paste toolbar shared by both row types (label + field).
@@ -7625,7 +7635,7 @@
                 row.innerHTML = `${grip}
                     <div class="col-md-4"><input type="text" placeholder="Label" class="form-control" value="${data?.name||''}"></div>
                     <div class="col-md-3">
-                        <select class="form-select f-type" onchange="const row=this.closest('.draggable-row'); const o=row.querySelector('.f-options'); const ob=row.querySelector('.optif-block'); if(['checkbox','choose'].includes(this.value)) o.classList.remove('hidden'); else o.classList.add('hidden'); if(this.value==='choose') ob.classList.remove('hidden'); else ob.classList.add('hidden');">
+                        <select class="form-select f-type" onchange="const row=this.closest('.draggable-row'); const ob=row.querySelector('.f-options-block'); if(['checkbox','choose'].includes(this.value)) ob.classList.remove('hidden'); else ob.classList.add('hidden');">
                             <option value="text" ${data?.type==='text'?'selected':''}>Text Input</option>
                             <option value="paragraph" ${data?.type==='paragraph'?'selected':''}>Paragraph</option>
                             <option value="number" ${data?.type==='number'?'selected':''}>Number</option>
@@ -7635,7 +7645,6 @@
                             <option value="class_group" ${data?.type==='class_group'?'selected':''}>Class Group (auto — Group Forms only)</option>
                         </select>
                     </div>
-                    <div class="col-md-4"><input type="text" placeholder="Options (comma separated)" class="form-control f-options ${['checkbox','choose'].includes(data?.type)?'':'hidden'}" value="${(data?.options||[]).join(',')}" oninput="_rebuildOptionConditionRows(this.closest('.draggable-row'))"></div>
                     <div class="col-auto d-flex align-items-center gap-1">
                         <input type="checkbox" class="form-check-input f-required" id="${row.id}-required" ${data?.required ? 'checked' : ''} style="margin-top:0">
                         <label class="small fw-700 text-muted mb-0" for="${row.id}-required" style="font-size:0.7rem;white-space:nowrap">Required</label>
@@ -7643,7 +7652,7 @@
                     ${keyInput}
                     <div class="col-auto d-flex gap-1">${_fieldRowActions}</div>
                     ${showIfBlockHtml(data)}
-                    ${_optionShowIfBlockHtml(data)}`;
+                    ${_optionsBlockHtml(data)}`;
             }
             container.appendChild(row);
             // Populate this row's own condition dropdowns and pre-select stored values.
@@ -7657,11 +7666,12 @@
                 if (key) _syncShowIfValueControl(sel);
             });
             if (type !== 'label') {
-                _rebuildOptionConditionRows(row);
-                const optBlock = row.querySelector('.optif-block');
-                if (optBlock) optBlock.addEventListener('change', (e) => {
-                    if (e.target.classList.contains('optif-field')) _syncOptionValueControl(e.target);
-                    _writeOptionConditionsToHidden(row);
+                const keys = getBuilderFieldKeys();
+                row.querySelectorAll('.f-option-row').forEach(r => {
+                    const presetField = r.dataset.condField;
+                    const sel = r.querySelector('.optif-field');
+                    populateShowIfSelect(sel, presetField, keys);
+                    if (presetField) _syncOptionValueControl(sel, r.querySelector('.optif-value')?.value);
                 });
             }
             return row;
@@ -7711,13 +7721,9 @@
                 return { kind: 'label', data: { label: row.querySelector('input[type="text"]')?.value || '', show_if } };
             }
             const name = row.querySelector('input[placeholder*="Label"]')?.value || '';
-            const options = (row.querySelector('.f-options')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+            const { options, option_show_if: optIf } = _readOptionRows(row);
+            const option_show_if = Object.keys(optIf).length ? optIf : undefined;
             const required = row.querySelector('.f-required')?.checked || false;
-            let option_show_if;
-            if (type === 'choose') {
-                const raw = row.querySelector('.f-option-show-if')?.value;
-                if (raw) { try { const m = JSON.parse(raw); if (m && Object.keys(m).length) option_show_if = m; } catch (e) {} }
-            }
             return { kind: 'field', data: { name, type, options, show_if, required, option_show_if } };
         }
         function duplicateField(btn) {
@@ -7809,11 +7815,12 @@
                 populateShowIfSelect(sel, sel.value, keys);
             });
             // Per-option conditions can reference a field that sits LATER in the
-            // list than the Dropdown field being edited — its row didn't exist
-            // yet when _rebuildOptionConditionRows first ran for that row, so
-            // re-run it now that every row in the batch is in the DOM.
-            document.querySelectorAll(`#${_activeFieldsContainerId} .draggable-row`).forEach(row => {
-                if (row.querySelector('.f-type')?.value === 'choose') _rebuildOptionConditionRows(row);
+            // list than the Dropdown/Checkbox field being edited — its row
+            // didn't exist yet when addTabRow first populated this one's
+            // option rows, so re-run that population now every row in the
+            // batch is in the DOM.
+            document.querySelectorAll(`#${_activeFieldsContainerId} .f-option-row .optif-field`).forEach(sel => {
+                populateShowIfSelect(sel, sel.value, keys);
             });
         }
 
@@ -7865,7 +7872,7 @@
                     if(l) { const g = { type:'group_label', label:l }; if (showIf) g.show_if = showIf; fields.push(g); cl = sz(l); }
                 } else {
                     const fn = row.querySelector('input[placeholder*="Label"]')?.value.trim();
-                    const fo = row.querySelector('.f-options')?.value.split(',').map(s=>s.trim()).filter(s=>s);
+                    const { options: fo, option_show_if: optIf } = _readOptionRows(row);
                     if(fn) {
                         // A dropdown/checkbox with no options renders as an empty control — warn the admin
                         if ((type === 'choose' || type === 'checkbox') && fo.length === 0) optionless.push(fn);
@@ -7875,10 +7882,7 @@
                         const obj = { name:fn, type:type, options:fo, data_key:f };
                         if (showIf) obj.show_if = showIf;
                         if (row.querySelector('.f-required')?.checked) obj.required = true;
-                        if (type === 'choose') {
-                            const rawOptIf = row.querySelector('.f-option-show-if')?.value;
-                            if (rawOptIf) { try { const m = JSON.parse(rawOptIf); if (m && Object.keys(m).length) obj.option_show_if = m; } catch (e) {} }
-                        }
+                        if ((type === 'choose' || type === 'checkbox') && Object.keys(optIf).length) obj.option_show_if = optIf;
                         fields.push(obj);
                     }
                 }
