@@ -5573,21 +5573,34 @@
             // Frozen either because the admin locked it or the leader already
             // submitted it — both mean no more inviting/leaving/editing.
             const readOnly = locked || submitted;
+            // A team already started before the form's Active/Open switches
+            // (or the per-student Open Logic Rules) closed it to NEW
+            // registrations — this team isn't new, it's mid-flight, so it
+            // isn't blocked outright. But it also shouldn't keep looking like
+            // an open fill-up form: freeze the fields/invites/roster changes
+            // (same rendering path as readOnly, just a different banner) and
+            // leave only the one meaningful action, Submit, reachable — so
+            // whatever was filled in before the deadline can still be turned
+            // in. revision_comment overrides this: an admin who sent the team
+            // back for changes clearly wants the leader able to fix it,
+            // regardless of the form's current Active/Open state.
+            const closedForMe = !readOnly && !team.revision_comment && (form.accepting_new === false || form.accepting_eligible === false);
+            const editLocked = readOnly || closedForMe;
             let fields = [];
             try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
             const rosterHtml = team.members.map(m => `
                 <div class="d-flex align-items-center justify-content-between p-2 border-bottom">
                     <span>${gfNameOf(m.profile, m.student_id)}${m.role === 'leader' ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill ms-1">Leader</span>' : ''}</span>
-                    ${(!readOnly && isLeader && m.role !== 'leader') ? `<button onclick="gfRemoveMember('${tid}', ${team.id}, '${m.student_id}')" class="btn btn-xs btn-outline-danger rounded-pill px-2" title="Remove from team">×</button>` : ''}
+                    ${(!editLocked && isLeader && m.role !== 'leader') ? `<button onclick="gfRemoveMember('${tid}', ${team.id}, '${m.student_id}')" class="btn btn-xs btn-outline-danger rounded-pill px-2" title="Remove from team">×</button>` : ''}
                 </div>`).join('');
             const pendingHtml = (isLeader && team.pending_invites.length) ? `
                 <div class="mt-3"><span class="small fw-800 text-muted text-uppercase" style="font-size:0.68rem">Pending invites</span>
                 ${team.pending_invites.map(inv => `
                     <div class="d-flex align-items-center justify-content-between p-2 border-bottom">
                         <span class="text-muted fst-italic">${gfNameOf(inv.profile, inv.invited_student_id)}</span>
-                        ${!readOnly ? `<button onclick="gfCancelInvite('${tid}', ${inv.id})" class="btn btn-xs btn-outline-secondary rounded-pill px-2">Cancel</button>` : ''}
+                        ${!editLocked ? `<button onclick="gfCancelInvite('${tid}', ${inv.id})" class="btn btn-xs btn-outline-secondary rounded-pill px-2">Cancel</button>` : ''}
                     </div>`).join('')}</div>` : '';
-            const canInviteMore = isLeader && !readOnly && team.members.length < form.max_team_size;
+            const canInviteMore = isLeader && !editLocked && team.members.length < form.max_team_size;
             // Submit is only reachable once nothing's left pending, (if the form
             // requires it) the roster is full, and every field the admin marked
             // Mandatory actually has an answer — matches submit_group_team's own
@@ -5601,6 +5614,7 @@
             if (locked) html += `<div class="alert alert-info py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-shield-check-fill me-2 fs-5"></i>Verified & Locked</div>`;
             else if (submitted) html += `<div class="alert alert-success py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-check-circle-fill me-2 fs-5"></i>Submitted${team.submitted_at ? ' — ' + new Date(team.submitted_at).toLocaleString() : ''}</div>`;
             else if (team.revision_comment) html += `<div class="alert alert-warning py-3 mb-4 rounded-4 shadow-sm border-0"><div class="fw-800 mb-1"><i class="bi bi-arrow-counterclockwise me-2 fs-5"></i>Changes requested${team.revision_requested_by_name ? ' by ' + _escHtml(team.revision_requested_by_name) : ''}${team.revision_requested_at ? ' — ' + new Date(team.revision_requested_at).toLocaleString() : ''}</div><div style="white-space:pre-wrap">${_escHtml(team.revision_comment)}</div></div>`;
+            else if (closedForMe) html += `<div class="alert alert-warning py-3 mb-4 rounded-4 shadow-sm border-0"><i class="bi bi-lock-fill me-2 fs-5"></i>Registration is now closed — no further changes can be made, but you can still submit your team as filled in below.</div>`;
             html += `<p class="small text-muted mb-2">${team.members.length} of ${form.max_team_size} members${form.members_required && team.members.length < form.max_team_size ? ' — team must be full to count as complete' : ''}</p>`;
             html += `<div class="rounded-4 border overflow-hidden mb-3">${rosterHtml}</div>${pendingHtml}`;
 
@@ -5626,9 +5640,9 @@
                     if (f.type === 'profile_picture') { if (isLeader) html += renderProfilePictureFieldHtml(`${tid}-photo`); return; }
                     if (f.type === 'class_group') { html += _gfClassGroupFieldHtml(f, ((team.members.find(m => m.role === 'leader') || {}).profile || {})[gfGetGroupField(form.eligibility_json)], form.eligibility_json); return; }
                     const val = gdLookup(f.data_key);
-                    html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, readOnly || !isLeader)}</div>`;
+                    html += `<div class="col-md-6"${showIfAttr}${hideStyle}>${renderField(f, val, editLocked || !isLeader)}</div>`;
                 });
-                html += `</div>${(!readOnly && isLeader) ? `<button type="submit" class="btn btn-premium-save w-100 mt-4"><i class="bi bi-cloud-arrow-up-fill me-2"></i>Save Team Details</button>` : ''}<div class="status-msg text-center mt-3 small fw-bold"></div></form>`;
+                html += `</div>${(!editLocked && isLeader) ? `<button type="submit" class="btn btn-premium-save w-100 mt-4"><i class="bi bi-cloud-arrow-up-fill me-2"></i>Save Team Details</button>` : ''}<div class="status-msg text-center mt-3 small fw-bold"></div></form>`;
             }
 
             if (isLeader && !readOnly) {
@@ -5637,7 +5651,7 @@
                     <button type="button" onclick="gfSubmitTeam('${tid}', ${team.id})" class="btn btn-success w-100" ${canSubmit ? '' : 'disabled'}><i class="bi bi-send-check-fill me-1"></i>Submit</button>
                 </div>`;
             }
-            if (!readOnly) {
+            if (!editLocked) {
                 html += isLeader
                     ? `<button onclick="gfDisbandTeam('${tid}', ${team.id})" class="btn btn-outline-danger w-100 mt-2">Disband Team</button>`
                     : `<button onclick="gfLeaveTeam('${tid}', ${team.id})" class="btn btn-outline-secondary w-100 mt-2">Leave Team</button>`;
@@ -5659,7 +5673,7 @@
                     _gdCondForm.addEventListener('change', () => { evaluateConditionalFields(_gdCondForm); evaluateOptionConditions(_gdCondForm); });
                 }
             }
-            if (fields.length && !readOnly && isLeader) {
+            if (fields.length && !editLocked && isLeader) {
                 const gdForm = document.getElementById(`${tid}-gd-form`);
                 if (fields.some(f => f.type === 'profile_picture')) wireProfilePictureField(`${tid}-photo`, gdForm);
                 if (gdForm) gdForm.onsubmit = (e) => {
