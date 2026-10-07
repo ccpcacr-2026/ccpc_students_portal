@@ -1197,6 +1197,11 @@
                                             <div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="gf-accepting-new" checked><label class="form-check-label fw-800">Accepting new teams</label></div></div>
                                         </div>
                                         <p class="small text-muted mt-2" style="font-size:0.7rem">To restrict either of these to specific classes, sections or students: save this form first, then use the "Filter" button on its card in the list below.</p>
+                                        <div class="form-check mt-3">
+                                            <input class="form-check-input" type="checkbox" id="gf-lock-when-closed">
+                                            <label class="form-check-label fw-800" for="gf-lock-when-closed">Freeze team details once closed</label>
+                                        </div>
+                                        <p class="small text-muted mt-1" style="font-size:0.7rem">Only matters once a team is Active but NOT Open for that student (either switch off above, or a non-matching "Open" Filter rule). Unchecked (default): a team already started can keep being edited normally even while closed. Checked: fields become read-only (just a summary) and inviting/leaving/disbanding freeze — the team can still be Submitted as-is, just not changed further.</p>
                                         <div class="mt-4 p-4 bg-light rounded-4 border">
                                             <span class="small fw-800 text-muted text-uppercase" style="letter-spacing:0.06em">Fill-up Page Content</span>
                                             <p class="small text-muted mt-1 mb-3" style="font-size:0.7rem">Shown at the top of the page a student sees when filling this out. All optional — Header falls back to the Form Title above when left blank.</p>
@@ -5584,7 +5589,7 @@
             // in. revision_comment overrides this: an admin who sent the team
             // back for changes clearly wants the leader able to fix it,
             // regardless of the form's current Active/Open state.
-            const closedForMe = !readOnly && !team.revision_comment && (form.accepting_new === false || form.accepting_eligible === false);
+            const closedForMe = !readOnly && !team.revision_comment && form.lock_when_closed && (form.accepting_new === false || form.accepting_eligible === false);
             const editLocked = readOnly || closedForMe;
             let fields = [];
             try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
@@ -6487,6 +6492,7 @@
             document.getElementById('gf-cover-status').textContent = '';
             document.getElementById('gf-is-enabled').checked = true;
             document.getElementById('gf-accepting-new').checked = true;
+            document.getElementById('gf-lock-when-closed').checked = false;
             gfResetEligibilityForm();
             _activeFieldsContainerId = 'gf-fields-list';
             document.getElementById('gf-fields-list').innerHTML = '';
@@ -6510,6 +6516,7 @@
             document.getElementById('gf-cover-status').textContent = '';
             document.getElementById('gf-is-enabled').checked = f.is_enabled !== false;
             document.getElementById('gf-accepting-new').checked = f.accepting_new !== false;
+            document.getElementById('gf-lock-when-closed').checked = !!f.lock_when_closed;
             document.getElementById('gf-fields-list').innerHTML = '';
             // Bands must be rendered before the fields loop — a show_if
             // condition referencing a class_group field looks up its value
@@ -6550,6 +6557,7 @@
                 // clobbers whatever Filter already set.
                 is_enabled: document.getElementById('gf-is-enabled').checked,
                 accepting_new: document.getElementById('gf-accepting-new').checked,
+                lock_when_closed: document.getElementById('gf-lock-when-closed').checked,
             };
             const btn = document.querySelector('[onclick="saveGroupForm()"]');
             const btnHtml = btn ? btn.innerHTML : '';

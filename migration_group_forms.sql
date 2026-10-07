@@ -409,3 +409,12 @@ CREATE TRIGGER trg_group_form_team_edit_history
 -- Empty (the default) means no extra restriction -- anyone who can see the
 -- form can also register, exactly like before this column existed.
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS accepting_condition_json text NOT NULL DEFAULT '{}';
+
+-- ── Whether an in-progress team freezes once the form closes ────────────────
+-- Active-but-not-Open (globally or via accepting_condition_json) stops NEW
+-- teams, but says nothing about a team that was already started before the
+-- cutoff. Default (false): that team keeps being fully editable, same as
+-- before this column existed. true: the student app renders it read-only
+-- (a summary, not a fill-up form) once closed -- Submit still works, just no
+-- further edits -- see renderTeamView's closedForMe in public/index.html.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS lock_when_closed boolean NOT NULL DEFAULT false;

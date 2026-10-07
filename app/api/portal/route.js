@@ -1574,7 +1574,7 @@ export async function POST(req) {
 
   // ── Save Group Form Config (admin) ──────────────────────────────────────
   if (action === 'save_group_form') {
-    const { id, title, header, sub_header, description, icon_class, cover_photo_url, max_team_size, members_required, fields_json, eligibility_json, condition_json, accepting_condition_json, is_enabled, accepting_new, sort_order } = payload;
+    const { id, title, header, sub_header, description, icon_class, cover_photo_url, max_team_size, members_required, fields_json, eligibility_json, condition_json, accepting_condition_json, is_enabled, accepting_new, lock_when_closed, sort_order } = payload;
 
     if (id) {
       // Partial update — only touches fields actually sent. The admin card's
@@ -1601,6 +1601,7 @@ export async function POST(req) {
       if (accepting_condition_json !== undefined) rowData.accepting_condition_json = accepting_condition_json || '{}';
       if (is_enabled !== undefined) rowData.is_enabled = !!is_enabled;
       if (accepting_new !== undefined) rowData.accepting_new = !!accepting_new;
+      if (lock_when_closed !== undefined) rowData.lock_when_closed = !!lock_when_closed;
       if (sort_order !== undefined) rowData.sort_order = sort_order;
       const writeRes = await sb(`group_forms?id=eq.${encodeURIComponent(id)}`, 'PATCH', rowData);
       if (writeRes?.error) return NextResponse.json({ result: 'error', message: 'Save failed: ' + writeRes.error });
@@ -1624,6 +1625,7 @@ export async function POST(req) {
       accepting_condition_json: accepting_condition_json || '{}',
       is_enabled: is_enabled !== false,
       accepting_new: accepting_new !== false,
+      lock_when_closed: !!lock_when_closed,
       sort_order: sort_order || 0,
     };
     const writeRes = await sb('group_forms', 'POST', rowData);
