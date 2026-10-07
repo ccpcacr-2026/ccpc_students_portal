@@ -1540,17 +1540,21 @@ export async function POST(req) {
     enabled = conditionVisible;
     if (!enabled.length) return NextResponse.json([]);
 
-    // Whether THIS student also clears accepting_condition_json (the "Open"
-    // rules, separate from condition_json's "Active" rules above) — exposed
-    // as accepting_eligible so the client can show "Registration isn't open
-    // for your profile yet" up front, in the same slot where it already
-    // shows "Registration is closed" for accepting_new=false, instead of
-    // only failing after the student fills in the whole Create Team form
-    // and hits submit (create_group re-checks this regardless either way).
+    // accepting_eligible is the final "can this student start a new team"
+    // verdict, exposed so the client can show the right message up front
+    // instead of only failing after the whole Create Team form is filled in
+    // (create_group re-checks this regardless either way). When
+    // accepting_condition_json has rules configured, it is AUTHORITATIVE —
+    // overriding the plain accepting_new switch in BOTH directions. That's
+    // what lets an admin flip Open OFF (closed to everyone) while still
+    // listing a specific student_id in the Filter to let just that student
+    // through, e.g. a late registrant let in without reopening to everyone.
+    // No rules configured (the default): falls back to the plain switch,
+    // same as before this column existed.
     for (const f of enabled) {
       let acceptCondObj = null;
       try { acceptCondObj = JSON.parse(f.accepting_condition_json || '{}'); } catch {}
-      if (!acceptCondObj || !(acceptCondObj.rules?.length)) { f.accepting_eligible = true; continue; }
+      if (!acceptCondObj || !(acceptCondObj.rules?.length)) { f.accepting_eligible = f.accepting_new !== false; continue; }
       const results = await Promise.all(acceptCondObj.rules.map(r => evalRule(r, profile, submissions)));
       f.accepting_eligible = acceptCondObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
     }
@@ -1949,7 +1953,6 @@ export async function POST(req) {
     const form = (!formRows?.error && formRows[0]) ? formRows[0] : null;
     if (!form) return NextResponse.json({ result: 'error', message: 'Group form not found.' });
     if (!form.is_enabled) return NextResponse.json({ result: 'error', message: 'This form is not available.' });
-    if (!form.accepting_new) return NextResponse.json({ result: 'error', message: 'Registration is closed for new teams.' });
 
     // get_group_forms hides a form from the nav when its Logic Rules
     // (condition_json) don't match this student, but that's a nav filter
@@ -1958,15 +1961,19 @@ export async function POST(req) {
     // still create a team the Logic Rules say they're not eligible for.
     //
     // accepting_condition_json is a SEPARATE, optional rule set for "who can
-    // start a NEW team" -- an admin can show a form to every class (so it
-    // passes condition_json) while only letting a subset actually register
-    // (accepting_condition_json), e.g. a staged rollout by class/section.
-    // Empty means no extra restriction beyond condition_json, same as before
-    // this column existed.
+    // start a NEW team". When it has rules, it is AUTHORITATIVE over the
+    // plain accepting_new switch -- in BOTH directions. That's what lets an
+    // admin flip Open OFF (closed to everyone) while still listing a
+    // specific student_id in the Filter to let just that student through,
+    // e.g. a late registrant let in without reopening to everyone, same as
+    // get_group_forms' accepting_eligible computation. No rules configured
+    // (the default) falls back to the plain switch, same as before this
+    // column existed.
     let condObj = null, acceptCondObj = null;
     try { condObj = JSON.parse(form.condition_json || '{}'); } catch {}
     try { acceptCondObj = JSON.parse(form.accepting_condition_json || '{}'); } catch {}
-    if ((condObj && condObj.rules?.length) || (acceptCondObj && acceptCondObj.rules?.length)) {
+    const hasAcceptRules = !!(acceptCondObj && acceptCondObj.rules?.length);
+    if ((condObj && condObj.rules?.length) || hasAcceptRules) {
       const profileRows = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=*`);
       const profile = (profileRows && !profileRows.error && profileRows[0]) ? profileRows[0] : { student_id };
       const subRows = await sb(`portal_submissions?student_id=eq.${encodeURIComponent(student_id)}&select=tab_name`);
@@ -1976,12 +1983,13 @@ export async function POST(req) {
         const pass = condObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
         if (!pass) return NextResponse.json({ result: 'error', message: 'This form is not available for your profile.' });
       }
-      if (acceptCondObj && acceptCondObj.rules?.length) {
+      if (hasAcceptRules) {
         const results = await Promise.all(acceptCondObj.rules.map(r => evalRule(r, profile, submissions)));
         const pass = acceptCondObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
         if (!pass) return NextResponse.json({ result: 'error', message: 'Registration is not open for your profile yet.' });
       }
     }
+    if (!hasAcceptRules && !form.accepting_new) return NextResponse.json({ result: 'error', message: 'Registration is closed for new teams.' });
 
     if (!(await hasProfilePhoto(student_id))) {
       return NextResponse.json({ result: 'error', code: 'PHOTO_REQUIRED', message: 'Please upload a profile picture before creating a team.' });
