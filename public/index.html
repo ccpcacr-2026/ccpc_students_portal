@@ -1793,35 +1793,57 @@
 
                 const saved = localStorage.getItem('student_session');
                 if (saved) {
-                    const data = JSON.parse(saved);
-                    // Captured once, before showAdminPanel()/showForm() run —
-                    // they land on the normal default landing first; whichever
-                    // of them actually runs then tries to switch straight to
-                    // this exact tab afterward (see _tryRestorePendingTab).
-                    try { if (!_pendingTabRestore) _pendingTabRestore = localStorage.getItem('ccpc_last_tab'); } catch (e) {}
-                    if (data && data.student_id === 'admin') { loggedInStudent = data; showAdminPanel(); }
-                    else if (data && data.student_id && data.phone_number) {
-                        loggedInStudent = data;
-                        portalFetch('login', { student_id: data.student_id, phone_number: data.phone_number }).then(res => {
-                            if (res.result === 'success') showForm(res);
-                            else {
-                                // Silent before — if this branch fires, auto-login was
-                                // REJECTED by the server (not a JS bug), and nothing
-                                // ever showed why. Surfaced now so "auto-login doesn't
-                                // work" reports come with an actual reason attached.
-                                console.error('Auto-login rejected:', res);
-                                alert('Auto-login failed: ' + (res && res.message ? res.message : 'Unknown reason') + '\n\nPlease log in again.');
+                    // JSON.parse throwing here (corrupted/truncated storage) used to
+                    // propagate up to initPortal's own outer catch, which wipes the
+                    // session and calls resetUI() with NO alert at all — "refresh ->
+                    // silently back at the login screen" with zero clue why. Parsed
+                    // separately now so that specific failure gets its own reason,
+                    // same as every other auto-login rejection below already has.
+                    let data = null;
+                    try { data = JSON.parse(saved); }
+                    catch (e) {
+                        console.error('Saved session was corrupted JSON:', e);
+                        alert('Could not restore your saved login (corrupted data). Please log in again.');
+                        localStorage.removeItem('student_session');
+                    }
+                    if (data) {
+                        // Captured once, before showAdminPanel()/showForm() run —
+                        // they land on the normal default landing first; whichever
+                        // of them actually runs then tries to switch straight to
+                        // this exact tab afterward (see _tryRestorePendingTab).
+                        try { if (!_pendingTabRestore) _pendingTabRestore = localStorage.getItem('ccpc_last_tab'); } catch (e) {}
+                        if (data.student_id === 'admin') { loggedInStudent = data; showAdminPanel(); }
+                        else if (data.student_id && data.phone_number) {
+                            loggedInStudent = data;
+                            portalFetch('login', { student_id: data.student_id, phone_number: data.phone_number }).then(res => {
+                                if (res.result === 'success') showForm(res);
+                                else {
+                                    // Silent before — if this branch fires, auto-login was
+                                    // REJECTED by the server (not a JS bug), and nothing
+                                    // ever showed why. Surfaced now so "auto-login doesn't
+                                    // work" reports come with an actual reason attached.
+                                    console.error('Auto-login rejected:', res);
+                                    alert('Auto-login failed: ' + (res && res.message ? res.message : 'Unknown reason') + '\n\nPlease log in again.');
+                                    localStorage.removeItem('student_session');
+                                    resetUI();
+                                }
+                            }).catch(err => {
+                                console.error('Auto-login network error:', err);
+                                alert('Auto-login failed (network error): ' + (err && err.message ? err.message : String(err)) + '\n\nPlease log in again.');
                                 localStorage.removeItem('student_session');
                                 resetUI();
-                            }
-                        }).catch(err => {
-                            console.error('Auto-login network error:', err);
-                            alert('Auto-login failed (network error): ' + (err && err.message ? err.message : String(err)) + '\n\nPlease log in again.');
+                            });
+                        } else {
+                            // Also silent before — a saved session missing student_id or
+                            // phone_number (e.g. a login flow that never actually filled
+                            // phone_number into the saved object) landed here with nothing
+                            // shown either. Same reasoning as the two branches above.
+                            console.error('Saved session missing student_id/phone_number:', data);
+                            alert('Could not restore your saved login (incomplete session data). Please log in again.');
                             localStorage.removeItem('student_session');
                             resetUI();
-                        });
+                        }
                     } else {
-                        localStorage.removeItem('student_session');
                         resetUI();
                     }
                 }
