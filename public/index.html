@@ -861,6 +861,7 @@
                         </div>
                         <div class="notice-dots" id="notice-dots"></div>
                     </div>
+                    <div id="storage-warning-banner" class="alert alert-warning rounded-4 border-0 small fw-700 hidden" style="margin-bottom:14px"><i class="bi bi-exclamation-triangle-fill me-2"></i>This browser is blocking saved logins (private/incognito mode, or site data disabled). You'll need to log in again every time you reopen or refresh the page.</div>
                     <div class="login-card">
                         <div class="login-card-title">Sign In to Portal</div>
                         <div class="mb-3">
@@ -1672,6 +1673,28 @@
         const DEEP_LINK_TAB = _urlP.get('gf') ? `gf-${_urlP.get('gf')}` : (_urlP.get('tab') || '');
 
         let loggedInStudent = null;
+
+        // One-shot check for whether this browser/context will actually let us
+        // remember a login at all — private browsing with storage blocked, a
+        // device policy, an embedded webview with ephemeral storage, quota
+        // already full, etc. setItem alone can silently succeed while reads
+        // come back empty in some browsers, so round-tripping a throwaway key
+        // is the only way to actually know, rather than assuming localStorage
+        // working is a given. Added after "refresh doesn't log me back in"
+        // reports kept coming back with no error shown anywhere — this makes
+        // the actual cause visible instead of guessed at.
+        let _storageAvailable = null;
+        function _checkStorageAvailable() {
+            if (_storageAvailable !== null) return _storageAvailable;
+            try {
+                const k = '__ccpc_storage_test__';
+                localStorage.setItem(k, '1');
+                _storageAvailable = localStorage.getItem(k) === '1';
+                localStorage.removeItem(k);
+            } catch (e) { _storageAvailable = false; }
+            return _storageAvailable;
+        }
+
         let allTabs = [];
         // Built-in tabs (as opposed to tab-builder custom ones in portal_tabs).
         // Personal Hub is intentionally excluded — always on, no toggle for it.
@@ -1752,6 +1775,12 @@
 
                 resetUI();
                 loadLoginNotices();
+
+                // Shown up front (before anyone even tries to log in) rather
+                // than only discovered confusingly on the NEXT refresh, when
+                // this browser can't actually remember a login at all.
+                const storageBanner = document.getElementById('storage-warning-banner');
+                if (storageBanner) storageBanner.classList.toggle('hidden', _checkStorageAvailable());
 
                 console.log("Portal Initialized. Autologin parameters from server:", {
                     id: AUTO_LOGIN_ID,
