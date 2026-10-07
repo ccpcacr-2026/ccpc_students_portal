@@ -1842,9 +1842,14 @@
                         // this exact tab afterward (see _tryRestorePendingTab).
                         try { if (!_pendingTabRestore) _pendingTabRestore = localStorage.getItem('ccpc_last_tab'); } catch (e) {}
                         if (data.student_id === 'admin') { loggedInStudent = data; showAdminPanel(); }
-                        else if (data.student_id && data.phone_number) {
+                        else if (data.student_id && (data._loginPhone || data.phone_number)) {
+                            // _loginPhone (added above) is the exact credential that
+                            // last authenticated successfully, immune to showForm()'s
+                            // profile merge overwriting phone_number with a blank DB
+                            // value. Falls back to phone_number for a session saved by
+                            // an older build, before _loginPhone existed.
                             loggedInStudent = data;
-                            portalFetch('login', { student_id: data.student_id, phone_number: data.phone_number }).then(res => {
+                            portalFetch('login', { student_id: data.student_id, phone_number: data._loginPhone || data.phone_number }).then(res => {
                                 if (res.result === 'success') showForm(res);
                                 else {
                                     // Silent before — if this branch fires, auto-login was
@@ -2285,7 +2290,18 @@
             portalFetch('login', { student_id: id, phone_number: phone }).then(json => {
                 if (btn) { btn.disabled = false; btn.innerText = "Authenticate Identity"; }
                 if (json.result === 'success') {
-                    loggedInStudent = { student_id: id, phone_number: phone, role: json.role || 'student' };
+                    // _loginPhone is the EXACT credential just typed (a PIN, or a
+                    // real phone number — same field does double duty) — kept
+                    // separate from phone_number because showForm()'s profile
+                    // merge below overwrites phone_number with the student's DB
+                    // profile value for display purposes, which is routinely
+                    // null for a PIN-login student (profile never had a real
+                    // phone on file). That merge used to clobber the only copy
+                    // of the login credential, so next refresh's auto-login
+                    // retry sent an empty credential and silently failed —
+                    // _loginPhone is never touched by that merge, so the saved
+                    // session always keeps a working credential to retry with.
+                    loggedInStudent = { student_id: id, phone_number: phone, _loginPhone: phone, role: json.role || 'student' };
                     // Guarded: a storage failure here (private browsing,
                     // quota, disabled storage) must never block actually
                     // showing the portal below — worst case is just no
@@ -2398,7 +2414,7 @@
             if (studentId === activeIdSafe()) return; // already active
             portalFetch('login', { student_id: acc.student_id, phone_number: acc.phone_number }).then(json => {
                 if (json.result === 'success') {
-                    loggedInStudent = { student_id: acc.student_id, phone_number: acc.phone_number, role: json.role || 'student' };
+                    loggedInStudent = { student_id: acc.student_id, phone_number: acc.phone_number, _loginPhone: acc.phone_number, role: json.role || 'student' };
                     try { localStorage.setItem('student_session', JSON.stringify(loggedInStudent)); } catch (e) {}
                     if (json.role === 'admin') showAdminPanel(); else showForm(json);
                 } else {
@@ -4616,10 +4632,15 @@
                 if(sidebarCont) sidebarCont.classList.remove('hidden');
                 if(mobHeader) mobHeader.classList.remove('hidden');
 
-                if (loggedInStudent && loggedInStudent.student_id && loggedInStudent.phone_number) {
+                // phone_number here is this student's DB profile value (for
+                // display elsewhere) — _loginPhone is the actual credential that
+                // authenticated, which is what _switchToAccount needs to log back
+                // in later. Falls back to phone_number for an older saved session
+                // that predates _loginPhone existing.
+                if (loggedInStudent && loggedInStudent.student_id && (loggedInStudent._loginPhone || loggedInStudent.phone_number)) {
                     _upsertSavedAccount({
                         student_id: loggedInStudent.student_id,
-                        phone_number: loggedInStudent.phone_number,
+                        phone_number: loggedInStudent._loginPhone || loggedInStudent.phone_number,
                         name: loggedInStudent.student_name || loggedInStudent.name || loggedInStudent.student_id,
                         photo: loggedInStudent.photo || null
                     });
