@@ -5428,6 +5428,18 @@
                     <div class="alert alert-warning mt-3 rounded-4 border-0"><i class="bi bi-lock-fill me-2"></i>Registration is closed for new teams.</div></div>`;
                 return;
             }
+            // accepting_eligible comes from get_group_forms re-checking the
+            // form's separate "Open" Logic Rules (accepting_condition_json)
+            // against this student — they can see the form (it passed the
+            // "Active" rules to even reach the nav) but aren't in the subset
+            // allowed to register. create_group would reject this anyway;
+            // showing it here avoids the student filling in the whole form
+            // first only to hit that error on submit.
+            if (form.accepting_eligible === false) {
+                pane.innerHTML = `<div class="card shadow-lg">${_gfHeaderHtml(form)}
+                    <div class="alert alert-warning mt-3 rounded-4 border-0"><i class="bi bi-lock-fill me-2"></i>Registration is not open for your profile yet.</div></div>`;
+                return;
+            }
             let fields = [];
             try { fields = JSON.parse(form.fields_json || '[]'); } catch (e) {}
             // Every Group Form requires a profile picture to create a team —

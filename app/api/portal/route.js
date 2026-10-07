@@ -1540,6 +1540,21 @@ export async function POST(req) {
     enabled = conditionVisible;
     if (!enabled.length) return NextResponse.json([]);
 
+    // Whether THIS student also clears accepting_condition_json (the "Open"
+    // rules, separate from condition_json's "Active" rules above) — exposed
+    // as accepting_eligible so the client can show "Registration isn't open
+    // for your profile yet" up front, in the same slot where it already
+    // shows "Registration is closed" for accepting_new=false, instead of
+    // only failing after the student fills in the whole Create Team form
+    // and hits submit (create_group re-checks this regardless either way).
+    for (const f of enabled) {
+      let acceptCondObj = null;
+      try { acceptCondObj = JSON.parse(f.accepting_condition_json || '{}'); } catch {}
+      if (!acceptCondObj || !(acceptCondObj.rules?.length)) { f.accepting_eligible = true; continue; }
+      const results = await Promise.all(acceptCondObj.rules.map(r => evalRule(r, profile, submissions)));
+      f.accepting_eligible = acceptCondObj.logic === 'OR' ? results.some(Boolean) : results.every(Boolean);
+    }
+
     const [memberRows, inviteRows] = await Promise.all([
       sb(`group_form_team_members?student_id=eq.${encodeURIComponent(student_id)}&select=group_form_id,role`),
       sb(`group_form_team_invites?invited_student_id=eq.${encodeURIComponent(student_id)}&status=eq.pending&select=group_form_id`),
