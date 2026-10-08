@@ -3255,6 +3255,7 @@
             group_form_revision: 'bi-arrow-counterclockwise',
             group_form_review_approved: 'bi-check-circle-fill',
             group_form_review_rejected: 'bi-x-circle-fill',
+            direct_message: 'bi-envelope-fill',
         };
         function _notifTimeAgo(iso) {
             const diffMs = Date.now() - new Date(iso).getTime();
@@ -3267,6 +3268,13 @@
             if (days < 7) return days + 'd ago';
             return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
         }
+        // Kept in memory so a click on a notification card can look up its
+        // own type/data without stuffing the whole object through an inline
+        // onclick string — a title/message built from admin- or student-
+        // authored free text could contain a quote or apostrophe that would
+        // break out of the attribute (same reasoning as this session's other
+        // onclick-quoting fixes elsewhere in this app).
+        let _notifList = [];
         async function loadStudentNotifications() {
             const sid = cantSid();
             const el = document.getElementById('notifications-list');
@@ -3276,9 +3284,10 @@
                 const r = await portalFetch('get_student_notifications', { student_id: sid });
                 if (!r || r.result !== 'success') { el.innerHTML = '<p class="text-muted small">Could not load notifications.</p>'; return; }
                 const list = r.notifications || [];
+                _notifList = list;
                 if (!list.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Nothing here yet</p>'; return; }
                 el.innerHTML = list.map(n => `
-                    <div class="wallet-stat-card mb-2" style="text-align:left;cursor:pointer;${n.is_read ? '' : 'border-left:3px solid var(--p-primary)'}" onclick="markNotificationRead(${n.id}, this)">
+                    <div class="wallet-stat-card mb-2" style="text-align:left;cursor:pointer;${n.is_read ? '' : 'border-left:3px solid var(--p-primary)'}" onclick="_notifClick(${n.id}, this)">
                         <div class="d-flex align-items-start gap-2">
                             <i class="bi ${NOTIF_TYPE_ICON[n.type] || 'bi-bell-fill'}" style="font-size:1.1rem;color:var(--p-primary);margin-top:2px"></i>
                             <div class="flex-grow-1">
@@ -3295,6 +3304,46 @@
             if (cardEl) cardEl.style.borderLeft = 'none';
             try { await portalFetch('mark_notification_read', { id }); } catch (e) {}
             _refreshNotificationBadge();
+        }
+        // Briefly outlines and scrolls to a just-navigated-to item (a forum
+        // post, a diary entry) so clicking a notification lands on the exact
+        // thing it was about, not just the right tab in general. The target
+        // may not exist yet (its list is still loading, or it's since been
+        // deleted) — silently does nothing rather than erroring either way.
+        function _scrollHighlight(elId) {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.style.transition = 'box-shadow 0.3s';
+            el.style.boxShadow = '0 0 0 3px var(--p-primary)';
+            setTimeout(() => { el.style.boxShadow = ''; }, 2000);
+        }
+        // Routes a notification to whatever it's actually about. switchTab()
+        // already lazy-loads each built-in tab's own content on first switch
+        // (loadStudentForumPosts/loadStudentDiaryEntries/etc — see switchTab
+        // itself), so a flat 500ms delay before the highlight is enough for
+        // that fetch to have rendered the item it's targeting in virtually
+        // every real case, without needing to thread a callback through
+        // switchTab for this one caller.
+        function _notifNavigate(n) {
+            if (!n) return;
+            const d = n.data || {};
+            if (n.type === 'diary_entry' || n.type === 'diary_reminder') {
+                switchTab('student-diary');
+                if (d.diary_entry_id) setTimeout(() => _scrollHighlight('diary-entry-' + d.diary_entry_id), 500);
+            } else if (n.type === 'forum_post' || n.type === 'forum_mention' || n.type === 'forum_reply') {
+                switchTab('student-forum');
+                if (d.post_id) setTimeout(() => _scrollHighlight('forum-post-' + d.post_id), 500);
+            } else if (n.type === 'direct_message') {
+                switchTab('student-messages');
+                if (d.teacher_id) setTimeout(() => openStudentMessageThread(d.teacher_id, d.teacher_name || d.teacher_id), 300);
+            } else if (n.type === 'group_form_revision' || n.type === 'group_form_review_approved' || n.type === 'group_form_review_rejected') {
+                if (d.group_form_id) switchTab('gf-' + d.group_form_id);
+            }
+        }
+        function _notifClick(id, cardEl) {
+            markNotificationRead(id, cardEl);
+            _notifNavigate(_notifList.find(n => n.id === id));
         }
         async function markAllNotificationsRead() {
             const sid = cantSid();
@@ -3426,7 +3475,7 @@
                 const posts = r.posts || [];
                 if (!posts.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">No posts yet — be the first to post!</p>'; return; }
                 el.innerHTML = posts.map(p => `
-                    <div class="wallet-stat-card mb-2" style="text-align:left">
+                    <div class="wallet-stat-card mb-2" id="forum-post-${p.id}" style="text-align:left">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <div style="width:28px;height:28px;border-radius:50%;background:var(--p-primary);color:var(--p-surface);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.75rem;flex-shrink:0">${cantEsc((p.author_name || '?').charAt(0))}</div>
                             <div>
@@ -3512,7 +3561,7 @@
                 if (!entries.length) { el.innerHTML = '<p class="text-center py-5" style="color:var(--p-ink-dim)">Nothing here yet</p>'; return; }
                 el.innerHTML = entries.map(e => {
                     const meta = DIARY_TYPE_META[e.entry_type] || DIARY_TYPE_META.wish;
-                    return `<div class="wallet-stat-card mb-2" style="text-align:left;border-left:3px solid ${meta.color}">
+                    return `<div class="wallet-stat-card mb-2" id="diary-entry-${e.id}" style="text-align:left;border-left:3px solid ${meta.color}">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <i class="bi ${meta.icon}" style="color:${meta.color}"></i>
                             <span style="font-weight:800;font-size:0.8rem">${cantEsc(meta.label)}</span>
