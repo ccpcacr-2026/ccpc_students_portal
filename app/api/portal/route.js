@@ -1845,7 +1845,7 @@ export async function POST(req) {
               user_id: 'student:' + m.student_id,
               type: 'group_form_review_' + status,
               title: `${status === 'approved' ? 'Approved' : 'Rejected'} — ${formTitle}`,
-              message: `Admin ${verb} your team's submission for "${formTitle}".`,
+              message: `The authority has ${verb} your team's submission for "${formTitle}".`,
               data: { team_id: Number(team_id), group_form_id: groupFormId },
               is_read: false,
               created_at: now,
