@@ -434,3 +434,51 @@ ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS lock_when_closed boolea
 -- everything else here.
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+
+-- ── Judging rubric: N named criteria, admin-defined once per form ──────────
+-- [{key, label, max}] -- key is a short stable id assigned when the
+-- criterion is added (never reused/reordered-by-index), so existing
+-- group_form_judge_scores rows stay valid even if the admin later reorders
+-- or renames a criterion.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judging_criteria_json text NOT NULL DEFAULT '[]';
+
+-- ── Judges: one row per judge per form, access by a shared secret code ─────
+-- No staff login involved on purpose -- judges are often not staff. The
+-- access_code IS the judge's identity, validated fresh on every request by
+-- ccpc-teachers' app/judge/[code]/route.js -- a standalone public page/API
+-- in one file, separate from student-admin/route.js, so the judge-facing
+-- endpoints never share a code path with staff auth.
+CREATE TABLE IF NOT EXISTS student.group_form_judges (
+  id              bigserial PRIMARY KEY,
+  group_form_id   bigint      NOT NULL,
+  name            text        NOT NULL,
+  access_code     text        NOT NULL UNIQUE,
+  is_enabled      boolean     NOT NULL DEFAULT true,
+  sort_order      int         NOT NULL DEFAULT 0,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS group_form_judges_form_idx ON student.group_form_judges (group_form_id);
+ALTER TABLE student.group_form_judges ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_form_judges_all" ON student.group_form_judges;
+CREATE POLICY "group_form_judges_all" ON student.group_form_judges FOR ALL USING (true);
+GRANT ALL ON student.group_form_judges TO anon, authenticated, service_role;
+
+-- ── One judge's scores for one team ─────────────────────────────────────────
+-- scores_json: {criterionKey: number}. The total is never stored here --
+-- always summed on read -- so editing the rubric later can't leave a stale
+-- total lying around.
+CREATE TABLE IF NOT EXISTS student.group_form_judge_scores (
+  id              bigserial PRIMARY KEY,
+  group_form_id   bigint      NOT NULL,
+  judge_id        bigint      NOT NULL,
+  team_id         bigint      NOT NULL,
+  scores_json     text        NOT NULL DEFAULT '{}',
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (judge_id, team_id)
+);
+CREATE INDEX IF NOT EXISTS group_form_judge_scores_team_idx ON student.group_form_judge_scores (team_id);
+CREATE INDEX IF NOT EXISTS group_form_judge_scores_judge_idx ON student.group_form_judge_scores (judge_id);
+ALTER TABLE student.group_form_judge_scores ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "group_form_judge_scores_all" ON student.group_form_judge_scores;
+CREATE POLICY "group_form_judge_scores_all" ON student.group_form_judge_scores FOR ALL USING (true);
+GRANT ALL ON student.group_form_judge_scores TO anon, authenticated, service_role;
