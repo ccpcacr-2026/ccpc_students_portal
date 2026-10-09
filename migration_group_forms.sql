@@ -418,3 +418,19 @@ ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS accepting_condition_jso
 -- (a summary, not a fill-up form) once closed -- Submit still works, just no
 -- further edits -- see renderTeamView's closedForMe in public/index.html.
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS lock_when_closed boolean NOT NULL DEFAULT false;
+
+-- ── Archiving a form for permanent, read-only reuse ──────────────────────────
+-- Lets an admin "retire" a form (e.g. Science Fair 2026) at the end of an
+-- event -- its final roster, scores (group_data) and formation stay exactly
+-- as they are, still fully viewable/printable/exportable by admin and
+-- reviewers, but every mutation is refused: no edit, no approve/reject, no
+-- lock/unlock/disband/delete, no add/remove member, no new team, and no
+-- student-side create/invite/submit/edit either -- archiving is meant to
+-- freeze the WHOLE form, not just the admin side. The one thing archived
+-- never blocks is flipping this flag back off, so a mistaken archive is
+-- always recoverable. Independent of is_enabled/accepting_new -- archiving
+-- doesn't auto-touch either, so an admin who wants students to stop seeing
+-- it too still switches Active off themselves, same two-step control as
+-- everything else here.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS archived_at timestamptz;

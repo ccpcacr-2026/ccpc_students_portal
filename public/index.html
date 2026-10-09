@@ -6265,31 +6265,36 @@
             }
             list.innerHTML = ALL_GROUP_FORMS.map((f, i) => `
                 <div class="col-md-6">
-                    <div class="card p-3 mb-0 shadow-sm border-0" style="${f.is_enabled ? '' : 'opacity:0.6'}">
+                    <div class="card p-3 mb-0 shadow-sm ${f.archived ? 'border-warning' : 'border-0'}" style="${f.is_enabled ? '' : 'opacity:0.6'}">
                         <div class="d-flex flex-row justify-content-between align-items-center">
                             <div class="text-truncate">
                                 <strong><i class="bi ${f.icon_class||'bi-people-fill'} me-2 text-primary"></i>${f.title}</strong>
+                                ${f.archived ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem"><i class="bi bi-archive-fill"></i> Archived — read-only</span>' : ''}
                                 ${f.is_enabled ? '' : ' <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size:0.6rem">Hidden from students</span>'}
                                 ${f.accepting_new === false ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem">Closed to new teams</span>' : ''}
                             </div>
                         </div>
                         <p class="small text-muted mb-2 mt-1" style="font-size:0.72rem">Up to ${f.max_team_size} per team${f.members_required ? ' · must be full to count as complete' : ''}${gfEligibilitySummary(f.eligibility_json)}</p>
                         <div class="d-flex gap-2 align-items-center flex-wrap">
-                            <button onclick="editGroupForm(${i})" class="btn btn-xs btn-primary rounded-pill px-3">Edit</button>
+                            <button onclick="editGroupForm(${i})" ${f.archived ? 'disabled title="Archived — unarchive first to edit"' : ''} class="btn btn-xs ${f.archived ? 'btn-outline-secondary disabled' : 'btn-primary'} rounded-pill px-3">Edit</button>
                             <button onclick="openGroupRoster(${f.id})" class="btn btn-xs btn-outline-dark rounded-pill px-3">View Teams</button>
-                            <button onclick="backfillGroupFormRefNumbers(${f.id})" class="btn btn-xs btn-outline-secondary rounded-pill px-3" title="Fill in reference numbers for submitted teams that don't have one yet">Backfill Ref#</button>
+                            <button onclick="backfillGroupFormRefNumbers(${f.id})" ${f.archived ? 'disabled' : ''} class="btn btn-xs btn-outline-secondary rounded-pill px-3" title="Fill in reference numbers for submitted teams that don't have one yet">Backfill Ref#</button>
                             <button onclick="deleteGroupFormConfig(${f.id})" class="btn btn-xs btn-danger rounded-pill px-3">Del</button>
-                            <div class="form-check form-switch mb-0 ms-auto" title="Active forms are visible to students; inactive forms are hidden without deleting their setup or data">
-                                <input class="form-check-input" type="checkbox" id="gf-active-${f.id}" ${f.is_enabled?'checked':''} onchange="toggleGroupFormFlag(${f.id},'is_enabled',this.checked)">
+                            <div class="form-check form-switch mb-0 ms-auto" title="Freeze this form permanently: no edits, approvals, locks, disbands or new teams/invites by anyone — still fully viewable, printable and exportable. Unarchive any time to resume normal use.">
+                                <input class="form-check-input" type="checkbox" id="gf-archived-${f.id}" ${f.archived?'checked':''} onchange="toggleGroupFormFlag(${f.id},'archived',this.checked)">
+                                <label class="form-check-label small fw-700 text-warning-emphasis" for="gf-archived-${f.id}">${f.archived?'Archived':'Archive'}</label>
+                            </div>
+                            <div class="form-check form-switch mb-0 ${f.archived ? 'opacity-50' : ''}" title="Active forms are visible to students; inactive forms are hidden without deleting their setup or data">
+                                <input class="form-check-input" type="checkbox" id="gf-active-${f.id}" ${f.is_enabled?'checked':''} ${f.archived ? 'disabled' : ''} onchange="toggleGroupFormFlag(${f.id},'is_enabled',this.checked)">
                                 <label class="form-check-label small fw-700" for="gf-active-${f.id}">${f.is_enabled?'Active':'Inactive'}</label>
                             </div>
-                            <div class="form-check form-switch mb-0" title="Turn off to stop new teams from being created — teams already made keep working">
-                                <input class="form-check-input" type="checkbox" id="gf-open-${f.id}" ${f.accepting_new!==false?'checked':''} onchange="toggleGroupFormFlag(${f.id},'accepting_new',this.checked)">
+                            <div class="form-check form-switch mb-0 ${f.archived ? 'opacity-50' : ''}" title="Turn off to stop new teams from being created — teams already made keep working">
+                                <input class="form-check-input" type="checkbox" id="gf-open-${f.id}" ${f.accepting_new!==false?'checked':''} ${f.archived ? 'disabled' : ''} onchange="toggleGroupFormFlag(${f.id},'accepting_new',this.checked)">
                                 <label class="form-check-label small fw-700" for="gf-open-${f.id}">${f.accepting_new!==false?'Open':'Closed'}</label>
                             </div>
-                            <button type="button" onclick="gfOpenRulesModal(${i})" class="btn btn-xs btn-outline-dark rounded-pill px-3" title="Restrict Active/Open to specific classes, sections or students">${_gfRulesSummaryBadge(f)}Filter</button>
-                            <div class="form-check form-switch mb-0" title="Unchecked (default): a team already started keeps being editable even once Active-but-not-Open. Checked: fields freeze to a read-only summary once closed — Submit still works, just no further edits.">
-                                <input class="form-check-input" type="checkbox" id="gf-lock-${f.id}" ${f.lock_when_closed?'checked':''} onchange="toggleGroupFormFlag(${f.id},'lock_when_closed',this.checked)">
+                            <button type="button" onclick="gfOpenRulesModal(${i})" ${f.archived ? 'disabled' : ''} class="btn btn-xs btn-outline-dark rounded-pill px-3" title="Restrict Active/Open to specific classes, sections or students">${_gfRulesSummaryBadge(f)}Filter</button>
+                            <div class="form-check form-switch mb-0 ${f.archived ? 'opacity-50' : ''}" title="Unchecked (default): a team already started keeps being editable even once Active-but-not-Open. Checked: fields freeze to a read-only summary once closed — Submit still works, just no further edits.">
+                                <input class="form-check-input" type="checkbox" id="gf-lock-${f.id}" ${f.lock_when_closed?'checked':''} ${f.archived ? 'disabled' : ''} onchange="toggleGroupFormFlag(${f.id},'lock_when_closed',this.checked)">
                                 <label class="form-check-label small fw-700" for="gf-lock-${f.id}">Freeze on close</label>
                             </div>
                         </div>
@@ -6741,7 +6746,7 @@
             document.getElementById('gf-roster-filter-panel').style.display = 'none';
             const searchEl = document.getElementById('gf-roster-search');
             if (searchEl) searchEl.value = '';
-            document.getElementById('admin-group-roster-title').textContent = 'Teams — ' + (form ? form.title : '');
+            document.getElementById('admin-group-roster-title').innerHTML = _escHtml('Teams — ' + (form ? form.title : '')) + (form && form.archived ? ' <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.6rem"><i class="bi bi-archive-fill"></i> Archived — read-only</span>' : '');
             document.getElementById('admin-group-roster').classList.remove('hidden');
             document.getElementById('admin-group-roster-list').innerHTML = '<p class="text-muted small">Loading…</p>';
             portalFetch('get_group_form_roster', { group_form_id: groupFormId }).then(res => {
@@ -7243,6 +7248,7 @@
                             <div class="small text-muted" style="font-size:0.72rem">${t.members.length}${maxSize ? '/' + maxSize : ''} members${t.pending_invites.length ? ' · ' + t.pending_invites.length + ' pending invite(s)' : ''}${t.submitted_at ? ' · submitted ' + new Date(t.submitted_at).toLocaleString() : ''}</div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap gf-no-print">
+                            ${form && form.archived ? `<span class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.65rem"><i class="bi bi-archive-fill"></i> Archived — read-only</span>` : `
                             ${t.status !== 'disbanded' ? `
                             ${t.review_status !== 'approved' ? `<button onclick="setReviewStatusAdmin(${t.id}, 'approved')" class="btn btn-xs btn-outline-success rounded-pill px-3">Approve</button>` : `<button onclick="setReviewStatusAdmin(${t.id}, null)" class="btn btn-xs btn-outline-secondary rounded-pill px-3">Unapprove</button>`}
                             ${t.review_status !== 'rejected' ? `<button onclick="setReviewStatusAdmin(${t.id}, 'rejected')" class="btn btn-xs btn-outline-danger rounded-pill px-3">Reject</button>` : `<button onclick="setReviewStatusAdmin(${t.id}, null)" class="btn btn-xs btn-outline-secondary rounded-pill px-3">Unreject</button>`}
@@ -7251,6 +7257,7 @@
                             <button onclick="disbandTeamAdmin(${t.id})" class="btn btn-xs btn-outline-danger rounded-pill px-3">Disband</button>
                             ` : ''}
                             <button onclick="deleteTeamAdmin(${t.id})" class="btn btn-xs btn-danger rounded-pill px-3">Delete</button>
+                            `}
                         </div>
                     </div>
                     <div class="mt-2 d-flex flex-wrap gap-2">
