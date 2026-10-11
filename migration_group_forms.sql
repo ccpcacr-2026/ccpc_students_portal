@@ -482,3 +482,13 @@ ALTER TABLE student.group_form_judge_scores ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "group_form_judge_scores_all" ON student.group_form_judge_scores;
 CREATE POLICY "group_form_judge_scores_all" ON student.group_form_judge_scores FOR ALL USING (true);
 GRANT ALL ON student.group_form_judge_scores TO anon, authenticated, service_role;
+
+-- ── Scope a judge to one slice of teams, same vocabulary as a reviewer
+-- rule's own dimension/value ('all' | 'class' | 'house' | 'group' | an
+-- 'answer:<data_key>' from the form's own fields_json) -- a judge is one
+-- person covering one slice, so (unlike reviewers, who can hold several
+-- rules) this lives directly on the judge row rather than a separate
+-- rules table. 'all' (the default) keeps today's behavior -- sees every
+-- team on the form.
+ALTER TABLE student.group_form_judges ADD COLUMN IF NOT EXISTS scope_dimension text NOT NULL DEFAULT 'all';
+ALTER TABLE student.group_form_judges ADD COLUMN IF NOT EXISTS scope_value text;
