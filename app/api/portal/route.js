@@ -634,7 +634,18 @@ async function buildReferenceNumber(referenceNumberJson, form, leaderProfile, gr
       }
     }
     else if (source) value = leaderProfile ? leaderProfile[source] : undefined; // e.g. 'house', 'class'
-    body += (map[value] || '');
+    const code = map[value];
+    // Every configured part must resolve to a real mapped code — a leader
+    // with no house yet, or a class that falls outside every eligibility
+    // band, used to silently contribute nothing and still produce a
+    // reference number with that segment just missing (e.g. "J2-008"
+    // instead of "3J2-008") — confusing, and impossible to tell apart from
+    // a correctly shorter code by looking at it. Returning null here means
+    // "not ready yet" instead, same as the all-empty case below; whichever
+    // later retry (submit-time, or Backfill Ref#) runs once the underlying
+    // data (house, class/band) is actually filled in will get it right.
+    if (!code) return null;
+    body += code;
   }
   if (!body) return null; // nothing matched — don't hand out a bare sequence number alone
 
