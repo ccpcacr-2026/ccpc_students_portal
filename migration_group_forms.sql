@@ -492,3 +492,14 @@ GRANT ALL ON student.group_form_judge_scores TO anon, authenticated, service_rol
 -- team on the form.
 ALTER TABLE student.group_form_judges ADD COLUMN IF NOT EXISTS scope_dimension text NOT NULL DEFAULT 'all';
 ALTER TABLE student.group_form_judges ADD COLUMN IF NOT EXISTS scope_value text;
+
+-- ── Remembered Judges Sheet / Combined Result print layouts ────────────────
+-- Both modals used to keep their column picks, blank/custom columns,
+-- judge selection, title and filter chips in a plain in-memory JS object
+-- only -- gone the moment the page reloaded or a new session opened, so an
+-- admin had to rebuild the same layout from scratch every time they came
+-- back to print. Saved here (one JSON blob per modal, written via
+-- save_group_form's own partial-update path) so it survives exactly like
+-- every other per-form setting on this table.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judges_sheet_layout_json text NOT NULL DEFAULT '{}';
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judges_combined_layout_json text NOT NULL DEFAULT '{}';
