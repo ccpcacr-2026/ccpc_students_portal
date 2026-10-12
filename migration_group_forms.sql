@@ -516,3 +516,10 @@ ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judges_combined_layout_
 -- a judge for a rubric meant that to stick, not be overridden by whichever
 -- teams that judge happens to be scoped to see.
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judging_rubric_sets_json text NOT NULL DEFAULT '[]';
+
+-- ── Judges' default sort order ──────────────────────────────────────────────
+-- {levels:[{field,dir}, ...], locked:bool} -- seeds the sort every judge's
+-- own scoring page opens with (set from the roster's "Judges Sort" panel).
+-- A judge can still re-sort their own page unless locked is true, in which
+-- case the sort controls on their page are disabled.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judges_sort_json text NOT NULL DEFAULT '{}';
