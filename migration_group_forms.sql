@@ -523,3 +523,10 @@ ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judging_rubric_sets_jso
 -- A judge can still re-sort their own page unless locked is true, in which
 -- case the sort controls on their page are disabled.
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judges_sort_json text NOT NULL DEFAULT '{}';
+
+-- ── Which non-score info fields show on the judge's own page ───────────────
+-- A JSON array of enabled keys from {reference_number, house, category,
+-- group, members, title, description} -- set from the roster's "Judge Link
+-- Columns" panel. An empty array (the default) means "show everything",
+-- so every form that predates this feature keeps looking exactly as it did.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judges_link_fields_json text NOT NULL DEFAULT '[]';
