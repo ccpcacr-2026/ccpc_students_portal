@@ -503,3 +503,16 @@ ALTER TABLE student.group_form_judges ADD COLUMN IF NOT EXISTS scope_value text;
 -- every other per-form setting on this table.
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judges_sheet_layout_json text NOT NULL DEFAULT '{}';
 ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judges_combined_layout_json text NOT NULL DEFAULT '{}';
+
+-- ── Additional named rubrics, each assigned to specific judges OR a filter ──
+-- judging_criteria_json (above) stays the form's DEFAULT rubric. Each entry
+-- here is {id, name, criteria:[{key,label,max}], assign_type:'judges'|
+-- 'filter', judge_ids:[...], filter_dimension, filter_values:[...]}.
+-- Resolution for a given (judge, team): a rubric assigned directly to that
+-- judge wins; otherwise a rubric whose filter matches the team's own
+-- house/category/group/answer value applies (same vocabulary as a judge's
+-- own scope_dimension); otherwise the default above. A judge-specific
+-- assignment deliberately beats a filter match -- an admin who hand-picked
+-- a judge for a rubric meant that to stick, not be overridden by whichever
+-- teams that judge happens to be scoped to see.
+ALTER TABLE student.group_forms ADD COLUMN IF NOT EXISTS judging_rubric_sets_json text NOT NULL DEFAULT '[]';
