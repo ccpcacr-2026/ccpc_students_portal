@@ -922,7 +922,7 @@ export async function POST(req) {
     const { student_id, class: cls, section } = payload;
     if (!student_id || !cls) return NextResponse.json({ result: 'error', message: 'student_id and class required.' });
     const rows = await sb(
-      `student_diary_entries?audience->>class=eq.${encodeURIComponent(cls)}&order=created_at.desc&limit=100&select=id,entry_type,audience,subject,message,due_date,teacher_id,created_at`,
+      `student_diary_entries?audience->>class=eq.${encodeURIComponent(cls)}&order=created_at.desc&limit=100&select=id,entry_type,audience,subject,message,due_date,teacher_id,created_at,case_type`,
       'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
     );
     if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
@@ -942,6 +942,70 @@ export async function POST(req) {
     if (Array.isArray(profiles)) profiles.forEach(p => { nameById[p.teacher_id] = p.full_name; });
     visible.forEach(e => { e.teacher_name = nameById[e.teacher_id] || e.teacher_id; });
     return NextResponse.json({ result: 'success', entries: visible });
+  }
+
+  // A guardian/student can reply on any diary/case entry that targets their
+  // own ward — validated server-side against diary_entry_students (the same
+  // table ccpc-teachers' own getStudentDiaryHistory reads), never a
+  // client-trusted check alone, even though the rest of this app's own
+  // identity model (student_id from the request payload) is otherwise
+  // client-trusted by established convention.
+  if (action === 'add_diary_reply') {
+    const { student_id, diary_entry_id, message: replyBody } = payload;
+    const text = String(replyBody || '').trim();
+    if (!student_id || !diary_entry_id || !text) return NextResponse.json({ result: 'error', message: 'student_id, diary_entry_id, and a message are required.' });
+    const linkRows = await sb(
+      `diary_entry_students?diary_entry_id=eq.${encodeURIComponent(diary_entry_id)}&student_id=eq.${encodeURIComponent(student_id)}`,
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
+    );
+    if (!Array.isArray(linkRows) || !linkRows.length) return NextResponse.json({ result: 'error', message: 'This entry does not target your student.' });
+    const created = await sb('diary_entry_replies', 'POST', {
+      diary_entry_id, author_role: 'guardian', author_id: student_id, message: text,
+    }, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
+    if (created?.error) return NextResponse.json({ result: 'error', message: created.error });
+    // Notify the filing teacher (and the current handler, if a committee
+    // case already has one) — same row shape ccpc-teachers' own
+    // _forumNotify already produces, hand-rolled here since this file has
+    // no shared helper to import (this codebase's established
+    // per-route-file duplication convention).
+    const entryRows = await sb(
+      `student_diary_entries?id=eq.${encodeURIComponent(diary_entry_id)}&select=teacher_id,current_handler_id`,
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
+    );
+    const entry = Array.isArray(entryRows) && entryRows[0];
+    if (entry) {
+      const preview = text.length > 100 ? text.slice(0, 100) + '…' : text;
+      const recipients = [...new Set([entry.teacher_id, entry.current_handler_id].filter(Boolean))];
+      if (recipients.length) {
+        await sb('notifications', 'POST', recipients.map(uid => ({
+          user_id: uid, type: 'diary_reply', title: 'A guardian replied to a diary entry',
+          message: preview, data: { diary_entry_id }, is_read: false, created_at: new Date().toISOString(),
+        })), { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' });
+      }
+    }
+    return NextResponse.json({ result: 'success', reply: created[0] });
+  }
+
+  if (action === 'get_diary_entry_replies') {
+    const { student_id, diary_entry_id } = payload;
+    if (!student_id || !diary_entry_id) return NextResponse.json({ result: 'error', message: 'student_id and diary_entry_id required.' });
+    const linkRows = await sb(
+      `diary_entry_students?diary_entry_id=eq.${encodeURIComponent(diary_entry_id)}&student_id=eq.${encodeURIComponent(student_id)}`,
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
+    );
+    if (!Array.isArray(linkRows) || !linkRows.length) return NextResponse.json({ result: 'error', message: 'This entry does not target your student.' });
+    const rows = await sb(
+      `diary_entry_replies?diary_entry_id=eq.${encodeURIComponent(diary_entry_id)}&order=created_at.asc&select=id,author_role,author_id,message,created_at`,
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
+    );
+    if (rows?.error) return NextResponse.json({ result: 'error', message: rows.error });
+    const list = Array.isArray(rows) ? rows : [];
+    const teacherIds = [...new Set(list.filter(r => r.author_role === 'teacher').map(r => r.author_id))];
+    if (teacherIds.length) {
+      const nameById = await _resolveAuthorNames(teacherIds);
+      list.forEach(r => { if (r.author_role === 'teacher') r.author_name = nameById[r.author_id] || r.author_id; });
+    }
+    return NextResponse.json({ result: 'success', replies: list });
   }
 
   // ── Student <-> Teacher direct messages ─────────────────────────────────────

@@ -3251,6 +3251,7 @@
         // get_student_notifications action — see app/api/portal/route.js.
         const NOTIF_TYPE_ICON = {
             diary_entry: 'bi-journal-text', diary_discipline: 'bi-exclamation-triangle-fill',
+            diary_case_committee: 'bi-people-fill', diary_reply: 'bi-reply-fill',
             forum_post: 'bi-chat-square-text-fill',
             group_form_revision: 'bi-arrow-counterclockwise',
             group_form_review_approved: 'bi-check-circle-fill',
@@ -3328,7 +3329,7 @@
         function _notifNavigate(n) {
             if (!n) return;
             const d = n.data || {};
-            if (n.type === 'diary_entry' || n.type === 'diary_reminder') {
+            if (n.type === 'diary_entry' || n.type === 'diary_reminder' || n.type === 'diary_case_committee' || n.type === 'diary_reply') {
                 switchTab('student-diary');
                 if (d.diary_entry_id) setTimeout(() => _scrollHighlight('diary-entry-' + d.diary_entry_id), 500);
             } else if (n.type === 'forum_post' || n.type === 'forum_mention' || n.type === 'forum_reply') {
@@ -3565,13 +3566,55 @@
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <i class="bi ${meta.icon}" style="color:${meta.color}"></i>
                             <span style="font-weight:800;font-size:0.8rem">${cantEsc(meta.label)}</span>
+                            ${e.case_type === 'committee' ? `<span class="wallet-stat-label" style="background:rgba(99,102,241,0.12);color:#6366f1;padding:1px 8px;border-radius:999px;font-weight:800">Committee Case</span>` : ''}
                         </div>
                         ${e.subject || e.due_date ? `<div class="wallet-stat-label">${cantEsc(e.subject || '')}${e.subject && e.due_date ? ' · ' : ''}${e.due_date ? 'Due ' + cantEsc(e.due_date) : ''}</div>` : ''}
                         <div style="font-size:0.85rem;white-space:pre-wrap;margin-top:4px">${cantEsc(e.message || '')}</div>
                         <div class="wallet-stat-label mt-2">By ${cantEsc(e.teacher_name || '')} · ${_notifTimeAgo(e.created_at)}</div>
+                        <div class="mt-2" style="cursor:pointer;color:var(--p-primary);font-size:0.78rem;font-weight:800" onclick="toggleDiaryReplies(${e.id})"><i class="bi bi-reply-fill"></i> Replies</div>
+                        <div id="diary-replies-${e.id}" style="display:none;margin-top:6px"></div>
                     </div>`;
                 }).join('');
             } catch (e) { el.innerHTML = '<p class="text-muted small">Could not load your diary.</p>'; }
+        }
+
+        // Same show/hide-then-lazy-load pattern as toggleForumReplies/
+        // sendForumReply above, just backed by the Diary reply actions
+        // instead of the Forum's.
+        async function toggleDiaryReplies(entryId) {
+            const box = document.getElementById('diary-replies-' + entryId);
+            if (!box) return;
+            const opening = box.style.display === 'none';
+            box.style.display = opening ? '' : 'none';
+            if (!opening) return;
+            box.innerHTML = '<p class="text-center py-2" style="color:var(--p-ink-dim);font-size:0.8rem">Loading…</p>';
+            const sid = cantSid();
+            try {
+                const r = await portalFetch('get_diary_entry_replies', { student_id: sid, diary_entry_id: entryId });
+                const replies = (r && r.result === 'success') ? (r.replies || []) : [];
+                box.innerHTML = `
+                    <div class="d-flex flex-column gap-2">
+                        ${replies.map(rp => `<div><span style="font-weight:800;font-size:0.78rem">${rp.author_role === 'teacher' ? cantEsc(rp.author_name || 'School') : 'You'}</span> <span style="font-size:0.78rem;color:var(--p-ink-dim)">${cantEsc(rp.message || '')}</span></div>`).join('') || '<p style="font-size:0.78rem;color:var(--p-ink-dim);margin:0">No replies yet</p>'}
+                    </div>
+                    <div class="d-flex gap-2 mt-2">
+                        <input type="text" class="form-control form-control-sm" placeholder="Write a reply…" style="border-radius:12px" onkeydown="if(event.key==='Enter'){sendDiaryReply(${entryId}, this);}">
+                        <button class="btn btn-sm" onclick="sendDiaryReply(${entryId}, this.previousElementSibling)" style="border-radius:12px;background:var(--p-primary);color:var(--p-surface);border:none;padding:0 12px"><i class="bi bi-send-fill"></i></button>
+                    </div>`;
+            } catch (e) { box.innerHTML = '<p class="text-muted small">Could not load replies.</p>'; }
+        }
+
+        async function sendDiaryReply(entryId, inputEl) {
+            const text = inputEl ? inputEl.value.trim() : '';
+            if (!text) return;
+            const sid = cantSid();
+            inputEl.disabled = true;
+            try {
+                await portalFetch('add_diary_reply', { student_id: sid, diary_entry_id: entryId, message: text });
+                inputEl.value = '';
+                toggleDiaryReplies(entryId); // closes
+                toggleDiaryReplies(entryId); // reopens fresh with the new reply
+            } catch (e) { alert('Could not send reply.'); }
+            finally { inputEl.disabled = false; }
         }
 
         // ── Messages (student <-> teacher direct messages) ──────────────────────
