@@ -944,6 +944,23 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', entries: visible });
   }
 
+  // Student Clubs (ccpc-teachers Part 19) — club_memberships lives in this
+  // app's own default `student` profile already; club name is read with the
+  // same `teacher_staff` profile override used above for diary entries.
+  if (action === 'get_my_club') {
+    const { student_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    const memberships = await sb(`club_memberships?student_id=eq.${encodeURIComponent(student_id)}&select=club_id`);
+    const clubId = Array.isArray(memberships) && memberships[0] ? memberships[0].club_id : null;
+    if (!clubId) return NextResponse.json({ result: 'success', club_name: null });
+    const clubs = await sb(
+      `clubs?id=eq.${encodeURIComponent(clubId)}&select=name`,
+      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
+    );
+    const club = Array.isArray(clubs) && clubs[0];
+    return NextResponse.json({ result: 'success', club_name: club ? club.name : null });
+  }
+
   // A guardian/student can reply on any diary/case entry that targets their
   // own ward — validated server-side against diary_entry_students (the same
   // table ccpc-teachers' own getStudentDiaryHistory reads), never a
