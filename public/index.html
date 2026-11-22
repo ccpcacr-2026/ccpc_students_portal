@@ -4062,6 +4062,7 @@
         }
 
         let _clubFetchInFlight = false;
+        let _clubInfo = null; // { locked, clubs, current_club_id, current_branch_id } once fetched
         function _ensureMyClubLoaded() {
             // club_name isn't a students_data column — it's derived via a
             // separate call (ccpc-teachers' Clubs feature). undefined means
@@ -4072,10 +4073,70 @@
             if (!sid) return;
             _clubFetchInFlight = true;
             portalFetch('get_my_club', { student_id: sid }).then(res => {
-                loggedInStudent.club_name = (res && res.result === 'success') ? res.club_name : null;
+                const ok = res && res.result === 'success';
+                const club = ok ? res.club_name : null;
+                const branch = ok ? res.branch_name : null;
+                loggedInStudent.club_name = club ? (branch ? `${club} — ${branch}` : club) : null;
+                _clubInfo = ok ? res : { locked: false, clubs: [] };
                 _clubFetchInFlight = false;
                 if (document.getElementById('hub-profile-card')) renderProfilePane(false);
-            }).catch(() => { loggedInStudent.club_name = null; _clubFetchInFlight = false; });
+                _renderClubSelfAssignBox();
+            }).catch(() => { loggedInStudent.club_name = null; _clubInfo = { locked: false, clubs: [] }; _clubFetchInFlight = false; _renderClubSelfAssignBox(); });
+        }
+
+        // Students pick their own club/branch here until an Admin/VP/Cord
+        // locks it (ccpc-teachers' Clubs module) — re-editable any time it's
+        // unlocked, same selection the class teacher's own "My Class" tool
+        // writes to (one shared club_memberships row per student).
+        function _renderClubSelfAssignBox() {
+            const el = document.getElementById('club-self-assign-box');
+            if (!el) return;
+            if (!_clubInfo || _clubInfo.locked) { el.innerHTML = ''; return; }
+            const clubs = _clubInfo.clubs || [];
+            if (!clubs.length) { el.innerHTML = ''; return; }
+            const curBranch = _clubInfo.current_branch_id;
+            const curClub = _clubInfo.current_club_id;
+            el.innerHTML = `
+                <div class="card p-3 mt-3 shadow-sm border-0">
+                    <h2 class="h6 section-title mb-1"><i class="bi bi-people-fill text-primary me-1"></i>My Club</h2>
+                    <p class="small text-muted mb-2" style="font-size:0.72rem">Pick your club/branch — you can change this any time until it's locked.</p>
+                    <select id="club-self-assign-select" class="form-select form-select-sm" onchange="_submitClubSelfAssign(this.value)">
+                        <option value="">No club</option>
+                        ${clubs.map(c => {
+                            const branches = c.branches || [];
+                            if (!branches.length) {
+                                return `<option value="c${c.id}" ${!curBranch && String(curClub) === String(c.id) ? 'selected' : ''}>${c.name}</option>`;
+                            }
+                            return `<optgroup label="${c.name}">${branches.map(b => `<option value="b${b.id}" ${String(curBranch) === String(b.id) ? 'selected' : ''}>${b.name}</option>`).join('')}</optgroup>`;
+                        }).join('')}
+                    </select>
+                </div>`;
+        }
+
+        function _submitClubSelfAssign(value) {
+            const sid = loggedInStudent && loggedInStudent.student_id;
+            if (!sid) return;
+            const isBranch = value.startsWith('b');
+            const isClub = value.startsWith('c');
+            const payload = { student_id: sid };
+            if (isBranch) payload.branch_id = value.slice(1);
+            else if (isClub) payload.club_id = value.slice(1);
+            portalFetch('self_assign_club', payload).then(res => {
+                if (!res || res.result !== 'success') {
+                    if (typeof showToast === 'function') showToast((res && res.message) || 'Could not update club', 'error');
+                    return;
+                }
+                _clubInfo.current_club_id = res.club_id;
+                _clubInfo.current_branch_id = res.branch_id;
+                let clubName = null, branchName = null;
+                (_clubInfo.clubs || []).forEach(c => {
+                    if (res.branch_id) { const b = (c.branches || []).find(x => String(x.id) === String(res.branch_id)); if (b) { clubName = c.name; branchName = b.name; } }
+                    else if (res.club_id && String(c.id) === String(res.club_id)) clubName = c.name;
+                });
+                loggedInStudent.club_name = clubName ? (branchName ? `${clubName} — ${branchName}` : clubName) : null;
+                if (document.getElementById('hub-profile-card')) renderProfilePane(false);
+                if (typeof showToast === 'function') showToast('Club updated', 'success');
+            }).catch(() => { if (typeof showToast === 'function') showToast('Network error while saving', 'error'); });
         }
 
         function buildProfileCardInner(editMode) {
@@ -5084,6 +5145,7 @@
                             </div>
                         </div>
                         <div id="hub-profile-card" class="card profile-grid-compressed">${buildProfileCardInner(false)}</div>
+                        <div id="club-self-assign-box"></div>
 
                         <!-- PIN login security -->
                         <div class="card p-4 mt-4 shadow-sm border-0">

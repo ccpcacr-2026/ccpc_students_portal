@@ -945,20 +945,75 @@ export async function POST(req) {
   }
 
   // Student Clubs (ccpc-teachers Part 19) — club_memberships lives in this
-  // app's own default `student` profile already; club name is read with the
-  // same `teacher_staff` profile override used above for diary entries.
+  // app's own default `student` profile already; clubs/club_branches/
+  // system_settings are read with the same `teacher_staff` profile override
+  // already used above for diary entries. Students may self-assign their
+  // own club/branch until an Admin/VP/Cord locks it (system_settings key
+  // 'club_self_assign_locked' — default OPEN, i.e. missing row = unlocked,
+  // set from ccpc-teachers' own Clubs module).
+  const TEACHER_STAFF_HEADERS = { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' };
   if (action === 'get_my_club') {
     const { student_id } = payload;
     if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
-    const memberships = await sb(`club_memberships?student_id=eq.${encodeURIComponent(student_id)}&select=club_id`);
-    const clubId = Array.isArray(memberships) && memberships[0] ? memberships[0].club_id : null;
-    if (!clubId) return NextResponse.json({ result: 'success', club_name: null });
-    const clubs = await sb(
-      `clubs?id=eq.${encodeURIComponent(clubId)}&select=name`,
-      'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }
+    const [memberships, lockRows] = await Promise.all([
+      sb(`club_memberships?student_id=eq.${encodeURIComponent(student_id)}&select=club_id,branch_id`),
+      sb('system_settings?key=eq.club_self_assign_locked&select=value', 'GET', null, TEACHER_STAFF_HEADERS),
+    ]);
+    const membership = Array.isArray(memberships) && memberships[0];
+    const lockRow = Array.isArray(lockRows) && lockRows[0];
+    const locked = lockRow ? !!lockRow.value : false;
+    const clubId = membership ? membership.club_id : null;
+    let clubName = null, branchName = null;
+    if (clubId) {
+      const clubs = await sb(`clubs?id=eq.${encodeURIComponent(clubId)}&select=name`, 'GET', null, TEACHER_STAFF_HEADERS);
+      const club = Array.isArray(clubs) && clubs[0];
+      clubName = club ? club.name : null;
+      if (membership.branch_id) {
+        const branches = await sb(`club_branches?id=eq.${encodeURIComponent(membership.branch_id)}&select=name`, 'GET', null, TEACHER_STAFF_HEADERS);
+        const branch = Array.isArray(branches) && branches[0];
+        branchName = branch ? branch.name : null;
+      }
+    }
+    const result = {
+      result: 'success', club_name: clubName, branch_name: branchName, locked,
+      current_club_id: clubId, current_branch_id: membership ? membership.branch_id : null,
+    };
+    if (!locked) {
+      const [clubs, branches] = await Promise.all([
+        sb('clubs?select=id,name&order=name.asc', 'GET', null, TEACHER_STAFF_HEADERS),
+        sb('club_branches?select=id,club_id,name&order=name.asc', 'GET', null, TEACHER_STAFF_HEADERS),
+      ]);
+      const branchesByClub = {};
+      (Array.isArray(branches) ? branches : []).forEach(b => { (branchesByClub[b.club_id] = branchesByClub[b.club_id] || []).push({ id: b.id, name: b.name }); });
+      result.clubs = (Array.isArray(clubs) ? clubs : []).map(c => ({ id: c.id, name: c.name, branches: branchesByClub[c.id] || [] }));
+    }
+    return NextResponse.json(result);
+  }
+
+  if (action === 'self_assign_club') {
+    const { student_id, club_id, branch_id } = payload;
+    if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });
+    const lockRows = await sb('system_settings?key=eq.club_self_assign_locked&select=value', 'GET', null, TEACHER_STAFF_HEADERS);
+    const lockRow = Array.isArray(lockRows) && lockRows[0];
+    if (lockRow && lockRow.value) return NextResponse.json({ result: 'error', message: 'Club selection is currently locked.' });
+    if (!club_id && !branch_id) {
+      await sb(`club_memberships?student_id=eq.${encodeURIComponent(student_id)}`, 'DELETE');
+      return NextResponse.json({ result: 'success', club_id: null, branch_id: null });
+    }
+    let finalClubId = club_id || null;
+    if (branch_id) {
+      const branches = await sb(`club_branches?id=eq.${encodeURIComponent(branch_id)}&select=club_id`, 'GET', null, TEACHER_STAFF_HEADERS);
+      const branch = Array.isArray(branches) && branches[0];
+      if (!branch) return NextResponse.json({ result: 'error', message: 'Branch not found.' });
+      finalClubId = branch.club_id;
+    }
+    const upserted = await sb(
+      'club_memberships?on_conflict=student_id', 'POST',
+      { student_id, club_id: finalClubId, branch_id: branch_id || null, assigned_by: 'student:' + student_id, assigned_at: new Date().toISOString() },
+      { Prefer: 'resolution=merge-duplicates,return=representation' }
     );
-    const club = Array.isArray(clubs) && clubs[0];
-    return NextResponse.json({ result: 'success', club_name: club ? club.name : null });
+    if (upserted?.error) return NextResponse.json({ result: 'error', message: upserted.error });
+    return NextResponse.json({ result: 'success', club_id: finalClubId, branch_id: branch_id || null });
   }
 
   // A guardian/student can reply on any diary/case entry that targets their
