@@ -993,6 +993,19 @@ export async function POST(req) {
     return NextResponse.json(result);
   }
 
+  // Read-only notice feed for a club (e.g. "Practice today, 4pm") — posted
+  // from ccpc-teachers' Clubs module. Not sensitive, same trust level as
+  // every other read in this file.
+  if (action === 'get_club_notices') {
+    const { club_id } = payload;
+    if (!club_id) return NextResponse.json({ result: 'error', message: 'club_id required.' });
+    const notices = await sb(
+      `club_notices?club_id=eq.${encodeURIComponent(club_id)}&select=id,message,created_at&order=created_at.desc&limit=20`,
+      'GET', null, TEACHER_STAFF_HEADERS
+    );
+    return NextResponse.json({ result: 'success', notices: Array.isArray(notices) ? notices : [] });
+  }
+
   if (action === 'self_assign_club') {
     const { student_id, club_id, branch_id } = payload;
     if (!student_id) return NextResponse.json({ result: 'error', message: 'student_id required.' });

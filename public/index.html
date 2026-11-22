@@ -4081,7 +4081,32 @@
                 _clubFetchInFlight = false;
                 if (document.getElementById('hub-profile-card')) renderProfilePane(false);
                 _renderClubSelfAssignBox();
+                _loadClubNotices();
             }).catch(() => { loggedInStudent.club_name = null; _clubInfo = { locked: false, clubs: [] }; _clubFetchInFlight = false; _renderClubSelfAssignBox(); });
+        }
+
+        function _escClubText(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        function _loadClubNotices() {
+            const el = document.getElementById('club-notices-box');
+            if (!el) return;
+            const clubId = _clubInfo && _clubInfo.current_club_id;
+            if (!clubId) { el.innerHTML = ''; return; }
+            portalFetch('get_club_notices', { club_id: clubId }).then(res => {
+                const notices = (res && res.result === 'success' && res.notices) || [];
+                if (!notices.length) { el.innerHTML = ''; return; }
+                el.innerHTML = `
+                    <div class="card p-3 mt-3 shadow-sm border-0">
+                        <h2 class="h6 section-title mb-2"><i class="bi bi-megaphone-fill text-primary me-1"></i>Club Notices</h2>
+                        ${notices.map(n => `
+                            <div class="pb-2 mb-2 border-bottom">
+                                <p class="small mb-0" style="font-size:0.78rem">${_escClubText(n.message)}</p>
+                                <p class="small text-muted mb-0" style="font-size:0.68rem">${new Date(n.created_at).toLocaleString()}</p>
+                            </div>`).join('')}
+                    </div>`;
+            }).catch(() => { el.innerHTML = ''; });
         }
 
         // Students pick their own club/branch here until an Admin/VP/Cord
@@ -5159,6 +5184,7 @@
                         </div>
                         <div id="hub-profile-card" class="card profile-grid-compressed">${buildProfileCardInner(false)}</div>
                         <div id="club-self-assign-box"></div>
+                        <div id="club-notices-box"></div>
 
                         <!-- PIN login security -->
                         <div class="card p-4 mt-4 shadow-sm border-0">
