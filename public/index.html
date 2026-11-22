@@ -816,6 +816,16 @@
             <div style="font-size:0.78rem;font-weight:900;color:var(--primary);letter-spacing:0.01em;line-height:1.2">CCPC Portal</div>
             <div style="font-size:0.58rem;font-weight:700;color:var(--text-3);letter-spacing:0.05em;text-transform:uppercase">Student Information System</div>
         </div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+            <button onclick="switchTab('student-messages')" style="position:relative;width:34px;height:34px;border-radius:10px;border:none;background:var(--p-surface,rgba(0,0,0,0.05));color:var(--primary);display:flex;align-items:center;justify-content:center">
+                <i class="bi bi-envelope-fill"></i>
+                <span id="headerMsgBadge" class="hidden" style="position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#ef4444;color:#fff;font-size:0.6rem;font-weight:800;line-height:16px;text-align:center"></span>
+            </button>
+            <button onclick="switchTab('notifications')" style="position:relative;width:34px;height:34px;border-radius:10px;border:none;background:var(--p-surface,rgba(0,0,0,0.05));color:var(--primary);display:flex;align-items:center;justify-content:center">
+                <i class="bi bi-bell-fill"></i>
+                <span id="headerNotifBadge" class="hidden" style="position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#ef4444;color:#fff;font-size:0.6rem;font-weight:800;line-height:16px;text-align:center"></span>
+            </button>
+        </div>
     </header>
 
     <div id="main-wrapper">
@@ -832,9 +842,19 @@
             </div>
             <div id="sidebar-student-card" class="sidebar-student-card">
                 <div id="sidebar-student-avatar" class="sidebar-student-avatar">?</div>
-                <div style="min-width:0">
+                <div style="min-width:0;flex:1">
                     <div id="sidebar-student-name" class="sidebar-student-name">—</div>
                     <div id="sidebar-student-id-label" class="sidebar-student-id">—</div>
+                </div>
+                <div style="display:flex;gap:6px">
+                    <button onclick="switchTab('student-messages')" style="position:relative;width:30px;height:30px;border-radius:9px;border:none;background:rgba(255,255,255,0.1);color:#fff;display:flex;align-items:center;justify-content:center">
+                        <i class="bi bi-envelope-fill" style="font-size:0.85rem"></i>
+                        <span id="headerMsgBadgeSb" class="hidden" style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#ef4444;color:#fff;font-size:0.56rem;font-weight:800;line-height:15px;text-align:center"></span>
+                    </button>
+                    <button onclick="switchTab('notifications')" style="position:relative;width:30px;height:30px;border-radius:9px;border:none;background:rgba(255,255,255,0.1);color:#fff;display:flex;align-items:center;justify-content:center">
+                        <i class="bi bi-bell-fill" style="font-size:0.85rem"></i>
+                        <span id="headerNotifBadgeSb" class="hidden" style="position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#ef4444;color:#fff;font-size:0.56rem;font-weight:800;line-height:15px;text-align:center"></span>
+                    </button>
                 </div>
             </div>
             <div class="sidebar-nav-list" id="sidebar-items"></div>
@@ -3369,6 +3389,12 @@
                         dot.textContent = unread > 9 ? '9+' : String(unread);
                     } else if (dot) { dot.remove(); }
                 });
+                ['headerNotifBadge', 'headerNotifBadgeSb'].forEach(id => {
+                    const b = document.getElementById(id);
+                    if (!b) return;
+                    if (unread > 0) { b.textContent = unread > 99 ? '99+' : unread; b.classList.remove('hidden'); }
+                    else b.classList.add('hidden');
+                });
             } catch (e) {}
         }
         // ── My Results (published OMR exam results) ──────────────────────────
@@ -3732,6 +3758,12 @@
                         if (!dot) { dot = document.createElement('span'); dot.className = 'notif-unread-dot'; dot.style.cssText = 'display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#ef4444;color:#fff;font-size:0.6rem;font-weight:800;line-height:16px;margin-left:6px'; btn.appendChild(dot); }
                         dot.textContent = unread > 9 ? '9+' : String(unread);
                     } else if (dot) { dot.remove(); }
+                });
+                ['headerMsgBadge', 'headerMsgBadgeSb'].forEach(id => {
+                    const b = document.getElementById(id);
+                    if (!b) return;
+                    if (unread > 0) { b.textContent = unread > 99 ? '99+' : unread; b.classList.remove('hidden'); }
+                    else b.classList.add('hidden');
                 });
             } catch (e) {}
         }
@@ -4942,6 +4974,11 @@
                 addNav('accounts', 'Accounts', 'bi-people-fill');
                 _refreshNotificationBadge();
                 _refreshMessageBadge();
+                if (!window._badgePollStarted) {
+                    window._badgePollStarted = true;
+                    setInterval(_refreshNotificationBadge, 60 * 1000);
+                    setInterval(_refreshMessageBadge, 45 * 1000);
+                }
                 const _formSectionEpoch = uiEpoch;
                 portalFetch('get_permanent_tabs_config', {}).then(cfg => {
                     if (_formSectionEpoch !== uiEpoch) return; // logged out / UI rebuilt while loading
