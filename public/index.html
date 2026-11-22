@@ -4096,6 +4096,7 @@
             if (!clubs.length) { el.innerHTML = ''; return; }
             const curBranch = _clubInfo.current_branch_id;
             const curClub = _clubInfo.current_club_id;
+            const selected = clubs.find(c => String(c.id) === String(curClub));
             el.innerHTML = `
                 <div class="card p-3 mt-3 shadow-sm border-0">
                     <h2 class="h6 section-title mb-1"><i class="bi bi-people-fill text-primary me-1"></i>My Club</h2>
@@ -4110,6 +4111,16 @@
                             return `<optgroup label="${c.name}">${branches.map(b => `<option value="b${b.id}" ${String(curBranch) === String(b.id) ? 'selected' : ''}>${b.name}</option>`).join('')}</optgroup>`;
                         }).join('')}
                     </select>
+                    <div id="club-self-assign-info">${_clubInfoCardHtml(selected)}</div>
+                </div>`;
+        }
+
+        function _clubInfoCardHtml(club) {
+            if (!club || (!club.badge_url && !club.description)) return '';
+            return `
+                <div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top">
+                    ${club.badge_url ? `<img src="${club.badge_url}" style="width:44px;height:44px;border-radius:10px;object-fit:cover" class="flex-shrink-0">` : ''}
+                    <p class="small text-muted mb-0" style="font-size:0.72rem">${club.description || ''}</p>
                 </div>`;
         }
 
@@ -4134,6 +4145,8 @@
                     else if (res.club_id && String(c.id) === String(res.club_id)) clubName = c.name;
                 });
                 loggedInStudent.club_name = clubName ? (branchName ? `${clubName} — ${branchName}` : clubName) : null;
+                const infoEl = document.getElementById('club-self-assign-info');
+                if (infoEl) infoEl.innerHTML = _clubInfoCardHtml((_clubInfo.clubs || []).find(c => String(c.id) === String(res.club_id)));
                 if (document.getElementById('hub-profile-card')) renderProfilePane(false);
                 if (typeof showToast === 'function') showToast('Club updated', 'success');
             }).catch(() => { if (typeof showToast === 'function') showToast('Network error while saving', 'error'); });

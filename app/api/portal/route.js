@@ -963,11 +963,13 @@ export async function POST(req) {
     const lockRow = Array.isArray(lockRows) && lockRows[0];
     const locked = lockRow ? !!lockRow.value : false;
     const clubId = membership ? membership.club_id : null;
-    let clubName = null, branchName = null;
+    let clubName = null, branchName = null, badgeUrl = null, description = null;
     if (clubId) {
-      const clubs = await sb(`clubs?id=eq.${encodeURIComponent(clubId)}&select=name`, 'GET', null, TEACHER_STAFF_HEADERS);
+      const clubs = await sb(`clubs?id=eq.${encodeURIComponent(clubId)}&select=name,description,badge_url`, 'GET', null, TEACHER_STAFF_HEADERS);
       const club = Array.isArray(clubs) && clubs[0];
       clubName = club ? club.name : null;
+      badgeUrl = club ? club.badge_url : null;
+      description = club ? club.description : null;
       if (membership.branch_id) {
         const branches = await sb(`club_branches?id=eq.${encodeURIComponent(membership.branch_id)}&select=name`, 'GET', null, TEACHER_STAFF_HEADERS);
         const branch = Array.isArray(branches) && branches[0];
@@ -977,15 +979,16 @@ export async function POST(req) {
     const result = {
       result: 'success', club_name: clubName, branch_name: branchName, locked,
       current_club_id: clubId, current_branch_id: membership ? membership.branch_id : null,
+      badge_url: badgeUrl, description,
     };
     if (!locked) {
       const [clubs, branches] = await Promise.all([
-        sb('clubs?select=id,name&order=name.asc', 'GET', null, TEACHER_STAFF_HEADERS),
+        sb('clubs?select=id,name,description,badge_url&order=name.asc', 'GET', null, TEACHER_STAFF_HEADERS),
         sb('club_branches?select=id,club_id,name&order=name.asc', 'GET', null, TEACHER_STAFF_HEADERS),
       ]);
       const branchesByClub = {};
       (Array.isArray(branches) ? branches : []).forEach(b => { (branchesByClub[b.club_id] = branchesByClub[b.club_id] || []).push({ id: b.id, name: b.name }); });
-      result.clubs = (Array.isArray(clubs) ? clubs : []).map(c => ({ id: c.id, name: c.name, branches: branchesByClub[c.id] || [] }));
+      result.clubs = (Array.isArray(clubs) ? clubs : []).map(c => ({ id: c.id, name: c.name, description: c.description, badge_url: c.badge_url, branches: branchesByClub[c.id] || [] }));
     }
     return NextResponse.json(result);
   }
