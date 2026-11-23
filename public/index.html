@@ -2987,6 +2987,9 @@
                     if (id === 'announcements') {
                         loadAnnouncementsFeed();
                     }
+                    if (id === 'dashboard') {
+                        loadStudentDashboard();
+                    }
                     if (id === 'schedule') {
                         loadPresentStatus();
                     }
@@ -4962,7 +4965,8 @@
                 if(_sbId)   _sbId.textContent  = 'ID: ' + loggedInStudent.student_id + _classInfo;
                 if(_sbCard) _sbCard.style.display = 'flex';
 
-                addNav('profile', 'Personal Hub', 'bi-person-badge-fill', true);
+                addNav('dashboard', 'Dashboard', 'bi-grid-1x2-fill', true);
+                addNav('profile', 'Personal Hub', 'bi-person-badge-fill');
                 addNav('schedule', 'Schedule', 'bi-calendar3');
                 addNav('attendance', 'Attendance', 'bi-fingerprint');
                 addNav('announcements', 'Announcements', 'bi-megaphone-fill');
@@ -4995,8 +4999,22 @@
                     _tryRestorePendingTab();
                 });
 
+                // Part 20: the new default-active landing tab — aggregates
+                // active announcements + upcoming calendar events (own class'
+                // homework due-dates, exam dates, dated announcements; never
+                // other students' birthdates) at a glance, same "app-opening
+                // moment" idea the teacher portal's Dashboard implements.
+                const dashPane = document.createElement('div');
+                dashPane.className = 'tab-pane active'; dashPane.id = 'dashboard-content';
+                dashPane.innerHTML = `<div class="ccpc-page">
+                    <div id="dashUpcoming" class="mb-3"><div class="text-center text-muted small py-4">Loading…</div></div>
+                    <div id="dashAnnouncements"></div>
+                </div>`;
+                if (content) content.appendChild(dashPane);
+                loadStudentDashboard();
+
                 const profPane = document.createElement('div');
-                profPane.className = 'tab-pane active'; profPane.id = 'profile-content';
+                profPane.className = 'tab-pane'; profPane.id = 'profile-content';
 
                 // ── Wallet (real data: balance / card status / limits) ──
                 const walletPane = document.createElement('div');
@@ -5593,6 +5611,59 @@
         }
 
         function _escHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+        // Part 20: Dashboard tab — the new default landing view, aggregating
+        // active announcements + upcoming calendar events (own class' due
+        // homework, exam dates, dated announcements). Read-only mirror of the
+        // teacher portal's Dashboard/Calendar; never shows other students'
+        // birthdates or any admin-only Manage controls.
+        const CAL_TYPE_COLOR = {
+            holiday: 'danger', programme: 'primary', exam: 'warning',
+            homework: 'info', announcement: 'success', other: 'secondary',
+        };
+        function _calFmtDate(iso) {
+            const d = new Date(iso + 'T00:00:00');
+            return d.toLocaleDateString('en-BD', { month: 'short', day: 'numeric' });
+        }
+        async function loadStudentDashboard() {
+            const upcomingHost = document.getElementById('dashUpcoming');
+            const annHost = document.getElementById('dashAnnouncements');
+            if (!loggedInStudent || !loggedInStudent.student_id) return;
+            try {
+                const today = new Date();
+                const from = today.toISOString().slice(0, 10);
+                const to = new Date(today.getTime() + 13 * 86400000).toISOString().slice(0, 10);
+                const [calRes, annRes] = await Promise.all([
+                    portalFetch('get_calendar_events', { student_id: loggedInStudent.student_id, from_date: from, to_date: to }),
+                    portalFetch('get_active_announcements', { student_id: loggedInStudent.student_id }),
+                ]);
+                const events = (calRes && calRes.result === 'success' && calRes.events) || [];
+                if (upcomingHost) {
+                    upcomingHost.innerHTML = !events.length
+                        ? `<div class="card shadow-sm border-0 rounded-4 p-4 text-center text-muted small">Nothing coming up in the next two weeks.</div>`
+                        : `<p class="text-muted small fw-800 text-uppercase mb-2">Upcoming</p>` + events.slice(0, 8).map(e => `
+                            <div class="card shadow-sm border-0 rounded-4 mb-2">
+                              <div class="card-body p-2 px-3 d-flex align-items-center gap-2">
+                                <span class="badge bg-${CAL_TYPE_COLOR[e.type] || 'secondary'}-subtle text-${CAL_TYPE_COLOR[e.type] || 'secondary'} rounded-pill" style="width:8px;height:8px;padding:0;"></span>
+                                <div class="flex-grow-1 min-w-0">
+                                  <p class="fw-800 mb-0 small">${_escHtml(e.title)}</p>
+                                  <p class="text-muted mb-0" style="font-size:11px">${_calFmtDate(e.date)}</p>
+                                </div>
+                              </div>
+                            </div>`).join('');
+                }
+                if (annHost && annRes && annRes.result === 'success') {
+                    const items = (annRes.announcements || []).slice(0, 3);
+                    annHost.innerHTML = items.length
+                        ? `<p class="text-muted small fw-800 text-uppercase mb-2 mt-3">Recent Announcements</p>` + items.map(a =>
+                            `<div class="card shadow-sm border-0 rounded-4 mb-2"><div class="card-body p-2 px-3"><p class="fw-800 mb-0 small">${_escHtml(a.title)}</p></div></div>`
+                          ).join('')
+                        : '';
+                }
+            } catch (err) {
+                if (upcomingHost) upcomingHost.innerHTML = `<div class="text-center text-muted small py-4">Could not load.</div>`;
+            }
+        }
 
         // Cover photo + Header/Sub-header/Instructions block shared by every
         // Group Form student-side screen (create/invite/roster) — Header falls

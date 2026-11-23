@@ -2952,6 +2952,45 @@ export async function POST(req) {
     return NextResponse.json({ result: 'success', announcements: visible });
   }
 
+  // Part 20: thin, read-only mirror of ccpc-teachers' getCalendarEvents —
+  // manual/holiday events + this student's own due homework + dated
+  // announcements already visible to them + exam dates. Deliberately never
+  // includes birthdate data (that stays teacher-portal/class-teacher only).
+  if (action === 'get_calendar_events') {
+    const { student_id, from_date, to_date } = payload;
+    const student = await sb(`students_data?student_id=eq.${encodeURIComponent(student_id)}&select=class,section`);
+    const { class: klass, section } = (Array.isArray(student) && student[0]) || {};
+
+    const [manual, homework, announcements, exams] = await Promise.all([
+      sb(`calendar_events?or=(and(event_date.gte.${from_date},event_date.lte.${to_date}),and(end_date.gte.${from_date},event_date.lte.${to_date}))&order=event_date.asc`, 'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }),
+      klass ? sb(`student_diary_entries?due_date=gte.${from_date}&due_date=lte.${to_date}&entry_type=eq.homework&select=id,subject,message,due_date,audience`, 'GET', null, { 'Accept-Profile': 'teacher_staff', 'Content-Profile': 'teacher_staff' }) : Promise.resolve([]),
+      sb(`announcements?event_date=gte.${from_date}&event_date=lte.${to_date}&active=eq.true&select=id,title,body,announcement_type,target_student_id,event_date`, 'GET', null, { 'Accept-Profile': 'public', 'Content-Profile': 'public' }),
+      sb(`exams?exam_date=gte.${from_date}&exam_date=lte.${to_date}&is_archived=eq.false&select=id,name,exam_date,exam_end_date,class_patterns(name),exam_patterns(name)`, 'GET', null, { 'Accept-Profile': 'exam', 'Content-Profile': 'exam' }),
+    ]);
+
+    const events = [];
+    (Array.isArray(manual) ? manual : []).forEach(e => events.push({
+      id: `manual:${e.id}`, title: e.title, description: e.description, date: e.event_date, end_date: e.end_date, type: e.event_type,
+    }));
+    (Array.isArray(homework) ? homework : []).forEach(e => {
+      const a = e.audience || {};
+      const mine = a.mode === 'students'
+        ? (a.student_ids || []).map(String).includes(String(student_id))
+        : (a.class === klass && (!a.section || a.section === section));
+      if (mine) events.push({ id: `homework:${e.id}`, title: e.subject || 'Homework', description: e.message, date: e.due_date, end_date: null, type: 'homework' });
+    });
+    (Array.isArray(announcements) ? announcements : [])
+      .filter(a => a.announcement_type === 'general' || (a.announcement_type === 'student' && a.target_student_id === student_id))
+      .forEach(e => events.push({ id: `announcement:${e.id}`, title: e.title, description: e.body, date: e.event_date, end_date: null, type: 'announcement' }));
+    (Array.isArray(exams) ? exams : []).forEach(e => events.push({
+      id: `exam:${e.id}`, title: e.name || e.exam_patterns?.name || 'Exam', description: e.class_patterns?.name || null,
+      date: e.exam_date, end_date: e.exam_end_date || null, type: 'exam',
+    }));
+
+    events.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    return NextResponse.json({ result: 'success', events });
+  }
+
   // ── Get Attendance History ────────────────────────────────────────────────
   if (action === 'get_attendance') {
     const { student_id } = payload;
