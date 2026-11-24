@@ -1912,6 +1912,16 @@
                 const btnNfcCancel = document.getElementById('btn-nfc-cancel');
                 if (btnNfcCancel) btnNfcCancel.onclick = stopNFCScan;
 
+                // Ambient NFC: inside the shared shell, listen for a tap the
+                // moment this portal is the one selected/visible — no button
+                // press needed first. Harmless if a saved-session auto-login
+                // above is still resolving asynchronously: _startShellNFCScan
+                // and the result handler both re-check loggedInStudent before
+                // acting, so an in-flight auto-login can never get bounced by
+                // a stray tap, and once logged in, nothing further happens
+                // here (the login screen itself is gone).
+                if (_inShell() && !loggedInStudent) _startShellNFCScan();
+
             } catch(e) {
                 console.error("initPortal error", e);
                 localStorage.removeItem('student_session');
@@ -2038,20 +2048,84 @@
         }
 
         // Dispatches to whichever NFC backend is actually available:
-        //   - Packaged native app (Capacitor) -> the CapacitorNfc plugin, real
-        //     device NFC via Android's/iOS's own APIs.
-        //   - A real browser tab (not packaged) -> the Web NFC API
+        //   - Inside the shared Android shell (android-shell/index.html,
+        //     ccpc-teachers' Capacitor app, this page loaded in its own
+        //     cross-origin iframe) -> the shell's postMessage relay. This is
+        //     the ONLY path that actually works once this portal is shipped
+        //     inside the real installed app: window.Capacitor is injected
+        //     only into the shell's own top-level page, never into a
+        //     cross-origin iframe, so `window.Capacitor.Plugins.CapacitorNfc`
+        //     below is never actually reachable from in here — confirmed by
+        //     the same reasoning already documented for the camera fix
+        //     (Part 11.5) and the NFC/QR relays built for ccpc-teachers.
+        //   - A real Capacitor app running THIS page directly as its own
+        //     top-level WebView (not the shared shell) -> the CapacitorNfc
+        //     plugin directly. Kept as a fallback for a hypothetical
+        //     standalone build of this portal; harmless dead code otherwise.
+        //   - A real browser tab (neither of the above) -> the Web NFC API
         //     (NDEFReader), Chrome/Opera-on-Android only.
-        // Critical distinction: Web NFC does NOT work inside a packaged
-        // Capacitor WebView at all (Chromium only exposes it to its own
-        // top-level browser UI, never an embedded WebView) — so once this
-        // app is shipped as a real Android app, the native plugin path below
-        // is the only one that will ever actually fire on a phone running
-        // the installed app; the Web NFC path only still matters for anyone
-        // using this same site directly in the Chrome browser app.
+        function _inShell() { try { return window.parent && window.parent !== window; } catch (e) { return false; } }
         async function startNFCScan() {
+            if (_inShell()) return _startShellNFCScan();
             if (window.Capacitor && window.Capacitor.isNativePlatform()) return _startNativeNFCScan();
             return _startWebNFCScan();
+        }
+
+        // ── Shell relay backend (own requestId namespace) ───────────────────
+        // Mirrors ccpc-teachers' own _diaryNfc*/_diaryQr* consumers exactly —
+        // same protocol (ccpc-nfc-start/-result/-error/-stop), since both
+        // portals share the one shell. Feeds the UID into the existing
+        // _nfcOnTagFound (shared by every backend) with an empty records
+        // array — the native relay only ever hands back a bare UID, no raw
+        // NDEF bytes, which is fine: _nfcOnTagFound already tries nfc_login
+        // first and only falls back to parsing records if that fails.
+        let _shellNfcReqSeq = 0;
+        let _shellNfcPending = null;
+        let _shellNfcListenerBound = false;
+        let _shellNfcActive = false;
+
+        function _shellNfcEnsureListener() {
+            if (_shellNfcListenerBound) return;
+            _shellNfcListenerBound = true;
+            window.addEventListener('message', ev => {
+                const data = ev.data;
+                if (!data || typeof data.type !== 'string' || data.requestId !== _shellNfcPending) return;
+                if (data.type === 'ccpc-nfc-result') {
+                    _shellNfcPending = null;
+                    if (loggedInStudent) return; // already signed in -- a stray tap shouldn't bounce the session
+                    updateNFCStatus('Card Detected', 'Verifying identity, please hold still...', false);
+                    _nfcOnTagFound(String(data.uid || '').trim(), []);
+                    if (_shellNfcActive) setTimeout(_startShellNFCScan, 1500);
+                } else if (data.type === 'ccpc-nfc-error') {
+                    _shellNfcPending = null;
+                    if (data.error === 'failed' && _shellNfcActive) setTimeout(_startShellNFCScan, 1200);
+                }
+            });
+        }
+
+        // Ambient variant: no "scanning…" overlay, used for the passive,
+        // tap-anytime-on-the-login-screen listening started automatically by
+        // initPortal below (as opposed to the explicit "Tap to Login" button,
+        // which still works the same way but shows the overlay via
+        // _startShellNFCScan itself — same function either way, just also
+        // called once up front without a user click).
+        function _startShellNFCScan() {
+            if (loggedInStudent) return;
+            _shellNfcEnsureListener();
+            _shellNfcActive = true;
+            const overlay = document.getElementById('nfc-scan-overlay');
+            if (overlay) { overlay.style.display = 'flex'; overlay.classList.remove('hidden'); }
+            updateNFCStatus('Ready to Scan', 'Please tap your student NFC card against the back of your phone.');
+            const requestId = 'shellnfc' + (++_shellNfcReqSeq);
+            _shellNfcPending = requestId;
+            window.parent.postMessage({ type: 'ccpc-nfc-start', requestId }, '*');
+        }
+
+        function _stopShellNFCScan() {
+            _shellNfcActive = false;
+            if (!_shellNfcPending) return;
+            window.parent.postMessage({ type: 'ccpc-nfc-stop', requestId: _shellNfcPending }, '*');
+            _shellNfcPending = null;
         }
 
         async function _startNativeNFCScan() {
@@ -2176,6 +2250,7 @@
         }
 
         function stopNFCScan() {
+            _stopShellNFCScan();
             if (window.Capacitor && window.Capacitor.isNativePlatform() && window.Capacitor.Plugins.CapacitorNfc) {
                 window.Capacitor.Plugins.CapacitorNfc.stopScanning().catch(() => {});
                 if (_nfcNativeListener) { try { _nfcNativeListener.remove(); } catch (e) {} _nfcNativeListener = null; }
